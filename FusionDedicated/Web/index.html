@@ -1,0 +1,1700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fusion Dedicated</title>
+<style>
+  :root {
+    --void:     #04060a;
+    --deep:     #070b11;
+    --panel:    #0a0f16;
+    --raised:   #0e151e;
+    --edge:     #16202b;
+    --edge-lit: #1d3542;
+
+    --cyan:     #3fe0d0;
+    --cyan-dim: #17786f;
+    --cyan-ink: #0a1d22;
+
+    --amber:    #ffab3d;
+    --red:      #ff6058;
+    --green:    #4ae08c;
+    --violet:   #a98bff;
+
+    --text:     #dce7ee;
+    --muted:    #75868f;
+    --faint:    #455460;
+
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --notch: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px));
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--text);
+    font: 400 13.5px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* faint plotted field, the way Monogon signage is set out */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      repeating-linear-gradient(0deg,  transparent 0 47px, rgba(63,224,208,.028) 47px 48px),
+      repeating-linear-gradient(90deg, transparent 0 47px, rgba(63,224,208,.028) 47px 48px);
+    -webkit-mask-image: radial-gradient(ellipse 110% 85% at 50% 0%, #000 20%, transparent 80%);
+    mask-image: radial-gradient(ellipse 110% 85% at 50% 0%, #000 20%, transparent 80%);
+  }
+
+  .frame { background: var(--edge); padding: 1px; clip-path: var(--notch); }
+  .frame-in { background: var(--panel); clip-path: var(--notch); overflow: hidden; }
+  .frame.lit { background: linear-gradient(160deg, var(--edge-lit), var(--edge) 45%); }
+
+  /* ---------- shell ---------- */
+
+  .app { display: grid; grid-template-columns: 214px 1fr; min-height: 100%; position: relative; z-index: 1; }
+
+  nav {
+    background: linear-gradient(180deg, var(--deep), var(--void));
+    border-right: 1px solid var(--edge);
+    padding: 20px 0 16px;
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh;
+  }
+
+  .brand { padding: 0 20px 18px; position: relative; }
+  .brand::after {
+    content: ''; position: absolute; left: 20px; right: 20px; bottom: 0; height: 1px;
+    background: linear-gradient(90deg, var(--cyan-dim), transparent);
+  }
+  .brand b {
+    display: block; font: 600 12.5px/1.2 system-ui, sans-serif;
+    text-transform: uppercase; letter-spacing: .2em;
+  }
+  .brand span {
+    display: block; font: 500 9px/1.4 var(--mono); margin-top: 5px;
+    color: var(--cyan-dim); text-transform: uppercase; letter-spacing: .3em;
+  }
+
+  .menu { padding: 12px 0; display: flex; flex-direction: column; overflow-y: auto; }
+
+  nav a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 20px; color: var(--muted); cursor: pointer;
+    font: 500 11.5px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .13em;
+    border-left: 2px solid transparent;
+  }
+  nav a:hover { color: var(--text); background: rgba(63,224,208,.04); }
+  nav a.on {
+    color: var(--cyan); border-left-color: var(--cyan);
+    background: linear-gradient(90deg, rgba(63,224,208,.10), transparent 70%);
+  }
+  nav a .c {
+    margin-left: auto; font: 500 10px var(--mono); color: var(--faint);
+    border: 1px solid var(--edge); padding: 0 5px; letter-spacing: 0;
+  }
+  nav a.on .c { color: var(--cyan); border-color: var(--cyan-dim); }
+
+  .navfoot { margin-top: auto; padding: 14px 20px 0; border-top: 1px solid var(--edge); }
+  .navfoot div {
+    display: flex; justify-content: space-between; gap: 10px; padding: 3px 0;
+    font: 500 9px var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--faint);
+  }
+  .navfoot span { color: var(--muted); letter-spacing: 0; text-transform: none; }
+
+  main { min-width: 0; }
+
+  /* ---------- header ---------- */
+
+  header {
+    display: flex; align-items: center; gap: 20px;
+    padding: 0 clamp(16px, 3vw, 30px); min-height: 58px;
+    border-bottom: 1px solid var(--edge);
+    background: linear-gradient(180deg, var(--deep), rgba(4,6,10,.85));
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 20;
+  }
+
+  .status { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .led {
+    width: 7px; height: 7px; background: var(--green);
+    box-shadow: 0 0 8px var(--green); transform: rotate(45deg);
+  }
+  .led.off { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .status b {
+    font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .18em; color: var(--muted);
+  }
+
+  header h1 {
+    font: 600 14px system-ui, sans-serif; margin: 0;
+    letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .readout { margin-left: auto; display: flex; gap: clamp(12px, 2.2vw, 28px); flex-shrink: 0; }
+  .readout div { text-align: right; }
+  .readout .k {
+    font: 500 8.5px var(--mono); color: var(--faint);
+    text-transform: uppercase; letter-spacing: .2em;
+  }
+  .readout .v { font: 500 13px var(--mono); color: var(--cyan); }
+
+  /* ---------- views ---------- */
+
+  .view { padding: clamp(18px, 2.6vw, 30px) clamp(16px, 3vw, 30px) 70px; max-width: 1240px; display: none; }
+  .view.on { display: block; }
+
+  h2 {
+    display: flex; align-items: center; gap: 12px;
+    font: 600 10.5px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .24em;
+    color: var(--cyan); margin: 0 0 14px;
+  }
+  h2::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--edge-lit), transparent); }
+  h2:not(:first-child) { margin-top: 36px; }
+
+  .hint { color: var(--muted); font-size: 12.5px; margin: -6px 0 16px; max-width: 680px; }
+
+  /* ---------- metrics ---------- */
+
+  .metrics {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px; background: var(--edge);
+  }
+  .metric { padding: 14px 16px; background: var(--panel); position: relative; }
+  .metric::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 16px; height: 2px; background: var(--cyan-dim);
+  }
+  .metric .k {
+    font: 500 9px var(--mono); color: var(--faint);
+    text-transform: uppercase; letter-spacing: .2em;
+  }
+  .metric .v {
+    font: 500 21px var(--mono); margin-top: 6px; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric .v small { font-size: 13px; color: var(--faint); }
+  .metric.warn .v { color: var(--amber); }
+  .metric.bad  .v { color: var(--red); }
+
+  /* ---------- charts ---------- */
+
+  .charts { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+
+  .chart-head {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 12px 16px 8px; border-bottom: 1px solid var(--edge);
+  }
+  .chart-head .title {
+    font: 500 9.5px var(--mono); color: var(--faint);
+    text-transform: uppercase; letter-spacing: .2em; margin-right: auto;
+  }
+  .chart-head .key { display: flex; align-items: center; gap: 6px; font: 500 12px var(--mono); }
+  .chart-head .key i { width: 8px; height: 8px; transform: rotate(45deg); }
+
+  .chart svg { display: block; width: 100%; height: 150px; }
+  .chart-axis {
+    display: flex; justify-content: space-between; padding: 6px 16px 12px;
+    font: 500 9px var(--mono); color: var(--faint); letter-spacing: .12em;
+  }
+
+  /* ---------- tables ---------- */
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; padding: 9px 15px; white-space: nowrap;
+    font: 500 9px var(--mono); color: var(--faint);
+    text-transform: uppercase; letter-spacing: .2em;
+    background: var(--raised); border-bottom: 1px solid var(--edge);
+  }
+  tbody td { padding: 10px 15px; border-bottom: 1px solid #10171f; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: rgba(63,224,208,.035); }
+  td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  td.dim { color: var(--muted); }
+  .right { text-align: right; }
+  .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+
+  .name { font-weight: 500; }
+  .sub { color: var(--faint); font: 400 10.5px var(--mono); word-break: break-all; }
+
+  /* ---------- chips ---------- */
+
+  .chip {
+    display: inline-block; padding: 2px 8px;
+    font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .12em;
+    border: 1px solid var(--edge); color: var(--muted); background: var(--raised);
+  }
+  .chip.owner    { color: var(--amber); border-color: #58400f; background: #1d1405; }
+  .chip.operator { color: var(--cyan);  border-color: var(--cyan-dim); background: var(--cyan-ink); }
+  .chip.guest    { color: var(--red);   border-color: #5a2320; background: #1d0c0b; }
+  .chip.orphan   { color: var(--amber); border-color: #58400f; background: #1d1405; }
+  .chip.live     { color: var(--green); border-color: #1d4a30; background: #08190f; }
+
+  /* ---------- controls ---------- */
+
+  button {
+    background: var(--raised); color: var(--muted);
+    border: 1px solid var(--edge); border-radius: 0;
+    padding: 5px 11px; cursor: pointer;
+    font: 500 10.5px var(--mono); text-transform: uppercase; letter-spacing: .12em;
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  button:hover { color: var(--cyan); border-color: var(--cyan-dim); background: var(--cyan-ink); }
+  button.warn:hover { color: var(--amber); border-color: #58400f; background: #1d1405; }
+  button.bad:hover  { color: var(--red);   border-color: #5a2320; background: #1d0c0b; }
+  button:disabled { opacity: .25; cursor: default; }
+  button:disabled:hover { color: var(--muted); border-color: var(--edge); background: var(--raised); }
+
+  button.go {
+    background: var(--cyan); border-color: var(--cyan); color: #041014;
+    padding: 8px 20px; font-size: 11px; letter-spacing: .18em;
+  }
+  button.go:hover { background: #6df3e5; border-color: #6df3e5; color: #041014; }
+  button.go:disabled { opacity: .4; }
+
+  button.danger { border-color: #5a2320; color: var(--red); padding: 8px 20px; font-size: 11px; letter-spacing: .18em; }
+  button.danger:hover { background: var(--red); border-color: var(--red); color: #150404; }
+
+  .seg { display: inline-flex; border: 1px solid var(--edge); }
+  .seg button {
+    border: 0; border-right: 1px solid var(--edge); padding: 4px 9px;
+    background: var(--panel); font-size: 10px; letter-spacing: .1em;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.on { background: var(--cyan-ink); color: var(--cyan); box-shadow: inset 0 -2px 0 var(--cyan); }
+
+  input, select, textarea {
+    background: #060a0f; border: 1px solid var(--edge); color: var(--text);
+    border-radius: 0; padding: 8px 11px; width: 100%;
+    font: 13px system-ui, sans-serif;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: 0; border-color: var(--cyan-dim); box-shadow: 0 0 0 1px rgba(63,224,208,.18);
+  }
+  input.m, textarea.m { font-family: var(--mono); font-size: 12.5px; }
+  input::placeholder, textarea::placeholder { color: var(--faint); }
+  textarea { resize: vertical; min-height: 62px; line-height: 1.5; }
+
+  label {
+    display: block; margin-bottom: 6px;
+    font: 500 9.5px var(--mono); color: var(--faint);
+    text-transform: uppercase; letter-spacing: .18em;
+  }
+
+  .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .fields .full { grid-column: 1 / -1; }
+
+  .pad { padding: clamp(15px, 2.2vw, 20px); }
+
+  /* ---------- rich text ---------- */
+
+  .rt-bar {
+    display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
+    padding: 7px 8px; background: var(--raised); border: 1px solid var(--edge); border-bottom: 0;
+  }
+  .rt-bar button { padding: 3px 9px; min-width: 30px; }
+  .rt-bar .sw {
+    width: 20px; height: 20px; border: 1px solid var(--edge); cursor: pointer; padding: 0;
+  }
+  .rt-bar .sw:hover { border-color: var(--cyan); }
+  .rt-bar .gap { width: 1px; height: 18px; background: var(--edge); margin: 0 3px; }
+
+  .rt-preview {
+    margin-top: 10px; padding: 12px 14px; min-height: 44px;
+    border: 1px dashed var(--edge); background: #060a0f;
+    font-size: 15px; line-height: 1.45; word-break: break-word;
+  }
+  .rt-preview:empty::before { content: 'preview'; color: var(--faint); font: 500 10px var(--mono); }
+
+  /* ---------- rows ---------- */
+
+  .rows { display: grid; gap: 1px; background: var(--edge); }
+  .row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px clamp(14px, 2vw, 18px); background: var(--panel);
+  }
+  .row .t { flex: 1; min-width: 0; }
+  .row .t b {
+    display: block; font: 500 12px system-ui, sans-serif;
+    text-transform: uppercase; letter-spacing: .1em;
+  }
+  .row .t span { font-size: 11.5px; color: var(--faint); }
+  label.row { margin: 0; cursor: pointer; text-transform: none; letter-spacing: normal; }
+  label.row:hover { background: var(--raised); }
+
+  .switch {
+    width: 38px; height: 18px; background: #121a23; border: 1px solid var(--edge);
+    position: relative; flex-shrink: 0; transition: .15s;
+  }
+  .switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; background: #3c4a55; transition: .15s;
+  }
+  .switch.on { background: var(--cyan-ink); border-color: var(--cyan-dim); }
+  .switch.on::after { left: 22px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+  /* ---------- action bar ---------- */
+
+  .bar {
+    position: sticky; bottom: 0; margin-top: 26px; z-index: 10;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 16px 0 6px; border-top: 1px solid var(--edge);
+    background: linear-gradient(180deg, rgba(4,6,10,0), var(--void) 45%);
+  }
+  .bar.flat { position: static; background: none; border-top: 0; padding: 16px 0 0; margin-top: 4px; }
+  .bar .note {
+    font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .16em; color: var(--faint);
+  }
+  .bar .note.dirty { color: var(--amber); }
+
+  /* ---------- log ---------- */
+
+  .log { font: 12px/1.7 var(--mono); max-height: min(62vh, 640px); overflow-y: auto; }
+  .log .r { display: flex; gap: 14px; padding: 3px 15px; border-bottom: 1px solid #0d131a; }
+  .log .r:hover { background: rgba(63,224,208,.035); }
+  .log .ts { color: #3b4854; flex-shrink: 0; }
+  .log .lv { width: 46px; flex-shrink: 0; font-weight: 600; font-size: 10.5px; letter-spacing: .1em; }
+  .log .msg { color: #b6c4ce; word-break: break-word; }
+  .lv.INFO  { color: var(--cyan-dim); }
+  .lv.WARN  { color: var(--amber); }
+  .lv.ERROR { color: var(--red); }
+  .lv.JOIN  { color: var(--green); }
+  .lv.LEAVE { color: var(--violet); }
+
+  .filters { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+  .filters input { width: min(280px, 100%); }
+
+  .empty { padding: 34px 18px; text-align: center; }
+  .empty b {
+    display: block; color: var(--muted); margin-bottom: 5px;
+    font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .2em;
+  }
+  .empty span { color: var(--faint); font-size: 12.5px; }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--void); }
+  ::-webkit-scrollbar-thumb { background: var(--edge); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--edge-lit); }
+
+  /* ================= responsive ================= */
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    nav {
+      position: sticky; top: 0; z-index: 30; height: auto; flex-direction: row;
+      align-items: center; padding: 0; border-right: 0; border-bottom: 1px solid var(--edge);
+      overflow-x: auto; scrollbar-width: none;
+    }
+    nav::-webkit-scrollbar { display: none; }
+    .brand { padding: 12px 16px; flex-shrink: 0; }
+    .brand::after, .brand span { display: none; }
+    .menu { flex-direction: row; padding: 0; overflow: visible; }
+    nav a { border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; padding: 14px; }
+    nav a.on { border-left: 0; border-bottom-color: var(--cyan); background: rgba(63,224,208,.07); }
+    .navfoot { display: none; }
+    header { top: 47px; }
+  }
+
+  @media (max-width: 640px) {
+    header {
+      min-height: 0; padding: 12px 16px; gap: 10px;
+      display: grid; grid-template-columns: auto 1fr; align-items: center;
+    }
+    header h1 { grid-column: 2; }
+    .readout {
+      grid-column: 1 / -1; margin-left: 0; justify-content: space-between; width: 100%;
+      padding-top: 10px; border-top: 1px solid var(--edge);
+    }
+    .readout div { text-align: left; }
+    .readout div:last-child { text-align: right; }
+
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+
+    /* A seven-column table at 375px is unreadable, so each row becomes a record. */
+    .stack thead { display: none; }
+    .stack, .stack tbody, .stack tr, .stack td { display: block; width: 100%; }
+    .stack tr { border-bottom: 1px solid var(--edge); padding: 8px 0; }
+    .stack tr:last-child { border-bottom: 0; }
+    .stack td {
+      border: 0; padding: 5px 15px; text-align: left;
+      display: grid; grid-template-columns: 88px 1fr; gap: 12px; align-items: center;
+    }
+    .stack td::before {
+      content: attr(data-label);
+      font: 500 8.5px var(--mono); color: var(--faint);
+      text-transform: uppercase; letter-spacing: .18em;
+    }
+    .stack .acts { justify-content: flex-start; }
+
+    .row { flex-wrap: wrap; }
+    .row .t { flex: 1 1 100%; }
+    .bar { flex-direction: column; align-items: stretch; }
+    .bar button { width: 100%; }
+    .bar .note { text-align: center; }
+    .log .r { flex-wrap: wrap; gap: 6px 12px; }
+    .log .msg { flex: 1 1 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <nav>
+    <div class="brand">
+      <b>Fusion</b>
+      <span>Dedicated Relay</span>
+    </div>
+
+    <div class="menu">
+      <a data-tab="overview" class="on">Overview</a>
+      <a data-tab="players">Players <i class="c" id="nPlayers">0</i></a>
+      <a data-tab="map">Map</a>
+      <a data-tab="analytics">Analytics</a>
+      <a data-tab="resources">Resources</a>
+      <a data-tab="ranks">Ranks <i class="c" id="nRanks">0</i></a>
+      <a data-tab="bans">Bans <i class="c" id="nBans">0</i></a>
+      <a data-tab="world">World <i class="c" id="nWorld">0</i></a>
+      <a data-tab="settings">Settings</a>
+      <a data-tab="log">Log</a>
+    </div>
+
+    <div class="navfoot">
+      <div>Lobby <span id="fLobby">—</span></div>
+      <div>Level <span id="fLevel">—</span></div>
+      <div>Build <span id="fVersion">—</span></div>
+    </div>
+  </nav>
+
+  <main>
+    <header>
+      <div class="status"><i class="led" id="led"></i><b id="statusText">linking</b></div>
+      <h1 id="hName">Fusion Dedicated</h1>
+      <div class="readout">
+        <div><div class="k">Code</div><div class="v" id="hCode">—</div></div>
+        <div><div class="k">Crew</div><div class="v" id="hPlayers">—</div></div>
+        <div><div class="k">Uptime</div><div class="v" id="hUptime">—</div></div>
+      </div>
+    </header>
+
+    <!-- ========== OVERVIEW ========== -->
+    <section class="view on" id="v-overview">
+      <h2>Telemetry</h2>
+      <div class="frame lit"><div class="frame-in"><div class="metrics" id="metrics"></div></div></div>
+
+      <h2>Crew aboard</h2>
+      <div class="frame"><div class="frame-in" id="overviewPlayers"></div></div>
+
+      <h2>Activity</h2>
+      <div class="frame"><div class="frame-in"><div class="log" id="miniLog" style="max-height:300px"></div></div></div>
+    </section>
+
+    <!-- ========== PLAYERS ========== -->
+    <section class="view" id="v-players">
+      <h2>Connected players</h2>
+      <p class="hint">
+        Rank changes apply immediately — nobody has to reconnect. A rank is stored
+        against the SteamID, so it still holds next time they join. Purge deletes
+        everything a player has spawned without removing the player.
+      </p>
+      <div class="frame"><div class="frame-in" id="players"></div></div>
+    </section>
+
+    <!-- ========== MAP ========== -->
+    <section class="view" id="v-map">
+      <h2>Current level</h2>
+      <div class="frame lit"><div class="frame-in pad" id="currentLevel"></div></div>
+
+      <h2>Map list</h2>
+      <p class="hint">
+        Loading a map sends everyone to it and clears the world, since entities belong
+        to the level they spawned in. For a modded map, give its mod.io id — a player
+        who does not have it asks the server which mod to fetch, and downloads it.
+      </p>
+      <div class="frame"><div class="frame-in" id="levels"></div></div>
+
+      <h2>Add a map</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div class="full">
+            <label>Vanilla level</label>
+            <select id="mVanilla" onchange="pickVanilla()">
+              <option value="">— pick to fill the fields below —</option>
+            </select>
+          </div>
+          <div class="full"><label>Title</label><input id="mTitle" placeholder="Museum Basement"></div>
+          <div class="full"><label>Barcode</label><input id="mBarcode" class="m" placeholder="Author.Pallet.Level.Name"></div>
+          <div><label>mod.io id</label><input id="mModId" class="m" type="number" placeholder="-1 for vanilla"></div>
+          <div><label>Modfile id</label><input id="mFileId" class="m" type="number" placeholder="optional"></div>
+        </div>
+        <div class="bar flat">
+          <button class="go" onclick="addLevel()">Save to list</button>
+          <button onclick="addLevel(true)">Save and load now</button>
+        </div>
+      </div></div>
+
+      <h2>Mod catalogue <span class="chip" id="mcCount">0</span></h2>
+      <p class="hint">
+        The server owns no mods, so it cannot look a modded item up itself. When a
+        player asks where one came from, the server forwards the question to whoever
+        spawned it and remembers the answer — after which it can serve that mod to
+        anyone, including people who join long after the original owner left.
+      </p>
+      <div class="frame"><div class="frame-in" id="modCatalog"></div></div>
+
+      <h2>Server picture</h2>
+      <p class="hint">
+        The browser draws a server's picture from the level's mod.io thumbnail, so
+        setting a mod.io id on the current map is what gives this server a custom
+        image. There is no way to point it at an arbitrary URL — the id is the hook.
+      </p>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div><label>Thumbnail mod.io id</label><input id="mThumb" class="m" type="number"></div>
+          <div style="display:flex;align-items:flex-end">
+            <button class="go" onclick="setThumb()">Apply to current map</button>
+          </div>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- ========== ANALYTICS ========== -->
+    <section class="view" id="v-analytics">
+      <h2>Session analytics</h2>
+      <p class="hint">
+        Sampled every five seconds and held in memory, so the graphs reset when the
+        server restarts.
+      </p>
+      <div class="filters">
+        <div class="seg" id="rangeSeg"></div>
+      </div>
+      <div class="charts">
+        <div class="frame"><div class="frame-in"><div class="chart" id="cPlayers"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cEntities"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cPackets"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cBandwidth"></div></div></div>
+      </div>
+    </section>
+
+    <!-- ========== RESOURCES ========== -->
+    <section class="view" id="v-resources">
+      <h2>Process</h2>
+      <div class="filters"><div class="seg" id="rangeSegRes"></div></div>
+      <div class="frame lit"><div class="frame-in"><div class="metrics" id="resMetrics"></div></div></div>
+
+      <div class="charts" style="margin-top:16px">
+        <div class="frame"><div class="frame-in"><div class="chart" id="cCpu"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cMemory"></div></div></div>
+      </div>
+
+      <h2>Host machine</h2>
+      <div class="frame"><div class="frame-in"><div class="metrics" id="hostMetrics"></div></div></div>
+    </section>
+
+    <!-- ========== RANKS ========== -->
+    <section class="view" id="v-ranks">
+      <h2>Saved ranks</h2>
+      <p class="hint">
+        Anyone not listed joins as Default. Guest sits below Default, for holding
+        someone back from features you have opened up to everyone.
+      </p>
+      <div class="frame"><div class="frame-in" id="ranks"></div></div>
+
+      <h2>Assign by SteamID</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div><label>SteamID64</label><input id="rId" class="m" placeholder="76561198000000000"></div>
+          <div><label>Name</label><input id="rName" placeholder="optional, for your reference"></div>
+          <div>
+            <label>Rank</label>
+            <select id="rLevel">
+              <option value="-1">Guest</option>
+              <option value="0">Default</option>
+              <option value="1" selected>Operator</option>
+              <option value="2">Owner</option>
+            </select>
+          </div>
+        </div>
+        <div class="bar flat"><button class="go" onclick="addRank()">Assign rank</button></div>
+      </div></div>
+    </section>
+
+    <!-- ========== BANS ========== -->
+    <section class="view" id="v-bans">
+      <h2>Ban list</h2>
+      <p class="hint">
+        A banned SteamID is refused during the handshake, before it is ever given a
+        player slot. The reason recorded here is what they are shown.
+      </p>
+      <div class="frame"><div class="frame-in" id="bans"></div></div>
+
+      <h2>Ban by SteamID</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div><label>SteamID64</label><input id="bId" class="m" placeholder="76561198000000000"></div>
+          <div><label>Name</label><input id="bName" placeholder="optional"></div>
+          <div class="full"><label>Reason</label><input id="bReason" placeholder="Banned from Server"></div>
+        </div>
+        <div class="bar flat"><button class="go" onclick="addBan()">Add ban</button></div>
+      </div></div>
+    </section>
+
+    <!-- ========== WORLD ========== -->
+    <section class="view" id="v-world">
+      <h2>World control</h2>
+      <p class="hint">
+        The server owns nothing and simulates nothing — it only remembers what exists
+        so late joiners can be caught up. An entity whose owner left has no machine
+        applying physics to it and hangs in place until it is culled.
+      </p>
+      <div class="frame"><div class="frame-in pad">
+        <div class="bar flat" style="margin:0;padding:0">
+          <button class="danger" onclick="clearWorld()">Clear every entity</button>
+          <span class="note" id="worldNote"></span>
+        </div>
+      </div></div>
+
+      <h2>Tracked entities</h2>
+      <div class="frame"><div class="frame-in" id="entities"></div></div>
+    </section>
+
+    <!-- ========== SETTINGS ========== -->
+    <section class="view" id="v-settings">
+      <h2>Server control</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div class="full">
+            <label>Restart notice</label>
+            <input id="fRestartMsg" value="Server is restarting, please wait a few minutes.">
+          </div>
+        </div>
+        <div class="bar flat">
+          <button class="danger" onclick="restartServer()">Restart server</button>
+          <span class="note">Everyone is disconnected with the notice above, then the process relaunches.</span>
+        </div>
+      </div></div>
+
+      <h2>Identity</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div class="full">
+            <label>Server name</label>
+            <div class="rt-bar" id="rtName"></div>
+            <textarea id="fName" class="m" rows="2" data-s></textarea>
+            <div class="rt-preview" id="pvName"></div>
+          </div>
+          <div class="full">
+            <label>Description</label>
+            <div class="rt-bar" id="rtDesc"></div>
+            <textarea id="fDesc" class="m" rows="3" data-s></textarea>
+            <div class="rt-preview" id="pvDesc"></div>
+          </div>
+          <div><label>Player slots</label><input id="fMax" type="number" min="1" max="255" data-s></div>
+          <div>
+            <label>Visibility</label>
+            <select id="fPriv" data-s>
+              <option value="0">Public</option>
+              <option value="1">Private</option>
+              <option value="2">Friends only</option>
+              <option value="3">Locked</option>
+            </select>
+          </div>
+        </div>
+      </div></div>
+
+      <h2>Crash protection</h2>
+      <p class="hint">
+        A spawn flood costs this server almost nothing — it never simulates anything —
+        but every client has to build each prop, which is what drops a whole lobby at
+        once. These limits are sized for what clients survive. Early strikes only
+        delete the offending props; a kick comes after repeated attempts.
+      </p>
+      <div class="frame"><div class="frame-in">
+        <div class="rows">
+          <label class="row" onclick="flip('antiSpam')">
+            <div class="t"><b>Spam guard</b><span>watch for spawn floods and act on them</span></div>
+            <i class="switch" id="sw-antiSpam"></i>
+          </label>
+        </div>
+        <div class="pad">
+          <div class="fields">
+            <div><label>Spawns allowed</label><input id="fBurst" type="number" min="1" max="1000" data-s></div>
+            <div><label>Within seconds</label><input id="fWindow" type="number" min="1" max="120" data-s></div>
+            <div><label>Max entities per player</label><input id="fPerPlayer" type="number" min="1" max="20000" data-s></div>
+            <div><label>Strikes before kick</label><input id="fStrikes" type="number" min="1" max="20" data-s></div>
+            <div class="full">
+              <label>Exempt from limits</label>
+              <select id="fExempt" data-s>
+                <option value="-1">Guest and above</option>
+                <option value="0">Default and above</option>
+                <option value="1">Operator and above</option>
+                <option value="2">Owner only</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div></div>
+
+      <h2>Gameplay</h2>
+      <div class="frame"><div class="frame-in"><div class="rows" id="toggles"></div></div></div>
+
+      <div class="frame" style="margin-top:16px"><div class="frame-in pad">
+        <div class="fields">
+          <div>
+            <label>Slow motion</label>
+            <select id="fSlowMo" data-s>
+              <option value="0">Disabled</option>
+              <option value="1">Low gravity</option>
+              <option value="2">Host only</option>
+              <option value="3">Everyone</option>
+              <option value="4">Client side</option>
+            </select>
+          </div>
+          <div><label>Knockout length (s)</label><input id="fKnockLen" type="number" min="0" max="600" data-s></div>
+          <div><label>Max avatar height (m)</label><input id="fHeight" type="number" min="0.1" max="100" step="0.1" data-s></div>
+        </div>
+      </div></div>
+
+      <h2>Permission gates</h2>
+      <p class="hint">
+        The minimum rank each action needs. Clients hide the buttons they think you
+        may not press, but the server checks again before acting — so these are
+        enforced, not cosmetic.
+      </p>
+      <div class="frame"><div class="frame-in"><div class="rows" id="gates"></div></div></div>
+
+      <h2>Limits</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div><label>Max tracked entities</label><input id="fMaxEnt" type="number" min="1" max="100000" data-s></div>
+          <div><label>Orphan timeout (s)</label><input id="fOrphan" type="number" min="5" max="86400" data-s></div>
+        </div>
+        <div class="rows" style="margin-top:16px">
+          <label class="row" onclick="flip('cullOrphans')">
+            <div class="t"><b>Cull orphans</b><span>remove entities nobody is simulating</span></div>
+            <i class="switch" id="sw-cullOrphans"></i>
+          </label>
+        </div>
+      </div></div>
+
+      <div class="bar">
+        <button class="go" id="saveBtn" onclick="saveSettings()">Apply</button>
+        <button onclick="revert()">Revert</button>
+        <span class="note" id="saveNote">No pending changes</span>
+      </div>
+    </section>
+
+    <!-- ========== LOG ========== -->
+    <section class="view" id="v-log">
+      <h2>Server log</h2>
+      <div class="filters">
+        <input id="logFilter" placeholder="Filter messages…" oninput="render()">
+        <div class="seg" id="logLevels"></div>
+      </div>
+      <div class="frame"><div class="frame-in"><div class="log" id="log"></div></div></div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let state = null;
+let history = [];
+let dirty = false;
+let tab = 'overview';
+let logLevel = 'ALL';
+let draft = null;
+let historyRange = '1h';
+let historyStep = 5;
+
+const LEVELS      = { '-1': 'Guest', '0': 'Default', '1': 'Operator', '2': 'Owner' };
+const LEVEL_CLASS = { '-1': 'guest', '0': '', '1': 'operator', '2': 'owner' };
+const LEVEL_SHORT = { '-1': 'GST', '0': 'DEF', '1': 'OP', '2': 'OWN' };
+
+const TOGGLES = [
+  ['nameTags',           'Name tags',           'floating names above players'],
+  ['voiceChat',          'Voice chat',          'relay player voice'],
+  ['mortality',          'Mortality',           'players can die'],
+  ['knockout',           'Knockout',            'ragdoll and black out instead of dying'],
+  ['friendlyFire',       'Friendly fire',       'players can damage each other'],
+  ['playerConstraining', 'Player constraining', 'players can constrain each other'],
+];
+
+const GATES = [
+  ['devTools',      'Dev tools',      'spawn gun, noclip and the dev menu'],
+  ['constrainer',   'Constrainer',    'the constrainer tool'],
+  ['customAvatars', 'Custom avatars', 'modded avatars'],
+  ['kicking',       'Kicking',        'remove a player from the server'],
+  ['banning',       'Banning',        'block a player from rejoining'],
+  ['teleportation', 'Teleportation',  'teleport to or summon a player'],
+];
+
+const VANILLA = [
+  ['00 - Main Menu',        'c2534c5a-80e1-4a29-93ca-f3254d656e75'],
+  ['01 - Descent',          'c2534c5a-4197-4879-8cd3-4a695363656e'],
+  ['02 - BONELAB Hub',      'c2534c5a-6b79-40ec-8e98-e58c5363656e'],
+  ['03 - LongRun',          'c2534c5a-56a6-40ab-a8ce-23074c657665'],
+  ['04 - Mine Dive',        'c2534c5a-54df-470b-baaf-741f4c657665'],
+  ['05 - Big Anomaly',      'c2534c5a-7601-4443-bdfe-7f235363656e'],
+  ['06 - Street Puncher',   'SLZ.BONELAB.Content.Level.LevelStreetPunch'],
+  ['07 - Sprint Bridge 04', 'SLZ.BONELAB.Content.Level.SprintBridge04'],
+  ['08 - Magma Gate',       'SLZ.BONELAB.Content.Level.SceneMagmaGate'],
+  ['09 - Moonbase',         'SLZ.BONELAB.Content.Level.MoonBase'],
+  ['10 - Monogon Motorway', 'SLZ.BONELAB.Content.Level.LevelKartRace'],
+  ['11 - Pillar Climb',     'c2534c5a-c056-4883-ac79-e051426f6964'],
+  ['12 - Big Anomaly B',    'SLZ.BONELAB.Content.Level.LevelBigAnomalyB'],
+  ['13 - Ascent',           'c2534c5a-db71-49cf-b694-24584c657665'],
+  ['14 - Home',             'SLZ.BONELAB.Content.Level.LevelOutro'],
+  ['15 - Void G114',        'fa534c5a868247138f50c62e424c4144.Level.VoidG114'],
+  ['Big Bone Bowling',      'fa534c5a83ee4ec6bd641fec424c4142.Level.LevelKartBowling'],
+  ['Fantasy Arena',         'fa534c5a868247138f50c62e424c4144.Level.LevelArenaMin'],
+  ['Gun Range',             'fa534c5a83ee4ec6bd641fec424c4142.Level.LevelGunRange'],
+  ['Halfway Park',          'fa534c5a83ee4ec6bd641fec424c4142.Level.LevelHalfwayPark'],
+  ['HoloChamber',           'fa534c5a83ee4ec6bd641fec424c4142.Level.LevelHoloChamber'],
+  ['Mirror',                'SLZ.BONELAB.Content.Level.LevelMirror'],
+  ['Museum Basement',       'fa534c5a83ee4ec6bd641fec424c4142.Level.LevelMuseumBasement'],
+  ['Neon District Parkour', 'fa534c5a83ee4ec6bd641fec424c4142.Level.SceneparkourDistrictLogic'],
+  ['Tuscany',               'c2534c5a-2c4c-4b44-b076-203b5363656e'],
+];
+
+/* ---------- formatting ---------- */
+
+function bytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  return (n / 1073741824).toFixed(2) + ' GB';
+}
+
+const num = n => Number(n).toLocaleString('en-US');
+
+function duration(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + m + 'm';
+  if (m > 0) return m + 'm ' + (s % 60) + 's';
+  return s + 's';
+}
+
+const levelChip = l => '<span class="chip ' + (LEVEL_CLASS[l] || '') + '">' + (LEVELS[l] || '?') + '</span>';
+const empty = (t, n) => '<div class="empty"><b>' + t + '</b><span>' + n + '</span></div>';
+
+/* ---------- Unity rich text ---------- */
+
+/**
+ * Renders the TextMeshPro subset BONELAB understands, so what you type in the
+ * panel looks like what the server browser will show. Everything is escaped
+ * first — the preview must never be able to inject markup of its own.
+ */
+function unityToHtml(raw) {
+  let out = esc(raw);
+
+  out = out
+    .replace(/&lt;b&gt;/gi, '<b>').replace(/&lt;\/b&gt;/gi, '</b>')
+    .replace(/&lt;i&gt;/gi, '<i>').replace(/&lt;\/i&gt;/gi, '</i>')
+    .replace(/&lt;u&gt;/gi, '<u>').replace(/&lt;\/u&gt;/gi, '</u>')
+    .replace(/&lt;s&gt;/gi, '<s>').replace(/&lt;\/s&gt;/gi, '</s>')
+    .replace(/&lt;color=(#[0-9a-f]{3,8}|[a-z]+)&gt;/gi,
+      (_, c) => '<span style="color:' + c + '">')
+    .replace(/&lt;\/color&gt;/gi, '</span>')
+    .replace(/&lt;mark=(#[0-9a-f]{3,8})&gt;/gi,
+      (_, c) => '<span style="background:' + c + '">')
+    .replace(/&lt;\/mark&gt;/gi, '</span>')
+    .replace(/&lt;size=(\d+)%&gt;/gi,
+      (_, n) => '<span style="font-size:' + Math.min(300, Math.max(30, +n)) + '%">')
+    .replace(/&lt;\/size&gt;/gi, '</span>')
+    .replace(/&lt;align=(left|center|right)&gt;/gi,
+      (_, a) => '<span style="display:block;text-align:' + a + '">')
+    .replace(/&lt;\/align&gt;/gi, '</span>')
+    .replace(/\n/g, '<br>');
+
+  return out;
+}
+
+const SWATCHES = ['#3fe0d0', '#4ae08c', '#ffab3d', '#ff6058', '#a98bff', '#5b9dff', '#ffffff'];
+
+function buildRichBar(barId, areaId, previewId) {
+  const bar = $(barId);
+
+  const btn = (label, open, close, title) =>
+    '<button title="' + title + '" onclick="wrapTag(\'' + areaId + '\',\'' +
+    open + '\',\'' + close + '\')">' + label + '</button>';
+
+  bar.innerHTML =
+    btn('<b>B</b>', '<b>', '</b>', 'Bold') +
+    btn('<i>I</i>', '<i>', '</i>', 'Italic') +
+    btn('<u>U</u>', '<u>', '</u>', 'Underline') +
+    btn('<s>S</s>', '<s>', '</s>', 'Strikethrough') +
+    '<span class="gap"></span>' +
+    SWATCHES.map(c =>
+      '<button class="sw" style="background:' + c + '" title="' + c + '"' +
+      ' onclick="wrapTag(\'' + areaId + '\',\'&lt;color=' + c + '&gt;\',\'&lt;/color&gt;\')"></button>').join('') +
+    '<span class="gap"></span>' +
+    btn('A+', '<size=140%>', '</size>', 'Larger') +
+    btn('A-', '<size=75%>', '</size>', 'Smaller') +
+    '<span class="gap"></span>' +
+    '<button title="Remove all tags" onclick="stripTags(\'' + areaId + '\')">Clear</button>';
+
+  $(areaId).addEventListener('input', () => {
+    $(previewId).innerHTML = unityToHtml($(areaId).value);
+  });
+}
+
+/** Wraps the current selection, or inserts an empty pair at the caret. */
+function wrapTag(areaId, open, close) {
+  const el = $(areaId);
+  const start = el.selectionStart, end = el.selectionEnd;
+  const value = el.value;
+
+  el.value = value.slice(0, start) + open + value.slice(start, end) + close + value.slice(end);
+
+  el.focus();
+  el.selectionStart = start + open.length;
+  el.selectionEnd = end + open.length;
+
+  el.dispatchEvent(new Event('input'));
+  markDirty();
+}
+
+function stripTags(areaId) {
+  const el = $(areaId);
+
+  el.value = el.value.replace(/<[^>]*>/g, '');
+  el.dispatchEvent(new Event('input'));
+  markDirty();
+}
+
+/* ---------- charts ---------- */
+
+/**
+ * Draws a small multi-series area chart as inline SVG. The viewBox is a fixed
+ * 1000 wide and stretched to the container, so strokes are drawn with
+ * non-scaling-stroke to stay an even width at any panel size.
+ */
+function drawChart(el, title, series, format) {
+  const points = series[0] ? series[0].data.length : 0;
+
+  if (points < 2) {
+    el.innerHTML = '<div class="chart-head"><span class="title">' + title + '</span></div>' +
+      empty('Not enough data yet', 'Samples are taken every five seconds.');
+    return;
+  }
+
+  const H = 150, W = 1000, pad = 6;
+  let max = 0;
+
+  series.forEach(s => s.data.forEach(v => { if (v > max) max = v; }));
+  if (max <= 0) max = 1;
+  max *= 1.15;
+
+  const x = i => (i / (points - 1)) * W;
+  const y = v => H - pad - (v / max) * (H - pad * 2);
+
+  let defs = '', body = '';
+
+  series.forEach((s, si) => {
+    const line = s.data.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1)).join(' ');
+    const id = 'g' + si + '_' + Math.abs(hash(title));
+
+    // Two overlapping areas just read as a solid slab, so only a lone series
+    // gets filled; comparisons are drawn as plain lines.
+    if (series.length === 1) {
+      defs += '<linearGradient id="' + id + '" x1="0" x2="0" y1="0" y2="1">' +
+        '<stop offset="0%" stop-color="' + s.color + '" stop-opacity=".30"/>' +
+        '<stop offset="100%" stop-color="' + s.color + '" stop-opacity="0"/></linearGradient>';
+
+      body += '<path d="' + line + ' L' + W + ' ' + H + ' L0 ' + H + ' Z" fill="url(#' + id + ')"/>';
+    }
+
+    body += '<path d="' + line + '" fill="none" stroke="' + s.color +
+      '" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';
+  });
+
+  let grid = '';
+  for (let g = 1; g < 4; g++) {
+    const gy = (H / 4) * g;
+    grid += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy +
+      '" stroke="#16202b" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+  }
+
+  const legend = series.map(s =>
+    '<span class="key"><i style="background:' + s.color + '"></i>' +
+    '<span style="color:' + s.color + '">' + format(s.data[s.data.length - 1]) + '</span>' +
+    '<span style="color:var(--faint)">' + s.name + '</span></span>').join('');
+
+  el.innerHTML =
+    '<div class="chart-head"><span class="title">' + title + '</span>' + legend + '</div>' +
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+    '<defs>' + defs + '</defs>' + grid + body + '</svg>' +
+    '<div class="chart-axis"><span>peak ' + format(max / 1.15) + '</span>' +
+    '<span>' + points + ' samples</span></div>';
+}
+
+function hash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+/**
+ * Turns cumulative counters into per-second rates. The spacing between points
+ * changes with the selected range, so it comes from the server rather than being
+ * assumed — at a month per chart the gap is hours, not seconds.
+ */
+function rate(samples, key) {
+  const out = [];
+
+  for (let i = 1; i < samples.length; i++) {
+    const delta = samples[i][key] - samples[i - 1][key];
+    out.push(Math.max(0, delta) / Math.max(1, historyStep));
+  }
+
+  return out;
+}
+
+/* ---------- navigation ---------- */
+
+document.querySelectorAll('nav a').forEach(a => {
+  a.onclick = () => {
+    tab = a.dataset.tab;
+    document.querySelectorAll('nav a').forEach(x => x.classList.toggle('on', x === a));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + tab));
+    window.scrollTo(0, 0);
+
+    if (tab === 'analytics' || tab === 'resources') pollHistory();
+    render();
+  };
+});
+
+/* ---------- polling ---------- */
+
+async function poll() {
+  try {
+    state = await (await fetch('/api/state')).json();
+    $('led').classList.remove('off');
+    $('statusText').textContent = state.server.published ? 'online' : 'unlisted';
+    render();
+  } catch {
+    $('led').classList.add('off');
+    $('statusText').textContent = 'no link';
+  }
+}
+
+async function pollHistory() {
+  try {
+    const d = await (await fetch('/api/history?range=' + historyRange)).json();
+    history = d.samples;
+    historyStep = d.stepSeconds || 5;
+    if (tab === 'analytics' || tab === 'resources') render();
+  } catch { /* the state poll already reports a dead link */ }
+}
+
+/* ---------- rendering ---------- */
+
+function render() {
+  if (!state) return;
+  const d = state;
+
+  $('hName').textContent = stripForTitle(d.server.name) || 'Fusion Dedicated';
+  $('hCode').textContent = d.server.code || '—';
+  $('hPlayers').textContent = d.players.length + '/' + d.server.maxPlayers;
+  $('hUptime').textContent = duration(d.server.uptimeSeconds);
+
+  $('fLobby').textContent = d.server.lobbyId ? String(d.server.lobbyId).slice(-8) : '—';
+  $('fLevel').textContent = stripForTitle(d.server.level) || '—';
+  $('fVersion').textContent = 'v' + d.server.version;
+
+  $('nPlayers').textContent = d.players.length;
+  $('nRanks').textContent = d.roster.length;
+  $('nBans').textContent = d.bans.length;
+  $('nWorld').textContent = d.entities.total;
+
+  if (tab === 'overview') renderOverview(d);
+  if (tab === 'players') $('players').innerHTML = playerTable(d, true);
+  if (tab === 'map') renderMap(d);
+  if (tab === 'analytics') renderAnalytics();
+  if (tab === 'resources') renderResources(d);
+  if (tab === 'ranks') renderRanks(d);
+  if (tab === 'bans') renderBans(d);
+  if (tab === 'world') renderWorld(d);
+  if (tab === 'settings') renderSettings(d);
+  if (tab === 'log') renderLog(d);
+}
+
+const stripForTitle = s => String(s || '').replace(/<[^>]*>/g, '');
+
+function renderOverview(d) {
+  const guard = d.guard || {};
+
+  $('metrics').innerHTML = [
+    ['Crew',        d.players.length + '<small>/' + d.server.maxPlayers + '</small>', ''],
+    ['Entities',    num(d.entities.total),
+      d.entities.total > d.limits.maxEntities * 0.8 ? 'bad'
+        : d.entities.total > d.limits.maxEntities * 0.5 ? 'warn' : ''],
+    ['Orphaned',    num(d.entities.orphaned), d.entities.orphaned > 200 ? 'warn' : ''],
+    ['Packets in',  num(d.traffic.packetsIn), ''],
+    ['Packets out', num(d.traffic.packetsOut), ''],
+    ['Transferred', bytes(d.traffic.bytesIn + d.traffic.bytesOut), ''],
+  ].map(p => '<div class="metric ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
+    '<div class="v">' + p[1] + '</div></div>').join('');
+
+  $('overviewPlayers').innerHTML = playerTable(d, false);
+  $('miniLog').innerHTML = logRows(d.log.slice(0, 40));
+}
+
+function playerTable(d, actions) {
+  if (!d.players.length) {
+    return empty('No crew aboard', 'The server is published and waiting for players.');
+  }
+
+  return '<table class="stack"><thead><tr>' +
+    '<th>ID</th><th>Player</th><th>Rank</th><th>Avatar</th>' +
+    '<th class="right">Owns</th><th class="right">Online</th><th class="right">Traffic</th>' +
+    (actions ? '<th class="right">Actions</th>' : '') +
+    '</tr></thead><tbody>' +
+    d.players.map(p => '<tr>' +
+      '<td class="m dim" data-label="ID">' + p.smallId + '</td>' +
+      '<td data-label="Player"><div class="name">' + esc(p.name) + '</div>' +
+        '<div class="sub">' + esc(p.platformId) + ' · v' + p.version + '</div></td>' +
+      '<td data-label="Rank">' + (actions ? rankPicker(p) : levelChip(p.permission)) + '</td>' +
+      '<td class="dim" data-label="Avatar" style="font-size:12px">' +
+        esc(p.avatar.split('.').pop() || '—') + '</td>' +
+      '<td class="m right dim" data-label="Owns">' + p.entities + '</td>' +
+      '<td class="m right dim" data-label="Online">' + duration(p.onlineSeconds) + '</td>' +
+      '<td class="m right dim" data-label="Traffic">' + bytes(p.bytesIn + p.bytesOut) + '</td>' +
+      (actions ? '<td class="right" data-label="Actions"><div class="acts">' +
+        '<button onclick="purge(' + p.smallId + ', \'' + esc(p.name) + '\')">Purge</button>' +
+        '<button class="warn" onclick="kick(' + p.smallId + ', \'' + esc(p.name) + '\')">Kick</button>' +
+        '<button class="bad" onclick="ban(' + p.smallId + ', \'' + esc(p.name) + '\')">Ban</button>' +
+        '</div></td>' : '') +
+      '</tr>').join('') + '</tbody></table>';
+}
+
+function rankPicker(p) {
+  return '<div class="seg">' + [-1, 0, 1, 2].map(l =>
+    '<button class="' + (p.permission === l ? 'on' : '') + '"' +
+    ' onclick="setRank(' + p.smallId + ', ' + l + ')"' +
+    ' title="' + LEVELS[l] + '">' + LEVEL_SHORT[l] + '</button>').join('') + '</div>';
+}
+
+/* ---------- map ---------- */
+
+function renderMap(d) {
+  $('currentLevel').innerHTML =
+    '<div class="name" style="font-size:16px">' + esc(stripForTitle(d.server.level)) + '</div>' +
+    '<div class="sub" style="margin-top:5px">' + esc(d.server.levelBarcode) + '</div>' +
+    '<div style="margin-top:12px">' +
+      (d.server.levelModId > 0
+        ? '<span class="chip operator">mod.io ' + d.server.levelModId + '</span>'
+        : '<span class="chip">vanilla · no download needed</span>') +
+    '</div>';
+
+  if (!$('mVanilla').dataset.filled) {
+    $('mVanilla').innerHTML = '<option value="">— pick to fill the fields below —</option>' +
+      VANILLA.map(v => '<option value="' + v[1] + '">' + v[0] + '</option>').join('');
+    $('mVanilla').dataset.filled = '1';
+  }
+
+  $('levels').innerHTML = !d.levels.length
+    ? empty('No saved maps', 'Add one below, or pick a vanilla level to fill the form.')
+    : '<table class="stack"><thead><tr>' +
+      '<th>Map</th><th>Source</th><th>Status</th><th class="right">Actions</th>' +
+      '</tr></thead><tbody>' +
+      d.levels.map(l => '<tr>' +
+        '<td data-label="Map"><div class="name">' + esc(l.title || l.barcode) + '</div>' +
+          '<div class="sub">' + esc(l.barcode) + '</div></td>' +
+        '<td data-label="Source">' + (l.modId > 0
+          ? '<span class="chip operator">mod.io ' + l.modId + '</span>'
+          : '<span class="chip">vanilla</span>') + '</td>' +
+        '<td data-label="Status">' + (l.active
+          ? '<span class="chip live">loaded</span>'
+          : '<span class="sub">—</span>') + '</td>' +
+        '<td class="right" data-label="Actions"><div class="acts">' +
+          '<button onclick="loadLevel(\'' + esc(l.barcode) + '\')"' +
+            (l.active ? ' disabled' : '') + '>Load</button>' +
+          '<button class="bad" onclick="removeLevel(\'' + esc(l.barcode) + '\')">Remove</button>' +
+        '</div></td></tr>').join('') + '</tbody></table>';
+
+  const cat = d.modCatalog || [];
+  $('mcCount').textContent = cat.length;
+
+  $('modCatalog').innerHTML = !cat.length
+    ? empty('Nothing learned yet', 'Barcodes are picked up as players use modded items.')
+    : '<table class="stack"><thead><tr>' +
+      '<th>Barcode</th><th>mod.io</th><th>Learned</th>' +
+      '</tr></thead><tbody>' +
+      cat.map(m => '<tr>' +
+        '<td data-label="Barcode"><div class="name">' +
+          esc(m.barcode.split(".").pop()) + '</div>' +
+          '<div class="sub">' + esc(m.barcode) + '</div></td>' +
+        '<td data-label="mod.io"><span class="chip operator">' + m.modId + '</span></td>' +
+        '<td class="m dim" data-label="Learned" style="font-size:12px">' +
+          esc(m.learnedAt) + '</td>' +
+        '</tr>').join('') + '</tbody></table>';
+
+  if (document.activeElement !== $('mThumb')) {
+    $('mThumb').value = d.server.levelModId > 0 ? d.server.levelModId : '';
+  }
+}
+
+function pickVanilla() {
+  const barcode = $('mVanilla').value;
+  if (!barcode) return;
+
+  const found = VANILLA.find(v => v[1] === barcode);
+
+  $('mTitle').value = found ? found[0] : '';
+  $('mBarcode').value = barcode;
+  $('mModId').value = '';
+  $('mFileId').value = '';
+}
+
+async function addLevel(loadNow) {
+  const barcode = $('mBarcode').value.trim();
+
+  if (!barcode) { alert('A barcode is required.'); return; }
+
+  const q = new URLSearchParams({
+    barcode,
+    title: $('mTitle').value.trim() || barcode,
+    modId: $('mModId').value.trim() || '-1',
+    modFileId: $('mFileId').value.trim() || '0',
+  });
+
+  await fetch('/api/levels?' + q);
+
+  if (loadNow === true) {
+    await fetch('/api/level?' + q);
+  }
+
+  $('mVanilla').value = '';
+  $('mTitle').value = $('mBarcode').value = $('mModId').value = $('mFileId').value = '';
+  poll();
+}
+
+async function loadLevel(barcode) {
+  const entry = (state.levels || []).find(l => l.barcode === barcode);
+  if (!entry) return;
+
+  if (!confirm('Load ' + (entry.title || barcode) + '?\n\n' +
+    'Everyone is sent to this level and the world is cleared.')) return;
+
+  await fetch('/api/level?' + new URLSearchParams({
+    barcode,
+    title: entry.title || barcode,
+    modId: String(entry.modId),
+    modFileId: String(entry.modFileId || 0),
+  }));
+
+  poll();
+}
+
+async function removeLevel(barcode) {
+  await fetch('/api/levels?barcode=' + encodeURIComponent(barcode) + '&remove=true');
+  poll();
+}
+
+async function setThumb() {
+  const modId = $('mThumb').value.trim() || '-1';
+
+  await fetch('/api/level?' + new URLSearchParams({
+    barcode: state.server.levelBarcode,
+    title: state.server.level,
+    modId,
+    modFileId: String(state.server.levelModFileId || 0),
+  }));
+
+  poll();
+}
+
+/* ---------- analytics & resources ---------- */
+
+/** Both graph tabs share one range, so the picker is built from the same list. */
+function buildRangePicker(id) {
+  const el = $(id);
+
+  if (el.children.length) {
+    [...el.children].forEach(b => b.classList.toggle('on', b.dataset.r === historyRange));
+    return;
+  }
+
+  el.innerHTML = [
+    ['10 MIN', '10m'], ['1 HOUR', '1h'], ['6 HOURS', '6h'],
+    ['DAY', '1d'], ['WEEK', '1w'], ['MONTH', '1M'],
+  ].map(r => '<button data-r="' + r[1] + '" class="' +
+    (r[1] === historyRange ? 'on' : '') + '">' + r[0] + '</button>').join('');
+
+  [...el.children].forEach(b => b.onclick = () => {
+    historyRange = b.dataset.r;
+    document.querySelectorAll('#rangeSeg button, #rangeSegRes button')
+      .forEach(x => x.classList.toggle('on', x.dataset.r === historyRange));
+    pollHistory();
+  });
+}
+
+function renderAnalytics() {
+  buildRangePicker('rangeSeg');
+
+  drawChart($('cPlayers'), 'Players',
+    [{ name: 'online', color: '#4ae08c', data: history.map(s => s.players) }], v => Math.round(v));
+
+  drawChart($('cEntities'), 'Entities in world',
+    [{ name: 'tracked', color: '#3fe0d0', data: history.map(s => s.entities) }], v => num(Math.round(v)));
+
+  drawChart($('cPackets'), 'Packets per second', [
+    { name: 'in',  color: '#5b9dff', data: rate(history, 'packetsIn') },
+    { name: 'out', color: '#a98bff', data: rate(history, 'packetsOut') },
+  ], v => Math.round(v));
+
+  drawChart($('cBandwidth'), 'Bandwidth', [
+    { name: 'in',  color: '#3fe0d0', data: rate(history, 'bytesIn') },
+    { name: 'out', color: '#ffab3d', data: rate(history, 'bytesOut') },
+  ], v => bytes(v) + '/s');
+}
+
+function renderResources(d) {
+  buildRangePicker('rangeSegRes');
+
+  const r = d.resources || {};
+  const h = r.host || {};
+
+  $('resMetrics').innerHTML = [
+    ['CPU', (r.cpuPercent || 0).toFixed(1) + '<small>%</small>',
+      r.cpuPercent > 80 ? 'bad' : r.cpuPercent > 50 ? 'warn' : ''],
+    ['Memory', bytes(r.workingSetBytes || 0), ''],
+    ['Managed heap', bytes(r.managedBytes || 0), ''],
+    ['Threads', r.threads || 0, ''],
+    ['Packets/s in', Math.round(r.packetsInPerSecond || 0), ''],
+    ['Packets/s out', Math.round(r.packetsOutPerSecond || 0), ''],
+    ['Rate in', bytes(r.bytesInPerSecond || 0) + '/s', ''],
+    ['Rate out', bytes(r.bytesOutPerSecond || 0) + '/s', ''],
+  ].map(p => '<div class="metric ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
+    '<div class="v">' + p[1] + '</div></div>').join('');
+
+  const usedRam = (h.memoryTotalBytes || 0) - (h.memoryAvailableBytes || 0);
+  const ramPct = h.memoryTotalBytes ? (usedRam / h.memoryTotalBytes * 100) : 0;
+
+  $('hostMetrics').innerHTML = [
+    ['Load average', (h.loadAverage || 0).toFixed(2),
+      h.loadAverage > h.processorCount ? 'warn' : ''],
+    ['Cores', h.processorCount || 0, ''],
+    ['RAM used', h.memoryTotalBytes ? bytes(usedRam) : 'n/a',
+      ramPct > 90 ? 'bad' : ramPct > 75 ? 'warn' : ''],
+    ['RAM total', h.memoryTotalBytes ? bytes(h.memoryTotalBytes) : 'n/a', ''],
+    ['Runtime', '<span style="font-size:14px">.NET ' + esc(h.framework || '?') + '</span>', ''],
+  ].map(p => '<div class="metric ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
+    '<div class="v">' + p[1] + '</div></div>').join('');
+
+  drawChart($('cCpu'), 'CPU',
+    [{ name: 'process', color: '#ffab3d', data: history.map(s => s.cpu) }], v => v.toFixed(1) + '%');
+
+  drawChart($('cMemory'), 'Working set',
+    [{ name: 'resident', color: '#3fe0d0', data: history.map(s => s.memory) }], v => bytes(v));
+}
+
+/* ---------- lists ---------- */
+
+function renderRanks(d) {
+  $('ranks').innerHTML = !d.roster.length
+    ? empty('No saved ranks', 'Everyone joins as Default.')
+    : '<table class="stack"><thead><tr>' +
+      '<th>Name</th><th>SteamID</th><th>Rank</th><th>Status</th><th class="right">Actions</th>' +
+      '</tr></thead><tbody>' +
+      d.roster.map(r => '<tr>' +
+        '<td class="name" data-label="Name">' + esc(r.username || '(unknown)') + '</td>' +
+        '<td class="m dim" data-label="SteamID" style="font-size:12px">' + esc(r.platformId) + '</td>' +
+        '<td data-label="Rank">' + levelChip(r.level) + '</td>' +
+        '<td data-label="Status" style="font-size:12px">' + (r.online
+          ? '<span style="color:var(--green)">connected</span>'
+          : '<span style="color:var(--faint)">offline</span>') + '</td>' +
+        '<td class="right" data-label="Actions"><div class="acts">' +
+          '<button onclick="setRankById(\'' + r.platformId + '\', ' + Math.min(r.level + 1, 2) +
+            ', \'' + esc(r.username) + '\')"' + (r.level >= 2 ? ' disabled' : '') + '>Promote</button>' +
+          '<button onclick="setRankById(\'' + r.platformId + '\', ' + Math.max(r.level - 1, -1) +
+            ', \'' + esc(r.username) + '\')"' + (r.level <= -1 ? ' disabled' : '') + '>Demote</button>' +
+          '<button class="bad" onclick="setRankById(\'' + r.platformId + '\', 0, \'' +
+            esc(r.username) + '\')">Clear</button>' +
+        '</div></td></tr>').join('') + '</tbody></table>';
+}
+
+function renderBans(d) {
+  $('bans').innerHTML = !d.bans.length
+    ? empty('Nobody is banned', 'Bans added here survive a restart.')
+    : '<table class="stack"><thead><tr>' +
+      '<th>Name</th><th>SteamID</th><th>Reason</th><th>Added</th><th class="right">Actions</th>' +
+      '</tr></thead><tbody>' +
+      d.bans.map(b => '<tr>' +
+        '<td class="name" data-label="Name">' + esc(b.username || '(unknown)') + '</td>' +
+        '<td class="m dim" data-label="SteamID" style="font-size:12px">' + esc(b.platformId) + '</td>' +
+        '<td class="dim" data-label="Reason">' + esc(b.reason) + '</td>' +
+        '<td class="m dim" data-label="Added" style="font-size:12px">' + esc(b.bannedAt) + '</td>' +
+        '<td class="right" data-label="Actions"><div class="acts">' +
+          '<button onclick="unban(\'' + b.platformId + '\')">Unban</button>' +
+        '</div></td></tr>').join('') + '</tbody></table>';
+}
+
+function renderWorld(d) {
+  $('worldNote').textContent = d.entities.total + ' tracked, ' + d.entities.orphaned + ' orphaned';
+
+  $('entities').innerHTML = !d.entities.recent.length
+    ? empty('The world is empty', 'Nothing has been spawned yet.')
+    : '<table class="stack"><thead><tr>' +
+      '<th>ID</th><th>Item</th><th>Owner</th><th class="right">Position</th>' +
+      '</tr></thead><tbody>' +
+      d.entities.recent.map(e => '<tr>' +
+        '<td class="m dim" data-label="ID">' + e.id + '</td>' +
+        '<td data-label="Item"><div class="name">' + esc(e.name) + '</div>' +
+          '<div class="sub">' + esc(e.barcode) + '</div></td>' +
+        '<td data-label="Owner">' + (e.orphaned
+          ? '<span class="chip orphan">orphan</span>'
+          : '<span class="chip">' + e.owner + '</span>') + '</td>' +
+        '<td class="m right dim" data-label="Position">' + e.x + ', ' + e.y + ', ' + e.z + '</td>' +
+        '</tr>').join('') + '</tbody></table>';
+}
+
+/* ---------- settings ---------- */
+
+function renderSettings(d) {
+  if (!draft) { revert(); return; }
+
+  if (!$('toggles').children.length) {
+    $('toggles').innerHTML = TOGGLES.map(t =>
+      '<label class="row" onclick="flip(\'' + t[0] + '\')">' +
+      '<div class="t"><b>' + t[1] + '</b><span>' + t[2] + '</span></div>' +
+      '<i class="switch" id="sw-' + t[0] + '"></i></label>').join('');
+
+    $('gates').innerHTML = GATES.map(g =>
+      '<div class="row"><div class="t"><b>' + g[1] + '</b><span>' + g[2] + '</span></div>' +
+      '<div class="seg" id="gate-' + g[0] + '">' +
+      [-1, 0, 1, 2].map(l =>
+        '<button onclick="setGate(\'' + g[0] + '\', ' + l + ')">' + LEVEL_SHORT[l] + '</button>').join('') +
+      '</div></div>').join('');
+  }
+
+  TOGGLES.forEach(t => $('sw-' + t[0]).classList.toggle('on', !!draft[t[0]]));
+  $('sw-cullOrphans').classList.toggle('on', !!draft.cullOrphans);
+  $('sw-antiSpam').classList.toggle('on', !!draft.antiSpam);
+
+  GATES.forEach(g => {
+    [...$('gate-' + g[0]).children].forEach((b, i) => b.classList.toggle('on', draft[g[0]] === i - 1));
+  });
+
+  $('saveNote').textContent = dirty ? 'Pending changes' : 'No pending changes';
+  $('saveNote').classList.toggle('dirty', dirty);
+}
+
+/** Pulls the live config into the editable draft, discarding local edits. */
+function revert() {
+  if (!state) return;
+  const d = state;
+  const g = d.guard || {};
+
+  draft = Object.assign({}, d.gameplay, d.permissions, {
+    cullOrphans: d.limits.cullOrphans,
+    antiSpam: g.enabled,
+  });
+
+  $('fName').value = d.server.name;
+  $('fDesc').value = d.server.description;
+  $('pvName').innerHTML = unityToHtml(d.server.name);
+  $('pvDesc').innerHTML = unityToHtml(d.server.description);
+
+  $('fMax').value = d.server.maxPlayers;
+  $('fPriv').value = d.server.privacy;
+  $('fSlowMo').value = d.gameplay.slowMoMode;
+  $('fKnockLen').value = d.gameplay.knockoutLength;
+  $('fHeight').value = d.gameplay.maxAvatarHeight;
+  $('fMaxEnt').value = d.limits.maxEntities;
+  $('fOrphan').value = d.limits.orphanTimeoutSeconds;
+
+  $('fBurst').value = g.burstLimit;
+  $('fWindow').value = g.windowSeconds;
+  $('fPerPlayer').value = g.maxPerPlayer;
+  $('fStrikes').value = g.strikes;
+  $('fExempt').value = g.exemptLevel;
+
+  dirty = false;
+  renderSettings(d);
+}
+
+function markDirty() {
+  dirty = true;
+  $('saveNote').textContent = 'Pending changes';
+  $('saveNote').classList.add('dirty');
+}
+
+function flip(key) { draft[key] = !draft[key]; markDirty(); renderSettings(state); }
+function setGate(key, level) { draft[key] = level; markDirty(); renderSettings(state); }
+
+document.querySelectorAll('[data-s]').forEach(el => el.addEventListener('input', markDirty));
+
+async function saveSettings() {
+  const q = new URLSearchParams({
+    name: $('fName').value,
+    description: $('fDesc').value,
+    maxPlayers: $('fMax').value,
+    privacy: $('fPriv').value,
+    slowMoMode: $('fSlowMo').value,
+    knockoutLength: $('fKnockLen').value,
+    maxAvatarHeight: $('fHeight').value,
+    maxEntities: $('fMaxEnt').value,
+    orphanTimeoutSeconds: $('fOrphan').value,
+    cullOrphans: !!draft.cullOrphans,
+
+    antiSpam: !!draft.antiSpam,
+    spawnBurstLimit: $('fBurst').value,
+    spawnWindowSeconds: $('fWindow').value,
+    maxEntitiesPerPlayer: $('fPerPlayer').value,
+    spamStrikes: $('fStrikes').value,
+    antiSpamExemptLevel: $('fExempt').value,
+  });
+
+  TOGGLES.forEach(t => q.set(t[0], !!draft[t[0]]));
+  GATES.forEach(g => q.set(g[0], draft[g[0]]));
+
+  $('saveBtn').disabled = true;
+  await fetch('/api/settings?' + q);
+  $('saveBtn').disabled = false;
+
+  dirty = false;
+  await poll();
+  revert();
+}
+
+/* ---------- actions ---------- */
+
+async function kick(id, name) {
+  const reason = prompt('Kick ' + name + '?\n\nReason shown to them:', 'Kicked by server operator');
+  if (reason === null) return;
+  await fetch('/api/kick?id=' + id + '&reason=' + encodeURIComponent(reason));
+  poll();
+}
+
+async function ban(id, name) {
+  const reason = prompt(
+    'Ban ' + name + '?\n\nThey will be refused on every future join.\nReason shown to them:',
+    'Banned from Server');
+  if (reason === null) return;
+  await fetch('/api/ban?id=' + id + '&reason=' + encodeURIComponent(reason));
+  poll();
+}
+
+async function purge(id, name) {
+  if (!confirm('Delete everything ' + name + ' has spawned?\n\nThey stay connected.')) return;
+  const r = await (await fetch('/api/purge?id=' + id)).json();
+  alert('Removed ' + (r.removed || 0) + ' entities.');
+  poll();
+}
+
+async function unban(platformId) {
+  await fetch('/api/unban?platformId=' + platformId);
+  poll();
+}
+
+async function setRank(smallId, level) {
+  await fetch('/api/permission?id=' + smallId + '&level=' + level);
+  poll();
+}
+
+async function setRankById(platformId, level, username) {
+  await fetch('/api/permission?platformId=' + platformId + '&level=' + level +
+    '&username=' + encodeURIComponent(username || ''));
+  poll();
+}
+
+async function addRank() {
+  const id = $('rId').value.trim();
+  if (!/^\d{17}$/.test(id)) { alert('Enter a 17-digit SteamID64.'); return; }
+
+  await setRankById(id, $('rLevel').value, $('rName').value.trim());
+  $('rId').value = $('rName').value = '';
+}
+
+async function addBan() {
+  const id = $('bId').value.trim();
+  if (!/^\d{17}$/.test(id)) { alert('Enter a 17-digit SteamID64.'); return; }
+
+  await fetch('/api/ban?platformId=' + id +
+    '&username=' + encodeURIComponent($('bName').value.trim()) +
+    '&reason=' + encodeURIComponent($('bReason').value.trim() || 'Banned from Server'));
+
+  $('bId').value = $('bName').value = $('bReason').value = '';
+  poll();
+}
+
+async function clearWorld() {
+  if (!confirm('Delete every entity in the world?\n\nThis cannot be undone.')) return;
+  const r = await (await fetch('/api/clear')).json();
+  alert('Removed ' + (r.removed || 0) + ' entities.');
+  poll();
+}
+
+async function restartServer() {
+  const message = $('fRestartMsg').value.trim() || 'Server is restarting, please wait a few minutes.';
+
+  if (!confirm('Restart the server?\n\nEveryone is disconnected with:\n"' + message + '"')) return;
+
+  await fetch('/api/restart?reason=' + encodeURIComponent(message));
+
+  $('statusText').textContent = 'restarting';
+  $('led').classList.add('off');
+}
+
+/* ---------- log ---------- */
+
+const logRows = entries => entries.map(l =>
+  '<div class="r"><span class="ts">' + l.at + '</span>' +
+  '<span class="lv ' + l.level + '">' + l.level + '</span>' +
+  '<span class="msg">' + esc(l.message) + '</span></div>').join('');
+
+function renderLog(d) {
+  if (!$('logLevels').children.length) {
+    $('logLevels').innerHTML = ['ALL', 'JOIN', 'LEAVE', 'INFO', 'WARN', 'ERROR']
+      .map(l => '<button data-lv="' + l + '" class="' + (l === 'ALL' ? 'on' : '') + '">' + l + '</button>')
+      .join('');
+
+    [...$('logLevels').children].forEach(b => b.onclick = () => {
+      logLevel = b.dataset.lv;
+      [...$('logLevels').children].forEach(x => x.classList.toggle('on', x === b));
+      renderLog(state);
+    });
+  }
+
+  const needle = $('logFilter').value.toLowerCase();
+
+  const rows = d.log.filter(l =>
+    (logLevel === 'ALL' || l.level === logLevel) &&
+    (!needle || l.message.toLowerCase().includes(needle)));
+
+  $('log').innerHTML = rows.length ? logRows(rows) : empty('Nothing matches', 'Try a different filter.');
+}
+
+/* ---------- boot ---------- */
+
+buildRichBar('rtName', 'fName', 'pvName');
+buildRichBar('rtDesc', 'fDesc', 'pvDesc');
+
+poll();
+pollHistory();
+
+setInterval(poll, 1000);
+setInterval(() => {
+  if (tab === 'analytics' || tab === 'resources') pollHistory();
+}, 5000);
+</script>
+</body>
+</html>

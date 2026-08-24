@@ -1,0 +1,57 @@
+{
+  "ServerName": "My Fusion Server",
+  "Description": "Dedicated relay \u2014 no host required",
+  "Privacy": 0,
+  "MaxPlayers": 10,
+  "ServerCode": "",
+
+  "VersionMajor": 1,
+  "VersionMinor": 14,
+  "VersionPatch": 2,
+
+  "LevelBarcode": "fa534c5a868247138f50c62e424c4144.Level.VoidG114",
+  "LevelTitle": "15 - Void G114",
+  "LoadingScreenBarcode": "",
+  "LevelModId": -1,
+  "LevelModFileId": null,
+  "ModPlatform": "windows",
+  "Levels": [],
+  "ModCatalog": [],
+
+  "NameTags": true,
+  "VoiceChat": true,
+  "PlayerConstraining": false,
+  "Mortality": true,
+  "FriendlyFire": false,
+  "Knockout": false,
+  "KnockoutLength": 10,
+  "MaxAvatarHeight": 20,
+  "SlowMoMode": 1,
+  "TimeBetweenGamemodeRounds": 30,
+
+  "DevTools": "Default",
+  "Constrainer": "Default",
+  "CustomAvatars": "Default",
+  "Kicking": "Operator",
+  "Banning": "Operator",
+  "Teleportation": "Operator",
+
+  "Permissions": [],
+  "Bans": [],
+
+  "AntiSpamEnabled": true,
+  "SpawnBurstLimit": 25,
+  "SpawnWindowSeconds": 5,
+  "MaxEntitiesPerPlayer": 300,
+  "SpamStrikesBeforeKick": 3,
+  "AntiSpamExemptLevel": "Owner",
+
+  "MaxEntities": 2000,
+  "CullOrphanedEntities": true,
+  "OrphanTimeoutSeconds": 120,
+  "BlacklistedBarcodes": [],
+
+  "LogDirectory": "logs",
+  "DashboardPort": 8778,
+  "DashboardHost": "localhost"
+}

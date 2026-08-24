@@ -1,0 +1,29 @@
+# ---- build output ----
+bin/
+obj/
+publish/
+publish-*/
+out/
+*.user
+.vs/
+.idea/
+
+# ---- runtime state, never commit ----
+# server.json holds ban lists, the permission roster and the learned mod catalogue,
+# all keyed by other people's SteamIDs. Ship server.example.json instead.
+server.json
+
+# Logs record every player's name and SteamID, plus metrics.csv.
+logs/
+
+# ---- Steam ----
+# libsteam_api.so is a Steamworks SDK redistributable. It is not ours to publish;
+# install.sh points you at where to get it.
+*.so
+steam_api64.dll
+steamclient.so
+
+# ---- editor / OS ----
+*.swp
+.DS_Store
+Thumbs.db
