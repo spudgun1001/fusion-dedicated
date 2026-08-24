@@ -1,0 +1,31 @@
+Fusion Dedicated
+================
+
+An independent reimplementation of the BONELAB Fusion network protocol, so that a
+dedicated server can interoperate with unmodified Fusion clients.
+
+This project is not affiliated with, endorsed by, or supported by Lakatrazz, the
+Fusion contributors, or Stress Level Zero. All game content, and the design of the
+protocol itself, belong to their respective authors.
+
+
+Third-party components
+----------------------
+
+BONELAB Fusion — MIT License, Copyright (c) 2023 Lakatrazz
+https://github.com/Lakatrazz/BONELAB-Fusion
+
+    The wire format implemented in FusionDedicated/Protocol/ was derived by reading
+    Fusion's source and confirmed against captured traffic. No Fusion code is
+    included in this repository.
+
+Steamworks.NET — MIT License, Copyright (c) 2013-2019 Riley Labrecque
+https://github.com/rlabrecque/Steamworks.NET
+
+    Consumed as a NuGet package.
+
+libsteam_api.so — Valve Corporation
+https://partner.steamgames.com/doc/sdk
+
+    A Steamworks SDK redistributable, governed by the Steamworks SDK Access
+    Agreement. It is NOT distributed with this project; you supply it yourself.

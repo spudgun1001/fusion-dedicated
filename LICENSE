@@ -19,18 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This project is an independent reimplementation of the BONELAB Fusion network
-protocol. It is not affiliated with or endorsed by Lakatrazz, the Fusion
-contributors, or Stress Level Zero.
-
-BONELAB Fusion is MIT licensed, Copyright (c) 2023 Lakatrazz:
-https://github.com/Lakatrazz/BONELAB-Fusion
-
-Steamworks.NET is MIT licensed, Copyright (c) 2013-2019 Riley Labrecque:
-https://github.com/rlabrecque/Steamworks.NET
-
-libsteam_api.so is a Valve redistributable governed by the Steamworks SDK
-Access Agreement. It is not distributed with this project.

@@ -9,30 +9,56 @@ leaves. Unmodified Fusion clients connect to it without knowing the difference.
 Includes a web control panel for moderation, map switching, live metrics and spam
 protection.
 
+- **No port forwarding.** Traffic goes through Steam's relay network, so it works
+  behind NAT with nothing opened on your router.
+- **No mods for players.** They join with stock Fusion.
+- **Runs on almost nothing.** Eight players and a thousand props sit at roughly 2% of
+  one CPU core and ~150 MB of RAM.
+
 ---
 
-## Why this is possible
+## Contents
 
-Fusion has no master server. Lobbies *are* Steam lobbies, and the in-game browser is
-a Steam lobby query filtered on a handful of metadata keys. Nothing has to bless a
-server for it to be listed — it creates a Steam lobby, writes the same keys, and
-clients find it.
+- [Why it needs Steam](#why-it-needs-steam)
+- [Requirements](#requirements)
+- [Setting up the Steam account](#setting-up-the-steam-account)
+- [Install](#install)
+- [First run](#first-run)
+- [The control panel](#the-control-panel)
+- [Permissions](#permissions)
+- [Spam protection](#spam-protection)
+- [Keeping the world clean](#keeping-the-world-clean)
+- [Configuration](#configuration)
+- [Troubleshooting](#troubleshooting)
+- [What is tested](#what-is-tested-and-what-is-not)
+- [Uninstall](#uninstall)
 
-The harder question is physics, and the answer is that there is none to do. In Fusion
-**only an entity's owner simulates it**; the host relays everyone else's state
-untouched. A server that never takes ownership of anything therefore never simulates
-anything. It only has to:
+---
 
-- accept connections and run the join handshake
-- allocate the small IDs players are addressed by
-- remember what exists, so late joiners can be caught up
-- forward packets to the right people
+## Why it needs Steam
 
-Which is why it holds eight players and a thousand props at roughly 2% of one CPU
-core and 150 MB of RAM.
+This is the part that surprises people, so it is worth explaining before you start.
 
-The wire format in `FusionDedicated/Protocol/` was derived by reading Fusion's source
-and confirmed against captured traffic from a real client.
+**Fusion has no master server and no direct IP connections.** It borrows two things
+from Steam instead:
+
+1. **Lobbies.** A Fusion "server" is a Steam lobby carrying a handful of metadata
+   keys, and the in-game browser is a Steam lobby query. To be listed at all, you
+   must be able to create a Steam lobby — which means being a signed-in Steam client.
+2. **Transport.** Players connect over Steam Datagram Relay, Valve's relay network.
+   That is why no port forwarding is needed, and also why the server cannot simply
+   open a socket and skip Steam.
+
+So this server signs in to Steam and stays signed in. Nothing is spoofed and it is
+not pretending to be a game — it uses the same mechanisms Fusion itself uses.
+
+**Why SteamVR?** Fusion initialises Steamworks under **app ID 250820 (SteamVR)**
+rather than BONELAB's own ID, so all its lobby metadata and relay traffic live under
+that app. This server does the same, which is exactly what allows the two to find
+each other. Steam only lets an app initialise if the signed-in account owns it —
+hence the requirement below.
+
+**You do not need BONELAB on the server account.** Only SteamVR, which is free.
 
 ---
 
@@ -40,14 +66,15 @@ and confirmed against captured traffic from a real client.
 
 | | |
 |---|---|
-| OS | Any Linux with systemd (x64) — desktop or headless |
+| OS | Any Linux with systemd (x86-64), desktop or headless |
 | Runtime | .NET 9 |
 | Packages | Xvfb, Steam |
-| Steam account | any account owning **SteamVR (app 250820)** — it is free |
+| Steam account | a **separate** account with **SteamVR** added — both free |
 | Steamworks SDK | `libsteam_api.so`, supplied once |
+| Network | nothing to open |
 
-`install.sh` detects your distribution and offers to install what is missing. If you
-prefer to do it yourself:
+`install.sh` detects your distribution and offers to install what is missing. To do
+it yourself:
 
 | Distro | Command |
 |---|---|
@@ -59,17 +86,49 @@ prefer to do it yourself:
 If .NET 9 is not packaged for your distribution, the official installer works
 anywhere: <https://dot.net/v1/dotnet-install.sh>
 
-**Xvfb is needed even on a desktop.** The Steam client refuses to run without a
-display, and the server runs it on a virtual one so it never depends on you being
-logged in to a graphical session.
+**Xvfb is required even on a desktop.** The Steam client refuses to start without a
+display. The server runs it on a virtual one so it never depends on you being logged
+in to a graphical session.
 
-**Use a separate Steam account.** The server signs in and stays signed in, and Steam
-allows only one active session per account — running this on your everyday account
-will sign you out of your own games.
+---
 
-**Why SteamVR's app id?** Fusion initialises Steamworks under app 250820 rather than
-BONELAB's id, so its lobby metadata and relay traffic live there. This server does the
-same, which is exactly what lets the two interoperate. Nothing is spoofed.
+## Setting up the Steam account
+
+Do this before installing — it is the step people miss.
+
+### 1. Use a separate account
+
+Steam allows **one active session per account**. If the server signs in as you, you
+get signed out of your own games — and it keeps happening, because the server signs
+back in automatically.
+
+Create a second free account for the server. It costs nothing and needs no purchases.
+
+### 2. Add SteamVR to that account
+
+SteamVR is free. Signed in as the server account, open its store page and add it to
+the library:
+
+<https://store.steampowered.com/app/250820/SteamVR/>
+
+You do not need a VR headset, and you do not need BONELAB on this account.
+
+Without this the server starts and immediately fails with `SteamAPI.Init() returned
+false`, because Steam will not let it initialise under an app the account does not
+own.
+
+### 3. Sign in once on the server machine
+
+Steam Guard needs a human the first time. After installing (below), run:
+
+```bash
+~/fusiondedicated/steam-login.sh
+```
+
+On a desktop it opens Steam normally — sign in and close it. On a headless machine it
+starts the virtual display and exposes it over VNC on loopback, printing the exact
+SSH tunnel command to use. Credentials are cached afterwards and the services handle
+themselves from then on.
 
 ---
 
@@ -81,62 +140,92 @@ cd fusion-dedicated
 ./install.sh
 ```
 
-The script verifies prerequisites, builds, and writes three systemd **user** units —
-no root required. It is safe to re-run; an existing `server.json` is left untouched.
+### What the installer does
+
+1. **Detects your distribution** (Arch, Debian/Ubuntu, Fedora/RHEL, openSUSE) and
+   checks for `dotnet` 9+, `Xvfb` and `steam`. For anything missing it shows the
+   exact package command and asks first — it never installs behind your back, and
+   declining simply prints the command for later.
+2. **Builds** the server with `dotnet publish` into `~/fusiondedicated`
+   (override with `FUSION_INSTALL_DIR`).
+3. **Looks for `libsteam_api.so`** in the repo, `$STEAMWORKS_SDK` and
+   `~/steamworks_sdk`. If it is missing it says where to get it rather than failing
+   later for an unclear reason.
+4. **Creates `server.json`** from `server.example.json`, leaving an existing one
+   alone — re-running the installer is safe.
+5. **Writes two helper scripts** into the install directory: `steam-login.sh` for the
+   one-time sign-in, and `steam-supervisor.sh`, which keeps Steam under systemd's
+   control (its launcher forks and exits, which would otherwise make systemd restart
+   it in a loop).
+6. **Writes three systemd user units** — `fusion-xvfb`, `fusion-steam`,
+   `fusion-server` — no root required, then reloads the daemon.
+7. **Checks lingering**, which is what lets user services start at boot without you
+   logging in, and prints the one command needing `sudo` if it is off.
+
+It does not start anything and does not touch your Steam account.
 
 ### Supplying libsteam_api.so
 
-Valve's redistributable is not bundled here. Download the
-[Steamworks SDK](https://partner.steamgames.com/downloads/list) (a free Steam account
-is enough) and either:
+Valve's redistributable is not bundled here, because it is not ours to publish. Get
+the [Steamworks SDK](https://partner.steamgames.com/downloads/list) — a free Steam
+account is enough — then either:
 
 ```bash
 STEAMWORKS_SDK=/path/to/steamworks_sdk ./install.sh
 ```
 
-or copy `redistributable_bin/linux64/libsteam_api.so` into the install directory by
-hand.
+or copy `redistributable_bin/linux64/libsteam_api.so` into `~/fusiondedicated/`.
 
-### Signing in to Steam
+---
 
-Steam Guard needs a human once. The installer writes a helper that handles both
-cases:
+## First run
 
-```bash
-~/fusiondedicated/steam-login.sh
-```
-
-**On a desktop**, it opens Steam on your normal session — sign in and close it.
-
-**On a headless machine** there is no screen to sign in at, so it starts the virtual
-display and exposes it over VNC on loopback. Tunnel in from your own machine:
-
-```bash
-ssh -L 5900:localhost:5900 user@your-server
-```
-
-then point any VNC viewer at `localhost:5900`, sign in, and press Ctrl+C on the
-server. `x11vnc` is required for this path only.
-
-Credentials are cached afterwards and the services look after themselves.
-
-### Running
+After signing in to Steam:
 
 ```bash
 systemctl --user enable --now fusion-xvfb fusion-steam fusion-server
-journalctl --user -u fusion-server -f
 ```
 
-To survive reboots and logouts:
+Make it survive logout and reboots:
 
 ```bash
 sudo loginctl enable-linger $USER
 ```
 
-The three units are deliberately separate: Steam is supervised by a wrapper that
-blocks while it lives, because Steam's launcher forks and returns — a naive unit
-restarts it forever. The relay is tied to Steam with `PartOf`, so a Steam crash
-rebuilds both.
+Watch it start:
+
+```bash
+journalctl --user -u fusion-server -f
+```
+
+A healthy start looks like this:
+
+```
+Steam: your-account-name (76561198...)
+Waiting for the Steam relay network...
+INFO  Relay socket listening as SteamID 76561198...
+INFO  Lobby published: 109775242... — the server is visible in the browser
+INFO  Control panel: http://<this-machine-ip>:8778/
+```
+
+`Lobby published` is the line that matters. Your server should now show up in
+BONELAB's browser under the name from `server.json`.
+
+**Set the version to match your players.** Clients refuse to join across a
+major/minor mismatch, so `VersionMajor` and `VersionMinor` must match the Fusion
+build people are running.
+
+### Why three services
+
+The split is deliberate:
+
+- **`fusion-xvfb`** provides the virtual display Steam needs.
+- **`fusion-steam`** runs Steam through a supervisor that blocks while it lives.
+  Steam's launcher forks and returns immediately, so a naive unit would decide the
+  service had finished and restart it every few seconds.
+- **`fusion-server`** is the relay, tied to Steam with `PartOf` — if Steam goes, both
+  are rebuilt. Steam's networking library does occasionally assert and take the
+  process down with it; this is what recovers unattended, usually in under a minute.
 
 ---
 
@@ -148,7 +237,7 @@ Listens on `localhost:8778` by default. Reach it through an SSH tunnel:
 ssh -L 8778:localhost:8778 user@your-server
 ```
 
-then open `http://localhost:8778`.
+then open <http://localhost:8778>.
 
 | Tab | |
 |---|---|
@@ -159,13 +248,15 @@ then open `http://localhost:8778`.
 | Ranks / Bans | persistent, keyed by SteamID |
 | Settings | gameplay rules, permission gates, spam protection, restart |
 
+Settings changes reach connected players immediately — no reconnect needed.
+
 ### ⚠️ There is no authentication
 
 Anyone who can reach port 8778 can kick, ban, restart the server, wipe the world and
 change the map. No login, no token.
 
-Keep `DashboardHost` set to `localhost` and tunnel in. Setting it to `"+"` publishes
-an unauthenticated admin interface on every interface — acceptable on a network you
+Keep `DashboardHost` on `localhost` and tunnel in. Setting it to `"+"` publishes an
+unauthenticated admin interface on every interface — acceptable on a network you
 control, never on a machine with a public IP.
 
 ---
@@ -174,7 +265,8 @@ control, never on a machine with a public IP.
 
 Mirrors Fusion's own model: `Guest (-1) · Default (0) · Operator (1) · Owner (2)`.
 
-Ranks are stored against SteamIDs and applied at join. Each action has a minimum rank:
+Ranks are stored against SteamIDs and applied at join, so they persist across
+restarts. Each action has a minimum rank:
 
 | Action | Default requirement |
 |---|---|
@@ -201,6 +293,8 @@ from players who left do not count against whoever inherited them.
 Across one night of testing (140 joins, peaks of 8–12 players) the guard removed
 3,254 props and kicked 4 people.
 
+---
+
 ## Keeping the world clean
 
 Props are not kept forever, and this matters if you plan to build something.
@@ -219,8 +313,8 @@ refusing the spawn, and a player's own work is never taken to free space for som
 else.
 
 Raise `InheritedTimeoutSeconds` if your server is for building rather than sandbox
-chaos, but be aware what the ceiling costs: on a busy public server this went from
-3,696 refused spawns over two days to zero.
+chaos, but know what the ceiling costs: on a busy public server this went from 3,696
+refused spawns over two days to zero.
 
 ---
 
@@ -233,15 +327,54 @@ gitignored.
 
 | Key | Meaning |
 |---|---|
-| `VersionMajor` / `VersionMinor` | must match the Fusion build your players run |
+| `ServerName` / `Description` | shown in the browser; Unity rich text works (`<color=#4ae08c>`) |
+| `VersionMajor` / `VersionMinor` | **must match** the Fusion build your players run |
 | `Privacy` | 0 public, 1 private, 2 friends only, 3 locked |
+| `MaxPlayers` | slots; Fusion addresses players with one byte, so 255 is the hard ceiling |
 | `LevelBarcode` / `LevelTitle` | the map clients are told to load |
-| `LevelModId` | mod.io id of the current map; also supplies the server's picture in the browser |
-| `DashboardHost` | `localhost` or `+` — see the warning above |
-| `AntiSpamExemptLevel` | rank that bypasses the spawn guard (`Owner` by default) |
+| `LevelModId` | mod.io ID of the current map; also supplies the server's picture in the browser |
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
+| `AntiSpamExemptLevel` | rank that bypasses the spawn guard (`Owner` by default) |
+| `DashboardHost` | `localhost` or `+` — see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
+
+Most of these are editable in the panel; the file is the source of truth on restart.
+
+---
+
+## Troubleshooting
+
+**`SteamAPI.Init() returned false`**
+The account does not own SteamVR, or the Steam client is not running or not signed
+in. Check `systemctl --user status fusion-steam`, and confirm app 250820 is in the
+account's library.
+
+**Server starts but never appears in the browser**
+Look for `Lobby published` in the log. If it is missing, Steam is up but the lobby
+was refused — usually a signed-out client. If it is present and players still cannot
+see it, check `Privacy` in `server.json` and that `VersionMajor`/`VersionMinor` match
+their Fusion build.
+
+**Players connect, then immediately drop**
+Almost always a version mismatch. The log records the rejection reason.
+
+**`fusion-steam` restarts in a loop**
+Steam failed to start under the virtual display. Check `/tmp/steam.log` and confirm
+the one-time sign-in was completed on this machine.
+
+**Everyone disconnects at once**
+Check the log for `MASS DISCONNECT`. It lists each player's transport-level reason
+and separates a clean exit (`Closing Connection`) from a fault
+(`Timeout; remote problem`). Several timeouts together means clients are freezing,
+which usually points at the number of props in the world rather than at the server.
+
+**Nothing spawns any more**
+The world hit `MaxEntities`. Abandoned props are evicted automatically; the panel's
+World tab also has a manual "Clear every entity".
+
+Logs live in `~/fusiondedicated/logs/server-YYYY-MM-DD.log`, kept separately from the
+journal so they survive restarts.
 
 ---
 
@@ -251,8 +384,8 @@ An honest inventory, because a server that overstates this wastes an evening.
 
 **Verified end to end:** join handshake, packet relaying, spawn and despawn,
 ownership transfer, permissions and moderation, bans, map switching, the spawn guard,
-settings persistence across restarts, and automatic recovery from both a killed
-server process and a Steam client crash.
+world cleanup, settings persistence across restarts, and automatic recovery from both
+a killed server process and a Steam client crash.
 
 **Implemented but never confirmed working:** mod-info brokering. When a player lacks
 a modded item, the server tries to forward the question to a connected player who has
@@ -269,25 +402,39 @@ found a holder, so treat it as untested rather than as a feature.
 - Gamemodes are not implemented; the server presents itself as plain sandbox.
 - Player IDs 0–255 are reserved by clients for player rigs, so props are allocated
   from 256 upward. Allocating below that corrupts player entities on every client.
+- The panel has no authentication.
 
 ---
 
 ## Platform
 
-Any systemd Linux on x86-64, desktop or headless — the installer detects the
-distribution and adapts. It has been run on Arch; other distributions use the same
-mechanisms (systemd user units, Xvfb, the Steam client) and should work, but if
-yours needs a tweak a PR to `install.sh` is welcome.
+Any systemd Linux on x86-64, desktop or headless — the installer adapts to the
+distribution. Developed and run on Arch; other distributions use the same mechanisms
+and should work, but if yours needs a tweak a PR to `install.sh` is welcome.
 
 **Windows is not supported.** Nothing in the code is Linux-specific beyond reading
 `/proc` for host statistics, and Steamworks.NET is cross-platform, but it has never
-been run there and the installer is systemd-only — so no install path is claimed.
+been run there and the installer is systemd-only.
 
-**Non-systemd Linux** works too, it just installs by hand: build with
+**Non-systemd Linux** works, it just installs by hand: build with
 `dotnet publish -c Release -r linux-x64 --self-contained false -o ~/fusiondedicated`,
 drop `libsteam_api.so` beside it, start Xvfb and Steam yourself, then run
 `LD_LIBRARY_PATH=. dotnet fusiondedicated.dll` with `DISPLAY` pointing at the virtual
 display.
+
+---
+
+## Uninstall
+
+```bash
+systemctl --user disable --now fusion-server fusion-steam fusion-xvfb
+rm -f ~/.config/systemd/user/fusion-{server,steam,xvfb}.service
+systemctl --user daemon-reload
+rm -rf ~/fusiondedicated
+```
+
+The Steam account and its cached credentials are untouched; sign out through Steam
+itself if you want those gone too.
 
 ---
 
@@ -297,6 +444,7 @@ Issues and pull requests are welcome. Useful things to include in a bug report:
 
 - the relevant section of `logs/server-YYYY-MM-DD.log`
 - your Fusion version and the server's `VersionMajor`/`VersionMinor`
+- your distribution, if it is an install problem
 - whether players disconnected with `Closing Connection` (a normal exit) or
   `Timeout; remote problem` (a client that stopped responding) — the distinction
   matters a great deal when diagnosing
@@ -305,10 +453,9 @@ Issues and pull requests are welcome. Useful things to include in a bug report:
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). Attribution and third-party notices are in [NOTICE](NOTICE).
 
 Built against [BONELAB Fusion](https://github.com/Lakatrazz/BONELAB-Fusion) by
-Lakatrazz and contributors (MIT), and uses
-[Steamworks.NET](https://github.com/rlabrecque/Steamworks.NET) (MIT). This project is
+Lakatrazz and contributors, and uses
+[Steamworks.NET](https://github.com/rlabrecque/Steamworks.NET). This project is
 independent and is not affiliated with or endorsed by them, or by Stress Level Zero.
-All game content, and the protocol design itself, belong to their respective authors.
