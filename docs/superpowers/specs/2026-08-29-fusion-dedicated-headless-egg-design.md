@@ -28,7 +28,8 @@ implementation.
 | Image strategy | Custom runtime image in `BadgerPanelYolks`, thin install script. |
 | Anti-grief delivery | Port the rules natively into the relay. No plugin system and no DLL loading. |
 | Promotion channel | One command parser behind two transports: stdin and Source RCON. Alongside the existing web panel. |
-| Rank storage | A separate hand-editable `ranks.json`, watched and reloaded, seeded by egg variables. |
+| Rank storage | A separate hand-editable `ranks.json`, watched and reloaded, seeded by egg variables, able to import Fusion's own `permissionList.xml`. |
+| Fusion safety lists | Consume both. The global mod blacklist is enforced; the global ban list is advisory and only logs. |
 | Moderation scope | All four capability groups: blocklist, player controls, message gates, audit log. |
 
 ## Triage of the upstream "known limits"
@@ -254,11 +255,14 @@ Environment variables overwrite only their own keys. Every other key in
 
 Environment-owned: `ServerName`, `Description`, `MaxPlayers`, `Privacy`,
 `VersionMajor`, `VersionMinor`, `LevelBarcode`, `LevelTitle`, `MaxEntities`,
-`AntiSpamEnabled`, `SpawnBurstLimit`, `MaxEntitiesPerPlayer`, `DashboardPort`,
-`DashboardHost`, `DashboardUser`, `DashboardPassword`, `RconPort`,
-`RconPassword`, `LogDirectory`.
+`AntiSpamEnabled`, `SpawnBurstLimit`, `MaxEntitiesPerPlayer`,
+`GlobalListsEnabled`, `DashboardPort`, `DashboardHost`, `DashboardUser`,
+`DashboardPassword`, `RconPort`, `RconPassword`, `LogDirectory`.
 
 Volume-owned: `Bans`, `ModCatalog`, `Levels`, `ServerCode`.
+
+Cached safety lists live in their own directory beside the logs, so a wiped cache
+costs a refetch and nothing else.
 
 `ranks.json` is a separate file and is volume-owned, except that
 `OWNER_STEAMIDS` and `OPERATOR_STEAMIDS` are merged into it at boot without
@@ -423,6 +427,25 @@ at boot as comma-separated lists. Anyone listed there holds that rank from their
 first join, with no console command and no web panel. Migration from an existing
 `server.json` happens once, on first start after upgrading.
 
+**Importing a Fusion roster.** LabFusion stores its own ranks through
+`LabFusion.Data.PermissionList`, in `permissionList.xml`:
+
+```xml
+<PermissionList>
+  <Permission id="76561198000000000" username="spudgun" level="2" />
+</PermissionList>
+```
+
+A `permissionList.xml` placed beside `ranks.json` is imported on start, so a
+roster built while hosting a normal lobby carries across to a dedicated server.
+The import is additive and never removes an existing entry. Level numbers map
+directly, because both sides use the same `PermissionLevel` values.
+
+This file is also the answer to why in-game promotion cannot reach us. A host
+assigns ranks through `FusionPermissions.TrySetPermission`, which writes to this
+local list. It is a host-local call, not a network message, so there is nothing
+for a dedicated server to receive.
+
 Because ranks apply at join ([FusionServer.cs:482]) and `SetPermission`
 broadcasts the change to connected clients immediately, a promotion takes effect
 mid-session. The promoted player sees their rank change and their menu update
@@ -503,17 +526,56 @@ Porting rather than loading also produces a better result. Rules enforced here
 apply to **unmodded clients**, and a griefer cannot bypass them by declining to
 install anything.
 
-### G1. Barcode blocklist
+### G1. Blocklists and Fusion's safety lists
 
-`BarcodeMatcher.AlwaysBlocked` is a plain `HashSet<string>` with no game
-dependencies, so it ports across unchanged. It becomes a built-in blocklist
-checked before the user-editable `BlacklistedBarcodes`, preserving the layering
-the mod already uses: the built-in list cannot be whitelisted away through
-configuration.
+`HandleSpawnRequest` already consults `Config.BlacklistedBarcodes`, so this
+hardens an existing check rather than adding a new one.
 
-`HandleSpawnRequest` already consults `Config.BlacklistedBarcodes`, so this seeds
-and hardens an existing check rather than adding a new one. A denied spawn is
-logged with the barcode and the player.
+**Three layers, checked in order.** A spawn is denied if any layer matches.
+
+1. **Built-in.** `BarcodeMatcher.AlwaysBlocked` ported from the mod. A plain
+   `HashSet<string>` with no game dependencies, so it transfers unchanged.
+   Cannot be disabled or whitelisted through configuration, matching the mod's
+   own intent.
+2. **Fusion's global mod blacklist.** Fetched from
+   `https://raw.githubusercontent.com/Lakatrazz/Fusion-Lists/main/globalModBlacklist.json`,
+   the same list every stock client uses. Entries block by barcode, by mod.io ID
+   and by name ID. Can be turned off wholesale by configuration, but not
+   per-entry.
+3. **Operator list.** `Config.BlacklistedBarcodes`, additive and editable in the
+   panel.
+
+Matching by mod.io ID is stronger than by barcode, because it covers every item
+in a malicious pallet rather than only the ones somebody enumerated. A spawn
+request carries a barcode, from which the name ID is derivable as the pallet
+portion. Mapping a barcode to a mod.io ID needs the learned `ModCatalog`, so ID
+matching applies only to barcodes the server has seen catalogued, and barcode and
+name ID matching always apply.
+
+The two lists overlap, which is a good sign rather than a redundancy:
+`SLZ.BONELAB.Core.Spawnable.GameplaySystems` appears in both.
+
+**The global ban list is advisory.** `globalBans.json` is fetched and consulted
+at join, and a match is logged and flagged in the panel with the community's
+recorded reason. It never kicks by itself. Enforcement stays a local decision,
+because a third-party repository should not be able to ban someone from this
+server, and a false positive would lock out a friend until somebody noticed.
+
+**Fetching and caching.** Lists are fetched on start and refreshed on an
+interval. Every fetch is cached to disk. A failed fetch falls back to the cache,
+and no cache falls back to the built-in layer alone, logged in both cases. A
+server with no outbound internet must still start and must still enforce layers
+one and three.
+
+### Tests for G1
+
+- a built-in barcode is denied even when absent from every fetched list
+- a global-blacklist barcode is denied, and so is one matched by name ID
+- a mod.io ID match denies only when the barcode is in the catalogue
+- disabling the global list leaves the built-in and operator layers enforcing
+- a fetch failure falls back to cache, and an absent cache to built-in only
+- a globally banned SteamID is admitted, logged and flagged, never kicked
+- a malformed downloaded list is rejected and the previous cache retained
 
 ### G2. Player controls
 
@@ -616,3 +678,6 @@ uncertain parts are validated where they will actually run.
 | RCON is a network-exposed auth surface | Disabled unless a password is set, refuses to listen with an empty one, fixed-time comparison, and its own allocation so it can be firewalled separately from the panel. |
 | No in-game promote button is possible on stock clients | Confirmed from `LabFusion.dll`: `PermissionCommandType` is only KICK, BAN and the two teleports. Ranks apply at join and `SetPermission` broadcasts live, so console and RCON promotion takes effect mid-session without a reconnect. |
 | A client could request its own rank via player metadata | `PlayerMetadataRequestMessage` exists and permission is stored as metadata, which is the permission-spoof attack. The server must never honour a client-supplied `PermissionLevel`. Covered by a test in G. |
+| The safety lists are a third-party repository | The mod blacklist is enforced but can be disabled wholesale; the ban list only ever logs. Both are cached, so the repository going away degrades rather than breaks. |
+| A server with no outbound internet | Fetch failures fall back to cache, then to the built-in layer. Startup never depends on reaching GitHub. |
+| Fusion is not installed on the development machine | Live validation in phase 4 needs a working Fusion client. `D:\SteamLibrary\steamapps\common\BONELAB` has no `Mods/` directory, so this is a setup step to schedule before phase 4, not a blocker for phases 1 to 3. |
