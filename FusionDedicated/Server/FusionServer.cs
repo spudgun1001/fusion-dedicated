@@ -64,10 +64,18 @@ public sealed class FusionServer : IDisposable
         Log("INFO", $"Relay socket listening as SteamID {SteamUser.GetSteamID().m_SteamID}");
     }
 
+    /// <summary>Fusion's community lists, when they have been fetched or cached.</summary>
+    public SafetyListStore? SafetyLists { get; set; }
+
     public void RebuildBlocklist()
     {
         _blocklist = new BlocklistEvaluator(
-            new HashSet<string>(Config.BlacklistedBarcodes, StringComparer.Ordinal));
+            new HashSet<string>(Config.BlacklistedBarcodes, StringComparer.Ordinal),
+            Config.GlobalListsEnabled ? SafetyLists?.Mods : null,
+            Config.ModCatalog
+                .Where(m => m.ModId > 0)
+                .GroupBy(m => m.Barcode)
+                .ToDictionary(g => g.Key, g => g.First().ModId, StringComparer.Ordinal));
     }
 
     public void Dispose()

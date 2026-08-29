@@ -209,6 +209,12 @@ public sealed class ServerConfig
 
     public List<string> BlacklistedBarcodes { get; set; } = new();
 
+    /// <summary>
+    /// Whether to fetch and enforce Fusion's community mod blacklist. The built-in
+    /// list is enforced either way.
+    /// </summary>
+    public bool GlobalListsEnabled { get; set; } = true;
+
     // ---- crash protection ----
     // A dedicated server never simulates anything, so a spawn flood costs it almost
     // nothing — but every client has to instantiate each prop, and enough of them at

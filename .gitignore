@@ -27,3 +27,6 @@ steamclient.so
 *.swp
 .DS_Store
 Thumbs.db
+
+# Cached copies of Fusion's community safety lists. Refetched on start.
+lists/

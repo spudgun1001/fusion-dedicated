@@ -1,5 +1,6 @@
 using FusionDedicated;
 using FusionDedicated.Server;
+using FusionDedicated.Server.Safety;
 using FusionDedicated.Web;
 using Steamworks;
 
@@ -69,6 +70,27 @@ public static class Program
         server.Resources.OpenStore(Path.IsPathRooted(config.LogDirectory)
             ? config.LogDirectory
             : Path.Combine(AppContext.BaseDirectory, config.LogDirectory));
+
+        // ---- safety lists ----
+        var safety = new SafetyListStore(Path.Combine(AppContext.BaseDirectory, "lists"));
+        safety.LoadCache();
+        server.SafetyLists = safety;
+        server.RebuildBlocklist();
+
+        if (config.GlobalListsEnabled)
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+
+            await safety.RefreshAsync(async url =>
+            {
+                try { return await http.GetStringAsync(url); }
+                catch { return null; }
+            });
+
+            server.RebuildBlocklist();
+            server.Log("INFO", $"Safety lists: {safety.Mods?.Mods.Count ?? 0} blacklisted mods, " +
+                               $"{safety.Bans?.Bans.Count ?? 0} global bans");
+        }
 
         // ---- lobby ----
         using var lobby = new LobbyPublisher();
