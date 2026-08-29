@@ -501,6 +501,13 @@ public sealed class FusionServer : IDisposable
         player.Permission = Config.GetPermission(platformId);
         player.Metadata[PermissionMetadataKey] = player.Permission.ToFusionString();
 
+        if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
+        {
+            Log("WARN", $"{player.DisplayName} is on Fusion's global ban list " +
+                        $"as '{globalBan.Username}': {globalBan.Reason}. " +
+                        "Not enforced — ban them here if you agree.");
+        }
+
         Players.Add(player);
 
         Log("JOIN", $"{player.DisplayName} joined — SmallID {player.SmallId}, " +
