@@ -64,4 +64,58 @@ public static class CgroupReader
 
         return Math.Max(1, (int)Math.Ceiling((double)q / p));
     }
+
+    public enum StatsSource
+    {
+        Host,
+        CgroupV1,
+        CgroupV2,
+    }
+
+    /// <summary>
+    /// Memory and CPU as the container sees them, or null when no limit is set. The
+    /// file reader is injected so this stays testable off Linux.
+    /// </summary>
+    public static (long Total, long Available, int Cpus, StatsSource Source)? TryReadLimits(
+        Func<string, string?> readFile)
+    {
+        long? v2 = ParseMemoryLimit(readFile("/sys/fs/cgroup/memory.max"));
+
+        if (v2 is { } totalV2)
+        {
+            long used = ParseMemoryLimit(readFile("/sys/fs/cgroup/memory.current")) ?? 0;
+            int cpus = ParseCpuQuota(readFile("/sys/fs/cgroup/cpu.max")) ?? Environment.ProcessorCount;
+
+            return (totalV2, Math.Max(0, totalV2 - used), cpus, StatsSource.CgroupV2);
+        }
+
+        long? v1 = ParseMemoryLimit(readFile("/sys/fs/cgroup/memory/memory.limit_in_bytes"));
+
+        // cgroup v1 signals "no limit" with a sentinel near long.MaxValue rather than
+        // the word max, so an implausibly large limit means unlimited.
+        if (v1 is { } totalV1 && totalV1 < (1L << 53))
+        {
+            long used = ParseMemoryLimit(readFile("/sys/fs/cgroup/memory/memory.usage_in_bytes")) ?? 0;
+            int cpus = ParseV1CpuQuota(
+                readFile("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"),
+                readFile("/sys/fs/cgroup/cpu/cpu.cfs_period_us")) ?? Environment.ProcessorCount;
+
+            return (totalV1, Math.Max(0, totalV1 - used), cpus, StatsSource.CgroupV1);
+        }
+
+        return null;
+    }
+
+    /// <summary>Reads a file, or null if it is missing or unreadable.</summary>
+    public static string? ReadFileOrNull(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

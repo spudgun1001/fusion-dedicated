@@ -353,7 +353,8 @@ public sealed class ResourceMonitor
         long MemoryAvailableBytes,
         int ProcessorCount,
         string Platform,
-        string Framework);
+        string Framework,
+        string Source);
 
     /// <summary>
     /// Machine-wide numbers. Linux exposes these through /proc; anywhere else the
@@ -394,13 +395,25 @@ public sealed class ResourceMonitor
             // Reporting resource use must never be able to take the server down.
         }
 
+        var limits = CgroupReader.TryReadLimits(CgroupReader.ReadFileOrNull);
+
+        if (limits is { } c)
+        {
+            return new HostStats(
+                Math.Round(load, 2), c.Total, c.Available, c.Cpus,
+                Environment.OSVersion.Platform.ToString(),
+                Environment.Version.ToString(),
+                c.Source.ToString());
+        }
+
         return new HostStats(
             Math.Round(load, 2),
             total,
             available,
             Environment.ProcessorCount,
             Environment.OSVersion.Platform.ToString(),
-            Environment.Version.ToString());
+            Environment.Version.ToString(),
+            nameof(CgroupReader.StatsSource.Host));
     }
 
     private static long ParseKb(string line)
