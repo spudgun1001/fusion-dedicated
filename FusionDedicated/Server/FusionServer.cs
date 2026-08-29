@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
+using FusionDedicated.Server.Safety;
 using Steamworks;
 
 namespace FusionDedicated.Server;
@@ -39,6 +40,8 @@ public sealed class FusionServer : IDisposable
     private readonly List<ServerLogEntry> _log = new();
     private readonly object _logLock = new();
 
+    private BlocklistEvaluator _blocklist = new(new HashSet<string>(StringComparer.Ordinal));
+
     public FusionServer(ServerConfig config)
     {
         Config = config;
@@ -56,7 +59,15 @@ public sealed class FusionServer : IDisposable
         _statusCallback = Callback<SteamNetConnectionStatusChangedCallback_t>
             .Create(OnConnectionStatusChanged);
 
+        RebuildBlocklist();
+
         Log("INFO", $"Relay socket listening as SteamID {SteamUser.GetSteamID().m_SteamID}");
+    }
+
+    public void RebuildBlocklist()
+    {
+        _blocklist = new BlocklistEvaluator(
+            new HashSet<string>(Config.BlacklistedBarcodes, StringComparer.Ordinal));
     }
 
     public void Dispose()
@@ -528,9 +539,12 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        if (Config.BlacklistedBarcodes.Contains(request.Value.Barcode))
+        var blockVerdict = _blocklist.Check(request.Value.Barcode);
+
+        if (blockVerdict.Blocked)
         {
-            Log("WARN", $"Spawn of '{request.Value.Barcode}' denied: barcode is blacklisted");
+            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+                        $"denied by the {blockVerdict.Layer} blocklist: {blockVerdict.Reason}");
             return;
         }
 
@@ -1030,6 +1044,8 @@ public sealed class FusionServer : IDisposable
     public void PushSettings()
     {
         Players.MaxPlayers = Config.MaxPlayers;
+
+        RebuildBlocklist();
 
         Broadcast(ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
     }
