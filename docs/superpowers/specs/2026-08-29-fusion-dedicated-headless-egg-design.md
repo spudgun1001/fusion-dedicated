@@ -26,6 +26,9 @@ implementation.
 | Validation | The operator owns BONELAB and can connect a real Fusion client, so live testing is available. |
 | Config authority | Split by key. Environment variables own identity and infrastructure keys. `server.json` keeps accumulated state. |
 | Image strategy | Custom runtime image in `BadgerPanelYolks`, thin install script. |
+| Anti-grief delivery | Port the rules natively into the relay. No plugin system and no DLL loading. |
+| Promotion channel | Console commands over stdin, alongside the existing web panel. |
+| Moderation scope | All four capability groups: blocklist, player controls, message gates, audit log. |
 
 ## Triage of the upstream "known limits"
 
@@ -54,10 +57,13 @@ In scope:
 - **B** — container-aware resource reporting
 - **E** — a release workflow producing a `linux-x64` tarball
 - **D** — runtime image, entrypoint, and the egg
+- **F** — a console command surface on stdin
+- **G** — moderation and anti-grief, in four parts
 - **C** — client-created entity tracking
 
 Out of scope: gamemodes, the two non-defects above, any change to the Proton-based
-egg that already exists in `BonelabFusionDedicated`.
+egg that already exists in `BonelabFusionDedicated`, and any plugin or DLL loading
+system (see the reasoning in section G).
 
 ## Repository layout
 
@@ -329,17 +335,187 @@ state, where these entities are invisible.
 
 ---
 
+## F. Console command surface
+
+### Problem
+
+Fusion's moderation vocabulary is fixed by its wire format:
+
+```
+Unknown = 0, Kick = 1, Ban = 2, TeleportToThem = 3, TeleportToMe = 4
+```
+
+There is no promote or demote command, so a stock client never sends one and the
+in-game menu has no button for it. The outbound half already works, because the
+server publishes each player's rank through the `PermissionLevel` metadata key
+and clients read it. Only an inbound channel is missing.
+
+The web panel has `/api/permission`, which requires leaving the game and reaching
+a separate web interface.
+
+### Design
+
+Read commands from standard input. Pterodactyl pipes its console directly to the
+process, so this gives BadgerPanel a first-class command surface for free, with
+no protocol reverse-engineering and no client-side mod.
+
+A reader task on stdin parses one command per line and dispatches to the same
+methods the web panel already calls. Commands operate on a SteamID64 or on a
+connected player's name, resolving names case-insensitively and refusing an
+ambiguous match rather than guessing.
+
+Initial command set:
+
+| Command | Effect |
+|---|---|
+| `promote <who> <guest\|default\|operator\|owner>` | Sets rank, persisted against the SteamID |
+| `kick <who> [reason]` | Disconnects a connected player |
+| `ban <who> [duration] [reason]` | Bans, permanently or for a duration |
+| `unban <steamid>` | Lifts a ban |
+| `mute` / `unmute <who>` | Voice mute, see section G |
+| `players` | Lists connected players with rank and entity count |
+| `purge <who>` | Removes that player's entities |
+| `level <barcode> [title]` | Switches map |
+| `say <message>` | Deferred until a text channel is confirmed to exist |
+| `help` | Lists commands |
+
+Unknown input is answered with a short error rather than being ignored, because a
+silent console is indistinguishable from a hung one.
+
+Commands issued on stdin have no rank and are always permitted. Anyone holding
+the console already controls the process.
+
+`say` is listed but not implemented in this phase. Fusion's text chat has no
+known message tag in the current protocol layer, and inventing one would require
+a client-side mod. It stays out until the tag is confirmed to exist.
+
+### Tests
+
+Parsing is pure and gets thorough coverage:
+
+- each command parses with and without its optional arguments
+- an unknown command produces an error rather than throwing
+- name resolution is case-insensitive, and an ambiguous name is refused
+- an unparsable rank name is refused rather than defaulting to a rank
+- a malformed duration is refused rather than becoming a permanent ban
+
+---
+
+## G. Moderation and anti-grief
+
+### Why the existing mod cannot be loaded
+
+`Z:\Dev\BoneLabAntiNuke` is a MelonLoader mod. It declares
+`[MelonGame("Stress Level Zero", "BONELAB")]` and
+`[MelonProcessAttribute("BONELAB_Steam_Windows64.exe")]`, and works by Harmony-
+patching `LabFusion.Network.*Message.OnHandleMessage` inside the running IL2CPP
+game process. Its dependencies are `MelonLoader`, `Il2Cpp*`, `UnityEngine.*`,
+`LabFusion` and `BoneLib`, none of which exist outside BONELAB and none of which
+can be supplied to a .NET 9 console application. A `Mods/` directory loading that
+assembly would fail at resolution on the first load.
+
+The mod exists because a client-hosted Fusion lobby has no server-side authority,
+so protection has to be patched into whichever player is hosting. This relay is
+that authority. Every message the mod patches has a seam in `HandleMessage`,
+which currently dispatches nine tags and blind-relays the rest.
+
+Porting rather than loading also produces a better result. Rules enforced here
+apply to **unmodded clients**, and a griefer cannot bypass them by declining to
+install anything.
+
+### G1. Barcode blocklist
+
+`BarcodeMatcher.AlwaysBlocked` is a plain `HashSet<string>` with no game
+dependencies, so it ports across unchanged. It becomes a built-in blocklist
+checked before the user-editable `BlacklistedBarcodes`, preserving the layering
+the mod already uses: the built-in list cannot be whitelisted away through
+configuration.
+
+`HandleSpawnRequest` already consults `Config.BlacklistedBarcodes`, so this seeds
+and hardens an existing check rather than adding a new one. A denied spawn is
+logged with the barcode and the player.
+
+### G2. Player controls
+
+- **Voice mute.** Tag 67 carries voice. A muted player's voice packets are
+  dropped at the relay instead of being broadcast, so muting works against a
+  stock client with nothing installed. Mute state is per-session unless the
+  player is also given a persistent flag.
+- **Temporary bans.** `Bans` entries gain an optional expiry. An expired ban is
+  ignored at join and swept from the list. Existing entries with no expiry stay
+  permanent, so the change is backward compatible.
+- **Whitelist mode.** An optional mode where only listed SteamIDs may join. Off
+  by default. When on, an unlisted player is refused at the join handshake with a
+  clear reason rather than being silently dropped.
+
+### G3. Message-type gates
+
+The eight message types the mod patches are relayed blind today. Each needs a
+parser written against the wire format and a rule applied before relaying:
+
+`PlayerRepTeleport`, `PlayerRepDamage`, `PlayerRepAvatar`, `LevelLoad`,
+`SlowMoButton`, `ConstraintCreate`, `RPCMethod`, `InventorySlotInsert`.
+
+This is the largest and least certain part of the work. Wire formats for these
+tags are not yet implemented in `Protocol/`, so each has to be derived and then
+confirmed against live traffic. The watcher logic in the mod
+(`ExplosiveProbe`, `GodmodeWatcher`, `MovementWatcher`) depends on
+`Il2CppSLZ.Marrow.Warehouse` and `UnityEngine` types, so it is rewritten against
+wire data rather than copied.
+
+Each gate ships independently and defaults to relaying unchanged. A gate that
+cannot be validated against a live client stays off and is documented, rather
+than being enabled on the assumption it works.
+
+### G4. Audit log
+
+Every moderation action records who acted, on whom, what, when, why, and through
+which channel of console, panel or in-game. Written to its own file separate from
+the server log so it survives log rotation and is readable on its own, and
+surfaced as a panel tab.
+
+### Tests
+
+- a built-in blocked barcode is denied even when present in `BlacklistedBarcodes`
+- a muted player's voice packets are dropped and their other packets still relay
+- an expired ban does not prevent a join, and an unexpired one does
+- a ban with no expiry stays permanent
+- whitelist mode refuses an unlisted SteamID and admits a listed one
+- each message gate defaults to relaying unchanged when disabled
+- every moderation path writes exactly one audit entry, with the right channel
+
+---
+
 ## Sequencing
+
+Four phases. Each ends somewhere worth stopping.
+
+**Phase 1 — foundations.** No game and no container needed, all unit-testable.
 
 1. **A** — test project and dashboard authentication
 2. **B** — container-aware resources
-3. **E** — release workflow
-4. **D** — image, entrypoint, egg, then a real deployment on BadgerPanel
-5. **C** — stage 1, then stage 2 with a live client
+3. **G1** — barcode blocklist port
+4. **F** — console command surface
 
-A and B need no game and no container. D produces something running on
-BadgerPanel. C is last because it is the only part that cannot be finished
-without a real client connected.
+**Phase 2 — ship it.** Produces something running on BadgerPanel, which makes
+everything after it testable in the real environment.
+
+5. **E** — release workflow
+6. **D** — image, entrypoint, egg, then a real deployment
+
+**Phase 3 — player controls.**
+
+7. **G2** — mute, temporary bans, whitelist
+8. **G4** — audit log
+
+**Phase 4 — live protocol work.** Both need a real client connected and both
+expect iteration.
+
+9. **C** — entity tracking, stage 1 then stage 2
+10. **G3** — message-type gates, one at a time
+
+Phase 2 lands deliberately early. Deploying before the protocol work means the
+uncertain parts are validated where they will actually run.
 
 ## Risks
 
@@ -350,3 +526,7 @@ without a real client connected.
 | Fusion updates break version compatibility | `VersionMajor` and `VersionMinor` are environment variables, so operators can track a new Fusion build without a new image |
 | Steam's runtime consumes the disk quota | Egg documents a 3 GB minimum |
 | Upstream is two commits old with no external validation | Work stays on a branch against a tracked `upstream` remote |
+| Wire formats for the eight gated message types are unknown | Each is derived and validated separately. A gate that cannot be validated stays off and is documented. |
+| Console commands need stdin to survive the entrypoint | The entrypoint replaces the shell with the server process rather than backgrounding it, so stdin is inherited. Covered by a deployment check in phase 2. |
+| Anti-grief rules now exist in two codebases | The relay copy is authoritative for servers running it. The mod stays useful for client-hosted lobbies. Barcode lists should be kept in step deliberately, not assumed to match. |
+| Fusion has no known text-chat tag | `say` is specified but not implemented. It stays out until a tag is confirmed rather than shipping a stub. |
