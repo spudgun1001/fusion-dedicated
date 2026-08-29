@@ -1,5 +1,7 @@
 using FusionDedicated;
 using FusionDedicated.Server;
+using FusionDedicated.Commands;
+using FusionDedicated.Server.Ranks;
 using FusionDedicated.Server.Safety;
 using FusionDedicated.Web;
 using Steamworks;
@@ -92,6 +94,45 @@ public static class Program
                                $"{safety.Bans?.Bans.Count ?? 0} global bans");
         }
 
+        // ---- ranks ----
+        var ranks = new RankStore(Path.Combine(AppContext.BaseDirectory, "ranks.json"));
+        ranks.Load();
+
+        int migrated = ranks.MigrateFrom(config.Permissions);
+
+        string permissionListPath = Path.Combine(AppContext.BaseDirectory, "permissionList.xml");
+
+        if (File.Exists(permissionListPath))
+        {
+            int imported = PermissionListImporter.Import(ranks, File.ReadAllText(permissionListPath));
+
+            if (imported > 0)
+            {
+                server.Log("INFO", $"Imported {imported} ranks from permissionList.xml");
+            }
+        }
+
+        int seededOwners = ranks.MergeSeed(
+            ParseIds(Environment.GetEnvironmentVariable("OWNER_STEAMIDS")), PermissionLevel.Owner);
+
+        int seededOperators = ranks.MergeSeed(
+            ParseIds(Environment.GetEnvironmentVariable("OPERATOR_STEAMIDS")), PermissionLevel.Operator);
+
+        if (migrated + seededOwners + seededOperators > 0)
+        {
+            ranks.Save();
+        }
+
+        server.Ranks = ranks;
+        ranks.ReloadIfChanged();
+
+        using var rankWatcher = new RankFileWatcher(ranks, message => server.Log("INFO", message));
+        rankWatcher.Start();
+
+        server.Log("INFO", $"Ranks: {ranks.Entries.Count} players listed");
+
+        var commands = new CommandProcessor(new ServerCommandTarget(server));
+
         // ---- lobby ----
         using var lobby = new LobbyPublisher();
 
@@ -134,6 +175,8 @@ public static class Program
 
         // ---- main loop ----
         using var quit = new CancellationTokenSource();
+
+        StdinCommands.Start(commands, Console.WriteLine, quit.Token);
 
         Console.CancelKeyPress += (_, e) =>
         {
@@ -213,6 +256,22 @@ public static class Program
     /// Starts a fresh copy of this server and lets this one exit. The child is
     /// deliberately not tied to our stdio, so it survives the parent going away.
     /// </summary>
+    private static IEnumerable<ulong> ParseIds(string? commaSeparated)
+    {
+        if (string.IsNullOrWhiteSpace(commaSeparated))
+        {
+            yield break;
+        }
+
+        foreach (string part in commaSeparated.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (ulong.TryParse(part.Trim(), out ulong id))
+            {
+                yield return id;
+            }
+        }
+    }
+
     private static void Relaunch()
     {
         // Under systemd the supervisor restarts us, so spawning our own copy would

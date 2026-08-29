@@ -67,6 +67,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Fusion's community lists, when they have been fetched or cached.</summary>
     public SafetyListStore? SafetyLists { get; set; }
 
+    /// <summary>The rank roster. When set it takes precedence over the config list.</summary>
+    public Ranks.RankStore? Ranks { get; set; }
+
     public void RebuildBlocklist()
     {
         _blocklist = new BlocklistEvaluator(
@@ -498,7 +501,7 @@ public sealed class FusionServer : IDisposable
 
         // The client sends its own idea of its permission level; the server's list is
         // what counts, so overwrite it before anyone else sees the metadata.
-        player.Permission = Config.GetPermission(platformId);
+        player.Permission = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
         player.Metadata[PermissionMetadataKey] = player.Permission.ToFusionString();
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
@@ -999,6 +1002,9 @@ public sealed class FusionServer : IDisposable
     public void SetPermission(ulong platformId, string username, PermissionLevel level)
     {
         Config.SetPermission(platformId, username, level);
+
+        Ranks?.Set(platformId, username, level);
+        Ranks?.Save();
 
         var player = Players.GetByPlatformId(platformId);
 
