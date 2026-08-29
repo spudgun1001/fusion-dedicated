@@ -30,6 +30,9 @@
   <ItemGroup>
     <None Include="steam_appid.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Web\index.html" CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- The container's entrypoint copies this to server.json on first start. -->
+    <None Include="server.example.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
