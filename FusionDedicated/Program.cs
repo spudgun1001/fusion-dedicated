@@ -29,11 +29,11 @@ public static class Program
         // ---- Steam ----
         // The app id comes from steam_appid.txt next to the binary; Fusion runs under
         // SteamVR's id rather than BONELAB's, and so does this.
-        if (!SteamAPI.Init())
+        var steam = SteamStartup.TryInit(SteamAPI.Init);
+
+        if (steam != SteamInitResult.Ok)
         {
-            Console.WriteLine("Steam unavailable: SteamAPI.Init() returned false.");
-            Console.WriteLine("Check that the Steam client is running and signed in, " +
-                              "and that steam_appid.txt sits next to the binary.");
+            Console.WriteLine(SteamStartup.Explain(steam));
             return 2;
         }
 
