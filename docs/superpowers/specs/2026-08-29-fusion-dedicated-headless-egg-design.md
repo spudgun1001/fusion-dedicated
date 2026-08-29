@@ -27,7 +27,8 @@ implementation.
 | Config authority | Split by key. Environment variables own identity and infrastructure keys. `server.json` keeps accumulated state. |
 | Image strategy | Custom runtime image in `BadgerPanelYolks`, thin install script. |
 | Anti-grief delivery | Port the rules natively into the relay. No plugin system and no DLL loading. |
-| Promotion channel | Console commands over stdin, alongside the existing web panel. |
+| Promotion channel | One command parser behind two transports: stdin and Source RCON. Alongside the existing web panel. |
+| Rank storage | A separate hand-editable `ranks.json`, watched and reloaded, seeded by egg variables. |
 | Moderation scope | All four capability groups: blocklist, player controls, message gates, audit log. |
 
 ## Triage of the upstream "known limits"
@@ -254,9 +255,14 @@ Environment variables overwrite only their own keys. Every other key in
 Environment-owned: `ServerName`, `Description`, `MaxPlayers`, `Privacy`,
 `VersionMajor`, `VersionMinor`, `LevelBarcode`, `LevelTitle`, `MaxEntities`,
 `AntiSpamEnabled`, `SpawnBurstLimit`, `MaxEntitiesPerPlayer`, `DashboardPort`,
-`DashboardHost`, `DashboardUser`, `DashboardPassword`, `LogDirectory`.
+`DashboardHost`, `DashboardUser`, `DashboardPassword`, `RconPort`,
+`RconPassword`, `LogDirectory`.
 
-Volume-owned: `Bans`, `Permissions`, `ModCatalog`, `Levels`, `ServerCode`.
+Volume-owned: `Bans`, `ModCatalog`, `Levels`, `ServerCode`.
+
+`ranks.json` is a separate file and is volume-owned, except that
+`OWNER_STEAMIDS` and `OPERATOR_STEAMIDS` are merged into it at boot without
+removing entries added by console, RCON or a hand edit.
 
 A value edited in the Fusion web panel that belongs to the environment half
 applies immediately and reverts on the next restart. This is a consequence of the
@@ -269,11 +275,15 @@ chosen split and must be stated in the egg description.
 - Startup done regex: `Lobby published`
 - Stop: `^C`, matching the `CancelKeyPress` handler in `Program.Main`
 - Primary allocation: the dashboard port. **Steam Datagram Relay needs no inbound
-  ports**, which is unusual for a game egg and belongs in the description.
+  ports for gameplay**, which is unusual for a game egg and belongs in the
+  description. The only listening ports are the panel and, if enabled, RCON.
+- Secondary allocation: RCON, required only when `RCON_PASSWORD` is set
 - Disk minimum: roughly 3 GB, for Steam's runtime rather than for game files
-- Variables: the environment-owned keys above, plus `STEAM_USER` and `STEAM_PASS`
+- Variables: the environment-owned keys above, plus `STEAM_USER`, `STEAM_PASS`,
+  `RCON_PASSWORD`, `OWNER_STEAMIDS` and `OPERATOR_STEAMIDS`
 
-`STEAM_PASS` and `DashboardPassword` are marked not viewable in the panel.
+`STEAM_PASS`, `DashboardPassword` and `RCON_PASSWORD` are marked not viewable in
+the panel.
 
 ---
 
@@ -335,7 +345,7 @@ state, where these entities are invisible.
 
 ---
 
-## F. Console command surface
+## F. Command surface: console, RCON and a ranks file
 
 ### Problem
 
@@ -353,16 +363,70 @@ and clients read it. Only an inbound channel is missing.
 The web panel has `/api/permission`, which requires leaving the game and reaching
 a separate web interface.
 
+### Why an out-of-band channel is required, not merely convenient
+
+`HandlePermissionCommand` denies any action where
+`target.Permission >= sender.Permission`. An Owner therefore cannot act on
+another Owner, so no in-game path can ever create a second Owner. A channel that
+carries no rank is the only way to grant that first or second Owner, which is
+what the console and RCON provide. Commands arriving on either transport are
+always permitted, because whoever holds the console or the RCON password already
+controls the process.
+
 ### Design
 
-Read commands from standard input. Pterodactyl pipes its console directly to the
-process, so this gives BadgerPanel a first-class command surface for free, with
-no protocol reverse-engineering and no client-side mod.
+One parser, two transports.
 
-A reader task on stdin parses one command per line and dispatches to the same
-methods the web panel already calls. Commands operate on a SteamID64 or on a
-connected player's name, resolving names case-insensitively and refusing an
-ambiguous match rather than guessing.
+**`CommandProcessor`** owns parsing and dispatch. It takes a command line, returns
+a text result, and calls the same methods the web panel already calls. It knows
+nothing about where the line came from, which is what keeps the two transports
+from duplicating logic.
+
+**Transport 1, stdin.** A reader task parses one line per command. Pterodactyl
+pipes its console straight to the process, so BadgerPanel gets a command surface
+with no extra port and no auth.
+
+**Transport 2, RCON.** A TCP listener speaking the Source RCON protocol: packet
+framing, `SERVERDATA_AUTH`, `SERVERDATA_EXECCOMMAND`. This makes the server work
+with `rcon-cli`, BadgerPanel's RCON features, and Discord bots. It stays disabled
+unless `RconPassword` is set, and a failed authentication closes the connection
+as the protocol requires. Because it is network-exposed, it gets the same care as
+the dashboard password: fixed-time comparison, and a refusal to listen with an
+empty password.
+
+Commands operate on a SteamID64 or on a connected player's name, resolving names
+case-insensitively and refusing an ambiguous match rather than guessing. A
+SteamID that belongs to nobody currently connected is still valid for rank and
+ban commands, which apply at that player's next join.
+
+### The ranks file
+
+The rank roster moves out of `server.json` into its own `ranks.json`, so it can
+be edited over SFTP without touching configuration, and so a malformed edit
+cannot take the whole config with it.
+
+```json
+{
+  "76561198000000000": { "rank": "OWNER",    "name": "spudgun" },
+  "76561198000000001": { "rank": "OPERATOR", "name": "someone else" }
+}
+```
+
+The `name` field is for the operator's reference and is never trusted for
+identity. The file is watched and reloaded when it changes, so a hand edit
+applies without a restart. A parse failure leaves the previous roster in place
+and logs the error, because dropping every rank because of a stray comma would be
+worse than ignoring the edit.
+
+`OWNER_STEAMIDS` and `OPERATOR_STEAMIDS` egg variables are merged into this file
+at boot as comma-separated lists. Anyone listed there holds that rank from their
+first join, with no console command and no web panel. Migration from an existing
+`server.json` happens once, on first start after upgrading.
+
+Because ranks apply at join ([FusionServer.cs:482]) and `SetPermission`
+broadcasts the change to connected clients immediately, a promotion takes effect
+mid-session. The promoted player sees their rank change and their menu update
+without reconnecting.
 
 Initial command set:
 
@@ -382,12 +446,10 @@ Initial command set:
 Unknown input is answered with a short error rather than being ignored, because a
 silent console is indistinguishable from a hung one.
 
-Commands issued on stdin have no rank and are always permitted. Anyone holding
-the console already controls the process.
-
-`say` is listed but not implemented in this phase. Fusion's text chat has no
-known message tag in the current protocol layer, and inventing one would require
-a client-side mod. It stays out until the tag is confirmed to exist.
+`say` is listed but not implemented in this phase. Inspecting `LabFusion.dll`
+directly found no text-chat message type, and `NetworkNotifications` turned out to
+be local-only popups rather than a server-to-client text channel. It stays out
+until such a channel is confirmed to exist.
 
 ### Tests
 
@@ -398,6 +460,24 @@ Parsing is pure and gets thorough coverage:
 - name resolution is case-insensitive, and an ambiguous name is refused
 - an unparsable rank name is refused rather than defaulting to a rank
 - a malformed duration is refused rather than becoming a permanent ban
+- a rank command naming a SteamID for nobody connected is accepted and reported
+  as applying at next join
+
+The ranks file:
+
+- a valid file loads every entry
+- a malformed file leaves the previous roster in place and logs
+- an edit on disk is picked up without a restart
+- `OWNER_STEAMIDS` merges without dropping existing entries
+- migration from `server.json` runs once and is not repeated
+
+RCON, tested against the protocol rather than against a client library:
+
+- a correct password authenticates, a wrong one closes the connection
+- a command before authentication is refused
+- request IDs are echoed as the protocol requires
+- a body longer than one packet is handled
+- the listener refuses to start with an empty password
 
 ---
 
@@ -477,6 +557,8 @@ surfaced as a panel tab.
 ### Tests
 
 - a built-in blocked barcode is denied even when present in `BlacklistedBarcodes`
+- a client-supplied `PermissionLevel` in a metadata request is ignored, and the
+  rank held by the server is what gets broadcast
 - a muted player's voice packets are dropped and their other packets still relay
 - an expired ban does not prevent a join, and an unexpired one does
 - a ban with no expiry stays permanent
@@ -495,24 +577,25 @@ Four phases. Each ends somewhere worth stopping.
 1. **A** — test project and dashboard authentication
 2. **B** — container-aware resources
 3. **G1** — barcode blocklist port
-4. **F** — console command surface
+4. **F1** — `CommandProcessor`, the stdin transport, and `ranks.json`
 
 **Phase 2 — ship it.** Produces something running on BadgerPanel, which makes
 everything after it testable in the real environment.
 
 5. **E** — release workflow
-6. **D** — image, entrypoint, egg, then a real deployment
+6. **F2** — the RCON transport, which needs the egg's second port allocation
+7. **D** — image, entrypoint, egg, then a real deployment
 
 **Phase 3 — player controls.**
 
-7. **G2** — mute, temporary bans, whitelist
-8. **G4** — audit log
+8. **G2** — mute, temporary bans, whitelist
+9. **G4** — audit log
 
 **Phase 4 — live protocol work.** Both need a real client connected and both
 expect iteration.
 
-9. **C** — entity tracking, stage 1 then stage 2
-10. **G3** — message-type gates, one at a time
+10. **C** — entity tracking, stage 1 then stage 2
+11. **G3** — message-type gates, one at a time
 
 Phase 2 lands deliberately early. Deploying before the protocol work means the
 uncertain parts are validated where they will actually run.
@@ -529,4 +612,7 @@ uncertain parts are validated where they will actually run.
 | Wire formats for the eight gated message types are unknown | Each is derived and validated separately. A gate that cannot be validated stays off and is documented. |
 | Console commands need stdin to survive the entrypoint | The entrypoint replaces the shell with the server process rather than backgrounding it, so stdin is inherited. Covered by a deployment check in phase 2. |
 | Anti-grief rules now exist in two codebases | The relay copy is authoritative for servers running it. The mod stays useful for client-hosted lobbies. Barcode lists should be kept in step deliberately, not assumed to match. |
-| Fusion has no known text-chat tag | `say` is specified but not implemented. It stays out until a tag is confirmed rather than shipping a stub. |
+| Fusion has no known text-chat tag | Confirmed by inspecting `LabFusion.dll`: no text-chat message type exists and `NetworkNotifications` is local-only. `say` is specified but not implemented. |
+| RCON is a network-exposed auth surface | Disabled unless a password is set, refuses to listen with an empty one, fixed-time comparison, and its own allocation so it can be firewalled separately from the panel. |
+| No in-game promote button is possible on stock clients | Confirmed from `LabFusion.dll`: `PermissionCommandType` is only KICK, BAN and the two teleports. Ranks apply at join and `SetPermission` broadcasts live, so console and RCON promotion takes effect mid-session without a reconnect. |
+| A client could request its own rank via player metadata | `PlayerMetadataRequestMessage` exists and permission is stored as metadata, which is the permission-spoof attack. The server must never honour a client-supplied `PermissionLevel`. Covered by a test in G. |
