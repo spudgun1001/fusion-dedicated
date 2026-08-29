@@ -1,6 +1,7 @@
 using FusionDedicated;
 using FusionDedicated.Server;
 using FusionDedicated.Commands;
+using FusionDedicated.Commands.Rcon;
 using FusionDedicated.Server.Ranks;
 using FusionDedicated.Server.Safety;
 using FusionDedicated.Web;
@@ -177,6 +178,15 @@ public static class Program
         using var quit = new CancellationTokenSource();
 
         StdinCommands.Start(commands, Console.WriteLine, quit.Token);
+
+        using var rcon = new RconServer(commands, config.RconPassword, config.RconPort, server.Log);
+
+        rcon.Start();
+
+        if (rcon.Port != 0)
+        {
+            server.Log("INFO", $"RCON listening on port {rcon.Port}");
+        }
 
         Console.CancelKeyPress += (_, e) =>
         {

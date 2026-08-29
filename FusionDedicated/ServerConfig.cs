@@ -275,6 +275,15 @@ public sealed class ServerConfig
     /// </summary>
     public string DashboardPassword { get; set; } = "";
 
+    /// <summary>Port for Source RCON. Only listened on when a password is set.</summary>
+    public int RconPort { get; set; } = 27015;
+
+    /// <summary>
+    /// RCON password. Empty turns RCON off entirely, which is the default: an
+    /// unauthenticated RCON port is a remote shell over the server.
+    /// </summary>
+    public string RconPassword { get; set; } = "";
+
     [JsonIgnore]
     public string Version => $"{VersionMajor}.{VersionMinor}.{VersionPatch}";
 
