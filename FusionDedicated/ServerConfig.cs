@@ -260,6 +260,15 @@ public sealed class ServerConfig
     /// </summary>
     public string DashboardHost { get; set; } = "localhost";
 
+    /// <summary>Username for the panel's HTTP Basic prompt.</summary>
+    public string DashboardUser { get; set; } = "admin";
+
+    /// <summary>
+    /// Panel password. Empty disables the check, which is only safe on loopback —
+    /// see the bind refusal in Dashboard.Start.
+    /// </summary>
+    public string DashboardPassword { get; set; } = "";
+
     [JsonIgnore]
     public string Version => $"{VersionMajor}.{VersionMinor}.{VersionPatch}";
 

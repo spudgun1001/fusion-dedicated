@@ -78,6 +78,17 @@ public sealed class Dashboard
 
     private void Handle(HttpListenerContext context)
     {
+        if (!DashboardAuth.IsAuthorized(
+                context.Request.Headers["Authorization"],
+                _config.DashboardUser,
+                _config.DashboardPassword))
+        {
+            context.Response.StatusCode = 401;
+            context.Response.AddHeader("WWW-Authenticate", "Basic realm=\"Fusion Dedicated\"");
+            context.Response.Close();
+            return;
+        }
+
         string path = context.Request.Url?.AbsolutePath ?? "/";
         var query = context.Request.QueryString;
 
