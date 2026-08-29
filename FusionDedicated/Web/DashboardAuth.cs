@@ -85,4 +85,25 @@ public static class DashboardAuth
         return ConstantTimeEquals(parsed.Value.User, user)
             && ConstantTimeEquals(parsed.Value.Password, password);
     }
+
+    public static bool IsLoopback(string host)
+        => host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+        || host == "127.0.0.1"
+        || host == "::1";
+
+    /// <summary>
+    /// Why the panel must not bind, or null when it may. Publishing an admin
+    /// interface with no password on a reachable address is refused rather than
+    /// warned about.
+    /// </summary>
+    public static string? BindRefusalReason(string host, string password)
+    {
+        if (IsLoopback(host) || !string.IsNullOrEmpty(password))
+        {
+            return null;
+        }
+
+        return $"DashboardHost is '{host}' but no DashboardPassword is set. "
+             + "Set a password, or bind the panel to localhost and tunnel in.";
+    }
 }

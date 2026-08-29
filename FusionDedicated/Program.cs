@@ -89,7 +89,11 @@ public static class Program
         try
         {
             dashboard.Start();
-            server.Log("INFO", $"Control panel: {dashboard.Url}");
+
+            if (dashboard.IsListening)
+            {
+                server.Log("INFO", $"Control panel: {dashboard.Url}");
+            }
         }
         catch (Exception ex)
         {

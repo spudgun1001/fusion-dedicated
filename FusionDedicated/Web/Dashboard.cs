@@ -37,8 +37,19 @@ public sealed class Dashboard
         ? $"http://<this-machine-ip>:{_config.DashboardPort}/"
         : $"http://{_config.DashboardHost}:{_config.DashboardPort}/";
 
+    public bool IsListening => _listener.IsListening;
+
     public void Start()
     {
+        var refusal = DashboardAuth.BindRefusalReason(
+            _config.DashboardHost, _config.DashboardPassword);
+
+        if (refusal != null)
+        {
+            _server.Log("ERROR", $"Control panel not started: {refusal}");
+            return;
+        }
+
         _listener.Prefixes.Add(Prefix);
         _listener.Start();
 
