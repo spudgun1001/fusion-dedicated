@@ -30,3 +30,6 @@ Thumbs.db
 
 # Cached copies of Fusion's community safety lists. Refetched on start.
 lists/
+
+# The rank roster is keyed by other people's SteamIDs, like server.json.
+ranks.json
