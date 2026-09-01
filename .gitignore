@@ -33,3 +33,6 @@ lists/
 
 # The rank roster is keyed by other people's SteamIDs, like server.json.
 ranks.json
+
+# Design specs and implementation plans stay local.
+docs/
