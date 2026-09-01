@@ -57,11 +57,11 @@ public class GlobalBlocklistTests
     }
 
     [Fact]
-    public void Built_in_still_wins_when_a_global_list_is_present()
+    public void A_barcode_only_the_global_list_knows_is_still_blocked()
     {
-        var verdict = Evaluator(Global()).Check("BaBaCorp.MiscExplosiveDevices.Spawnable.TimedNuke");
+        var verdict = Evaluator(Global()).Check("SLZ.BONELAB.Core.Spawnable.RigManagerBlank");
 
-        Assert.Equal("built-in", verdict.Layer);
+        Assert.Equal("global", verdict.Layer);
     }
 }
 

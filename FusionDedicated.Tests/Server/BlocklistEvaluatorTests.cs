@@ -8,15 +8,6 @@ public class BlocklistEvaluatorTests
         => new(new HashSet<string>(operatorBarcodes, StringComparer.Ordinal));
 
     [Fact]
-    public void Built_in_barcode_is_blocked()
-    {
-        var verdict = Evaluator().Check("BaBaCorp.MiscExplosiveDevices.Spawnable.TimedNuke");
-
-        Assert.True(verdict.Blocked);
-        Assert.Equal("built-in", verdict.Layer);
-    }
-
-    [Fact]
     public void Operator_barcode_is_blocked()
     {
         var verdict = Evaluator("Some.Mod.Spawnable.Thing").Check("Some.Mod.Spawnable.Thing");
@@ -29,16 +20,6 @@ public class BlocklistEvaluatorTests
     public void Unlisted_barcode_is_allowed()
     {
         Assert.False(Evaluator().Check("SLZ.BONELAB.Spawnable.Crate").Blocked);
-    }
-
-    [Fact]
-    public void Built_in_wins_over_an_operator_list_that_omits_it()
-    {
-        var verdict = Evaluator("Unrelated.Thing")
-            .Check("BaBaCorp.MiscExplosiveDevices.Spawnable.MicroNukeGrenade");
-
-        Assert.True(verdict.Blocked);
-        Assert.Equal("built-in", verdict.Layer);
     }
 
     [Theory]
@@ -56,8 +37,8 @@ public class BlocklistEvaluatorTests
     }
 
     [Fact]
-    public void Built_in_list_contains_the_known_crash_payload()
+    public void An_unlisted_barcode_is_allowed_with_no_blocklist_file()
     {
-        Assert.Contains("SLZ.BONELAB.Core.Spawnable.GameplaySystems", BuiltInBlocklist.Barcodes);
+        Assert.False(Evaluator().Check("BaBaCorp.MiscExplosiveDevices.Spawnable.TimedNuke").Blocked);
     }
 }

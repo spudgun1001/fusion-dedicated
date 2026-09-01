@@ -212,6 +212,12 @@ public sealed class ServerConfig
     /// <summary>The built-in grief payload list is enforced either way.</summary>
     public bool GlobalListsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Turns on the per-second spawn cap, despawn authority and nickname rules from
+    /// blocklist.json. The blocklist itself applies regardless.
+    /// </summary>
+    public bool ExtendedProtection { get; set; } = true;
+
     // ---- crash protection ----
     // A dedicated server never simulates anything, so a spawn flood costs it almost
     // nothing — but every client has to instantiate each prop, and enough of them at

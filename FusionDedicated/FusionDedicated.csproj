@@ -31,6 +31,7 @@
     <None Include="steam_appid.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Web\index.html" CopyToOutputDirectory="PreserveNewest" />
     <None Include="server.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="blocklist.example.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

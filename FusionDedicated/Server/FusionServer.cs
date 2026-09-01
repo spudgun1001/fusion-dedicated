@@ -41,6 +41,8 @@ public sealed class FusionServer : IDisposable
     private readonly object _logLock = new();
 
     private BlocklistEvaluator _blocklist = new(new HashSet<string>(StringComparer.Ordinal));
+    private SpawnRateLimiter _rateLimiter = new(0);
+    private NicknameGuard _nicknames = new(0, Array.Empty<string>());
 
     public FusionServer(ServerConfig config)
     {
@@ -69,15 +71,28 @@ public sealed class FusionServer : IDisposable
     /// <summary>When set, takes precedence over the config permission list.</summary>
     public Ranks.RankStore? Ranks { get; set; }
 
+    /// <summary>The owner's editable blocklist.json, when present.</summary>
+    public BlocklistStore? Blocklist { get; set; }
+
     public void RebuildBlocklist()
     {
+        var file = Blocklist?.Current;
+
         _blocklist = new BlocklistEvaluator(
             new HashSet<string>(Config.BlacklistedBarcodes, StringComparer.Ordinal),
             Config.GlobalListsEnabled ? SafetyLists?.Mods : null,
             Config.ModCatalog
                 .Where(m => m.ModId > 0)
                 .GroupBy(m => m.Barcode)
-                .ToDictionary(g => g.Key, g => g.First().ModId, StringComparer.Ordinal));
+                .ToDictionary(g => g.Key, g => g.First().ModId, StringComparer.Ordinal),
+            file);
+
+        bool extended = Config.ExtendedProtection && file != null;
+
+        _rateLimiter = new SpawnRateLimiter(extended ? file!.MaxSpawnsPerSecond : 0);
+        _nicknames = new NicknameGuard(
+            extended ? file!.MaxNicknameChangesPerMinute : 0,
+            extended ? file!.ReservedNicknames : Array.Empty<string>());
     }
 
     public void Dispose()
@@ -221,6 +236,8 @@ public sealed class FusionServer : IDisposable
         NoteDeparture(player.DisplayName, reason);
 
         Guard.Forget(player.SmallId);
+        _rateLimiter.Forget(player.SmallId);
+        _nicknames.Forget(player.SmallId);
 
         // Their entities lost the only machine simulating them. Hand them to another
         // player if anyone is left, otherwise they hang frozen until culled.
@@ -498,6 +515,18 @@ public sealed class FusionServer : IDisposable
         player.Username = request.Metadata.GetValueOrDefault("Username", "");
         player.Nickname = request.Metadata.GetValueOrDefault("Nickname", "");
 
+        if (!string.IsNullOrWhiteSpace(player.Nickname))
+        {
+            var nickVerdict = _nicknames.Allow(player.SmallId, player.Nickname, DateTime.UtcNow);
+
+            if (!nickVerdict.Allowed)
+            {
+                Log("WARN", $"{player.Username} joined with nickname '{player.Nickname}': " +
+                            $"{nickVerdict.Reason}. Falling back to their Steam name.");
+                player.Nickname = "";
+            }
+        }
+
         // The client sends its own idea of its permission level; the server's list is
         // what counts, so overwrite it before anyone else sees the metadata.
         player.Permission = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
@@ -556,12 +585,18 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        var blockVerdict = _blocklist.Check(request.Value.Barcode);
+        var blockVerdict = _blocklist.Check(request.Value.Barcode, sender.Permission);
 
         if (blockVerdict.Blocked)
         {
             Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
                         $"denied by the {blockVerdict.Layer} blocklist: {blockVerdict.Reason}");
+            return;
+        }
+
+        if (!_rateLimiter.Allow(sender.SmallId, DateTime.UtcNow))
+        {
+            Log("WARN", $"Spawn by {sender.DisplayName} denied: over the per-second rate cap");
             return;
         }
 
@@ -651,6 +686,15 @@ public sealed class FusionServer : IDisposable
         }
 
         var (entityId, despawnEffect) = request.Value;
+
+        if (Config.ExtendedProtection
+            && Entities.Get(entityId) is { } target
+            && !DespawnAuthority.MayDespawn(target.OwnerSmallId, sender.SmallId, sender.Permission))
+        {
+            Log("WARN", $"{sender.DisplayName} tried to despawn entity {entityId}, " +
+                        "which belongs to someone else");
+            return;
+        }
 
         Entities.Remove(entityId);
 

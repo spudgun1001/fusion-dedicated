@@ -6,35 +6,53 @@ public sealed record BlockVerdict(bool Blocked, string Layer, string Reason)
 }
 
 /// <summary>
-/// Decides whether a barcode may be spawned. Built-in is checked first so a
-/// permissive operator list cannot re-enable a known grief payload.
+/// Decides whether a barcode may be spawned. The owner's whitelist wins over their
+/// own rules but not over Fusion's community list, which covers mods that are
+/// malicious rather than merely unwanted.
 /// </summary>
 public sealed class BlocklistEvaluator
 {
     private readonly IReadOnlySet<string> _operatorBarcodes;
     private readonly GlobalModBlacklist? _global;
     private readonly IReadOnlyDictionary<string, int> _catalogue;
+    private readonly BlocklistFile? _file;
 
     public BlocklistEvaluator(
         IReadOnlySet<string> operatorBarcodes,
         GlobalModBlacklist? global = null,
-        IReadOnlyDictionary<string, int>? catalogue = null)
+        IReadOnlyDictionary<string, int>? catalogue = null,
+        BlocklistFile? file = null)
     {
         _operatorBarcodes = operatorBarcodes;
         _global = global;
         _catalogue = catalogue ?? new Dictionary<string, int>();
+        _file = file?.Enabled == true ? file : null;
     }
 
-    public BlockVerdict Check(string barcode)
+    public BlockVerdict Check(string barcode, PermissionLevel senderRank = PermissionLevel.Default)
     {
         if (string.IsNullOrWhiteSpace(barcode))
         {
             return BlockVerdict.Allowed;
         }
 
-        if (BuiltInBlocklist.Barcodes.Contains(barcode))
+        bool whitelisted = _file?.Whitelist.Contains(barcode, StringComparer.Ordinal) == true;
+
+        if (!whitelisted && _file != null)
         {
-            return new BlockVerdict(true, "built-in", "known grief payload");
+            if (_file.Barcodes.Contains(barcode, StringComparer.Ordinal))
+            {
+                return new BlockVerdict(true, "blocklist", "on this server's blocklist");
+            }
+
+            foreach (string keyword in _file.Keywords)
+            {
+                if (!string.IsNullOrWhiteSpace(keyword)
+                    && barcode.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BlockVerdict(true, "keyword", $"barcode contains '{keyword}'");
+                }
+            }
         }
 
         if (_global != null && MatchesGlobal(barcode, out string reason))
@@ -42,9 +60,16 @@ public sealed class BlocklistEvaluator
             return new BlockVerdict(true, "global", reason);
         }
 
-        if (_operatorBarcodes.Contains(barcode))
+        if (!whitelisted && _operatorBarcodes.Contains(barcode))
         {
             return new BlockVerdict(true, "operator", "on this server's blacklist");
+        }
+
+        if (_file != null
+            && _file.OperatorOnly.Contains(barcode, StringComparer.Ordinal)
+            && !senderRank.IsAtLeast(PermissionLevel.Operator))
+        {
+            return new BlockVerdict(true, "operator-only", "only operators may spawn this");
         }
 
         return BlockVerdict.Allowed;

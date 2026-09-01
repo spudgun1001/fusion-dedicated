@@ -77,7 +77,23 @@ public static class Program
         var safety = new SafetyListStore(Path.Combine(AppContext.BaseDirectory, "lists"));
         safety.LoadCache();
         server.SafetyLists = safety;
+
+        var blocklist = new BlocklistStore(Path.Combine(AppContext.BaseDirectory, "blocklist.json"));
+        blocklist.ReloadIfChanged();
+        server.Blocklist = blocklist;
+
         server.RebuildBlocklist();
+
+        if (blocklist.Current is { } rules)
+        {
+            server.Log("INFO", $"Blocklist: {rules.Barcodes.Count} barcodes, " +
+                               $"{rules.Keywords.Count} keywords, " +
+                               $"extended protection {(config.ExtendedProtection ? "on" : "off")}");
+        }
+        else
+        {
+            server.Log("WARN", "No blocklist.json — spawn rules come from the community list only.");
+        }
 
         if (config.GlobalListsEnabled)
         {
@@ -220,6 +236,12 @@ public static class Program
 
             if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
             {
+                if (blocklist.ReloadIfChanged())
+                {
+                    server.RebuildBlocklist();
+                    server.Log("INFO", "Reloaded blocklist.json");
+                }
+
                 server.Tick();
                 lastTick = DateTime.UtcNow;
             }
