@@ -1,9 +1,8 @@
 namespace FusionDedicated.Server.Safety;
 
 /// <summary>
-/// Grief payloads that no server should allow. Ported from BoneLabAntiNuke's
-/// BarcodeMatcher.AlwaysBlocked. Configuration cannot whitelist these; adding one
-/// means changing this file and shipping a build, which is deliberate.
+/// Grief payloads no server should allow, ported from BoneLabAntiNuke. Configuration
+/// cannot whitelist these; adding one means shipping a build, which is deliberate.
 /// </summary>
 public static class BuiltInBlocklist
 {

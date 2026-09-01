@@ -1,9 +1,9 @@
 namespace FusionDedicated.Commands;
 
 /// <summary>
-/// Parses one command line and carries it out. Commands arrive from stdin or RCON
-/// and carry no rank, because whoever reaches either already controls the process —
-/// which is also the only way to grant Owner, since no in-game path can.
+/// Parses one command line and carries it out. Commands carry no rank, because
+/// whoever reaches the console or RCON already controls the process — and that is
+/// the only way to grant Owner, since no in-game path can.
 /// </summary>
 public sealed class CommandProcessor
 {
@@ -196,8 +196,8 @@ public sealed class CommandProcessor
     }
 
     /// <summary>
-    /// Turns a SteamID or a name into a player. A name matching more than one person
-    /// is refused rather than guessed at.
+    /// Turns a SteamID or a name into a player. An ambiguous name is refused rather
+    /// than guessed at.
     /// </summary>
     private Resolution Resolve(string who)
     {

@@ -3,9 +3,8 @@ using System.Xml.Linq;
 namespace FusionDedicated.Server.Ranks;
 
 /// <summary>
-/// Reads the roster LabFusion writes when you host a normal lobby, so a rank list
-/// built in game carries across to a dedicated server. The import is additive and
-/// never lowers a rank already held here.
+/// Reads the roster LabFusion writes when hosting a normal lobby. The import is
+/// additive and never lowers a rank already held here.
 /// </summary>
 public static class PermissionListImporter
 {

@@ -1,8 +1,8 @@
 namespace FusionDedicated.Commands;
 
 /// <summary>
-/// Reads commands from standard input. Pterodactyl pipes its console straight to
-/// the process, so this is the panel's command surface.
+/// Reads commands from standard input, which is how the Pterodactyl console
+/// reaches the server.
 /// </summary>
 public static class StdinCommands
 {

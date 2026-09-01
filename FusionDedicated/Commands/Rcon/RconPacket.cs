@@ -43,8 +43,7 @@ public static class RconCodec
 
     /// <summary>
     /// Total bytes this packet occupies, or -1 when the size field has not arrived.
-    /// Throws for a size that is impossible or hostile, so a malicious client cannot
-    /// make the server allocate two gigabytes.
+    /// Throws for a hostile size, so a client cannot force a huge allocation.
     /// </summary>
     public static int RequiredLength(ReadOnlySpan<byte> buffer)
     {

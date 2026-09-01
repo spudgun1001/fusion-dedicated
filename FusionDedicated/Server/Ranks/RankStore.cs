@@ -15,8 +15,8 @@ public sealed class RankEntry
 }
 
 /// <summary>
-/// The rank roster, kept in its own file so it can be edited over SFTP without
-/// touching configuration, and so a stray comma cannot take the config with it.
+/// The rank roster, kept in its own file so it can be edited over SFTP and so a
+/// stray comma cannot take the config with it.
 /// </summary>
 public sealed class RankStore
 {
@@ -132,10 +132,7 @@ public sealed class RankStore
         return added;
     }
 
-    /// <summary>
-    /// Merges an environment-supplied list. Never lowers a rank already held, so a
-    /// promotion made by console or by hand survives a restart.
-    /// </summary>
+    /// <summary>Merges an environment list. Never lowers a rank already held.</summary>
     public int MergeSeed(IEnumerable<ulong> ids, PermissionLevel level)
     {
         var added = 0;
@@ -156,10 +153,7 @@ public sealed class RankStore
 
     public DateTime LastWriteSeen { get; private set; }
 
-    /// <summary>
-    /// Rereads the file when its timestamp has moved. Returns whether a reload
-    /// happened, so the caller can log it.
-    /// </summary>
+    /// <summary>Rereads the file when its timestamp has moved.</summary>
     public bool ReloadIfChanged()
     {
         DateTime stamp;

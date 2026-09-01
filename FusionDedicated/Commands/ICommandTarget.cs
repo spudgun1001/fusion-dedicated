@@ -8,8 +8,8 @@ public sealed record CommandPlayer(
     int EntityCount);
 
 /// <summary>
-/// What a command can do to the server. Kept abstract so the parser is testable
-/// without Steam, and so both transports share one implementation.
+/// What a command can do to the server. Abstract so the parser is testable without
+/// Steam and both transports share one implementation.
 /// </summary>
 public interface ICommandTarget
 {

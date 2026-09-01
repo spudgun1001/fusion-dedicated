@@ -1,9 +1,8 @@
 namespace FusionDedicated.Server.Safety;
 
 /// <summary>
-/// Holds Fusion's community lists and keeps a copy on disk. A server with no
-/// outbound internet still starts: a failed or corrupt fetch falls back to the
-/// cache, and an absent cache leaves the built-in layer to do the work.
+/// Holds Fusion's community lists and caches them on disk, so a server with no
+/// outbound internet still starts.
 /// </summary>
 public sealed class SafetyListStore
 {
@@ -30,10 +29,7 @@ public sealed class SafetyListStore
         Bans = SafetyListParser.ParseBanList(ReadCache(BansFile) ?? "") ?? Bans;
     }
 
-    /// <summary>
-    /// Fetches both lists. The downloader is injected so this is testable without a
-    /// network, and returns null for any failure.
-    /// </summary>
+    /// <summary>Fetches both lists. The downloader is injected, and returns null for any failure.</summary>
     public async Task RefreshAsync(Func<string, Task<string?>> download)
     {
         string? mods = await download(RepositoryUrl + ModsFile);

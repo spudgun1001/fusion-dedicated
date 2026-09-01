@@ -5,10 +5,7 @@ namespace FusionDedicated.Web;
 
 public static class DashboardAuth
 {
-    /// <summary>
-    /// Compares two secrets without leaking their contents through timing. A null on
-    /// either side never matches, including null against null.
-    /// </summary>
+    /// <summary>Compares two secrets in fixed time. A null on either side never matches.</summary>
     public static bool ConstantTimeEquals(string? a, string? b)
     {
         if (a is null || b is null)
@@ -24,10 +21,7 @@ public static class DashboardAuth
 
     private const string Scheme = "Basic ";
 
-    /// <summary>
-    /// Splits an HTTP Basic header into its two halves. Returns null for anything
-    /// malformed rather than throwing, because this runs on untrusted input.
-    /// </summary>
+    /// <summary>Splits an HTTP Basic header. Returns null for anything malformed, since this runs on untrusted input.</summary>
     public static (string User, string Password)? TryParseBasic(string? header)
     {
         if (string.IsNullOrWhiteSpace(header)
@@ -64,10 +58,7 @@ public static class DashboardAuth
         return (decoded[..split], decoded[(split + 1)..]);
     }
 
-    /// <summary>
-    /// True when the request may proceed. An empty configured password disables the
-    /// check entirely, which is what keeps a passwordless localhost panel usable.
-    /// </summary>
+    /// <summary>An empty configured password disables the check, keeping a localhost panel usable.</summary>
     public static bool IsAuthorized(string? header, string user, string password)
     {
         if (string.IsNullOrEmpty(password))
@@ -91,11 +82,7 @@ public static class DashboardAuth
         || host == "127.0.0.1"
         || host == "::1";
 
-    /// <summary>
-    /// Why the panel must not bind, or null when it may. Publishing an admin
-    /// interface with no password on a reachable address is refused rather than
-    /// warned about.
-    /// </summary>
+    /// <summary>Why the panel must not bind, or null when it may.</summary>
     public static string? BindRefusalReason(string host, string password)
     {
         if (IsLoopback(host) || !string.IsNullOrEmpty(password))

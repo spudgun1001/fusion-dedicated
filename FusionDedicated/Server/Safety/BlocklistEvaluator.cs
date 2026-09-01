@@ -6,8 +6,8 @@ public sealed record BlockVerdict(bool Blocked, string Layer, string Reason)
 }
 
 /// <summary>
-/// Decides whether a barcode may be spawned. Layers are checked built-in first so a
-/// permissive operator list can never re-enable a known grief payload.
+/// Decides whether a barcode may be spawned. Built-in is checked first so a
+/// permissive operator list cannot re-enable a known grief payload.
 /// </summary>
 public sealed class BlocklistEvaluator
 {
@@ -51,9 +51,8 @@ public sealed class BlocklistEvaluator
     }
 
     /// <summary>
-    /// A barcode is Author.Pallet.Type.Name, so its first segment is the name id
-    /// Fusion's list uses. Mod id matching needs the learned catalogue, because a
-    /// spawn request carries no mod id of its own.
+    /// A barcode's first segment is the name id Fusion's list uses. Mod id matching
+    /// needs the catalogue, since a spawn request carries no mod id.
     /// </summary>
     private bool MatchesGlobal(string barcode, out string reason)
     {

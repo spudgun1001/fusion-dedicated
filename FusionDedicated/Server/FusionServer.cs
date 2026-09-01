@@ -64,10 +64,9 @@ public sealed class FusionServer : IDisposable
         Log("INFO", $"Relay socket listening as SteamID {SteamUser.GetSteamID().m_SteamID}");
     }
 
-    /// <summary>Fusion's community lists, when they have been fetched or cached.</summary>
     public SafetyListStore? SafetyLists { get; set; }
 
-    /// <summary>The rank roster. When set it takes precedence over the config list.</summary>
+    /// <summary>When set, takes precedence over the config permission list.</summary>
     public Ranks.RankStore? Ranks { get; set; }
 
     public void RebuildBlocklist()

@@ -4,8 +4,7 @@ namespace FusionDedicated.Server;
 
 /// <summary>
 /// Reads the container's own limits. Inside a container /proc describes the whole
-/// node, so the panel would otherwise graph the host's memory rather than the
-/// server's allowance.
+/// node rather than the server's allowance.
 /// </summary>
 public static class CgroupReader
 {
@@ -106,7 +105,6 @@ public static class CgroupReader
         return null;
     }
 
-    /// <summary>Reads a file, or null if it is missing or unreadable.</summary>
     public static string? ReadFileOrNull(string path)
     {
         try

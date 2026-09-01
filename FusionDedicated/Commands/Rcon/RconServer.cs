@@ -5,9 +5,8 @@ using FusionDedicated.Web;
 namespace FusionDedicated.Commands.Rcon;
 
 /// <summary>
-/// Source RCON over TCP, so rcon-cli, BadgerPanel and Discord bots can drive the
-/// same commands the console does. Refuses to listen without a password, because
-/// an unauthenticated RCON port is a remote shell over the server.
+/// Source RCON over TCP, driving the same commands the console does. Refuses to
+/// listen without a password: an open RCON port is a remote shell over the server.
 /// </summary>
 public sealed class RconServer : IDisposable
 {

@@ -209,10 +209,7 @@ public sealed class ServerConfig
 
     public List<string> BlacklistedBarcodes { get; set; } = new();
 
-    /// <summary>
-    /// Whether to fetch and enforce Fusion's community mod blacklist. The built-in
-    /// list is enforced either way.
-    /// </summary>
+    /// <summary>The built-in grief payload list is enforced either way.</summary>
     public bool GlobalListsEnabled { get; set; } = true;
 
     // ---- crash protection ----
@@ -269,19 +266,13 @@ public sealed class ServerConfig
     /// <summary>Username for the panel's HTTP Basic prompt.</summary>
     public string DashboardUser { get; set; } = "admin";
 
-    /// <summary>
-    /// Panel password. Empty disables the check, which is only safe on loopback —
-    /// see the bind refusal in Dashboard.Start.
-    /// </summary>
+    /// <summary>Empty disables the check, which is only safe on loopback.</summary>
     public string DashboardPassword { get; set; } = "";
 
     /// <summary>Port for Source RCON. Only listened on when a password is set.</summary>
     public int RconPort { get; set; } = 27015;
 
-    /// <summary>
-    /// RCON password. Empty turns RCON off entirely, which is the default: an
-    /// unauthenticated RCON port is a remote shell over the server.
-    /// </summary>
+    /// <summary>Empty turns RCON off entirely, which is the default.</summary>
     public string RconPassword { get; set; } = "";
 
     [JsonIgnore]

@@ -1,9 +1,8 @@
 namespace FusionDedicated.Server.Safety;
 
 /// <summary>
-/// Looks a joining player up in Fusion's community ban list. This never refuses a
-/// join on its own: a third-party list should not decide who may play here, and a
-/// false positive would lock out a friend without explanation.
+/// Looks a joining player up in Fusion's community ban list. It never refuses a join:
+/// a third-party list should not decide who may play here.
 /// </summary>
 public static class GlobalBanCheck
 {

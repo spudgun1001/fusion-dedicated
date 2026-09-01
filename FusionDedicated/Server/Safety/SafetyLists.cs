@@ -49,9 +49,8 @@ public sealed class GlobalBanList
 }
 
 /// <summary>
-/// Reads the community lists Fusion publishes at
-/// github.com/Lakatrazz/Fusion-Lists. Returns null rather than throwing, so a
-/// corrupt download can be discarded in favour of the cache.
+/// Reads the community lists Fusion publishes at github.com/Lakatrazz/Fusion-Lists.
+/// Returns null rather than throwing, so a corrupt download falls back to the cache.
 /// </summary>
 public static class SafetyListParser
 {

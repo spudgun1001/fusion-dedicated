@@ -1,9 +1,8 @@
 namespace FusionDedicated.Server.Ranks;
 
 /// <summary>
-/// Polls ranks.json so an edit made over SFTP applies without a restart. Polling
-/// beats file change notifications here, which are unreliable across the bind
-/// mounts a container volume uses.
+/// Polls ranks.json so an SFTP edit applies without a restart. Polling beats change
+/// notifications, which are unreliable across a container's bind mounts.
 /// </summary>
 public sealed class RankFileWatcher : IDisposable
 {

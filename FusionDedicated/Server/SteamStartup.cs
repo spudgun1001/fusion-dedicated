@@ -8,9 +8,8 @@ public enum SteamInitResult
 }
 
 /// <summary>
-/// Wraps SteamAPI.Init so a missing native library is a message rather than a
-/// stack trace. It throws when the library is absent instead of returning false,
-/// which is the most likely first-run failure in a fresh container.
+/// Wraps SteamAPI.Init, which throws when the native library is absent rather than
+/// returning false. That is the most likely first-run failure in a fresh container.
 /// </summary>
 public static class SteamStartup
 {

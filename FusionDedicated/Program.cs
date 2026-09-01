@@ -74,7 +74,6 @@ public static class Program
             ? config.LogDirectory
             : Path.Combine(AppContext.BaseDirectory, config.LogDirectory));
 
-        // ---- safety lists ----
         var safety = new SafetyListStore(Path.Combine(AppContext.BaseDirectory, "lists"));
         safety.LoadCache();
         server.SafetyLists = safety;
@@ -95,7 +94,6 @@ public static class Program
                                $"{safety.Bans?.Bans.Count ?? 0} global bans");
         }
 
-        // ---- ranks ----
         var ranks = new RankStore(Path.Combine(AppContext.BaseDirectory, "ranks.json"));
         ranks.Load();
 
