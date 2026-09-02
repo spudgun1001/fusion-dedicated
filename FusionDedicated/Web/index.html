@@ -5,29 +5,94 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fusion Dedicated</title>
 <style>
+  /* Token values are BadgerPanel's own, from web/src/styles/globals.css and
+     tailwind.config.ts. The panel is served by the game server rather than by
+     BadgerPanel, so it cannot import that stylesheet and matches it by value. */
   :root {
-    --void:     #04060a;
-    --deep:     #070b11;
-    --panel:    #0a0f16;
-    --raised:   #0e151e;
-    --edge:     #16202b;
-    --edge-lit: #1d3542;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --elevated: 210 40% 98%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 43%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary-soft: 204 94% 94%;
+    /* Darker ramp steps, for text sitting on the soft tints. The 500 is a
+       surface colour and does not carry small text on a pale ground. */
+    --primary-strong: 201 96% 32%;
+    --warning-strong: 38 92% 27%;
+    --success-strong: 142 72% 26%;
+    /* The 500-level red is a fill. Small text on a dark ground needs its own,
+       lighter step, which is what BadgerPanel's own notes call for. */
+    --destructive-strong: 0 72% 42%;
 
-    --cyan:     #3fe0d0;
-    --cyan-dim: #17786f;
-    --cyan-ink: #0a1d22;
+    --series-1: 201 96% 32%;
+    --series-2: 142 72% 26%;
+    --series-3: 262 70% 45%;
+    --series-4: 25 90% 35%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 78%;
+    --ring: 199 89% 36%;
+    --destructive: 0 72% 45%;
+    --destructive-soft: 0 86% 97%;
+    --success: 142 72% 30%;
+    --success-soft: 138 76% 94%;
+    --warning: 38 92% 33%;
+    --warning-soft: 48 96% 89%;
+    --info: 217 80% 42%;
+    --violet: 262 83% 50%;
 
-    --amber:    #ffab3d;
-    --red:      #ff6058;
-    --green:    #4ae08c;
-    --violet:   #a98bff;
+    --radius: 0.5rem;
+    --radius-sm: 0.375rem;
+    --shadow: 0 1px 2px 0 hsl(222 47% 11% / .06), 0 1px 3px 0 hsl(222 47% 11% / .08);
+    --shadow-lg: 0 4px 6px -1px hsl(222 47% 11% / .07), 0 10px 15px -3px hsl(222 47% 11% / .09);
 
-    --text:     #dce7ee;
-    --muted:    #75868f;
-    --faint:    #455460;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+            "Liberation Mono", monospace;
 
-    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-    --notch: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px));
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 222.2 84% 4.9%;
+      --foreground: 210 40% 98%;
+      --card: 222 47% 7%;
+      --elevated: 217.2 32.6% 12%;
+      --muted: 217.2 32.6% 17.5%;
+      --muted-foreground: 215 20.2% 65.1%;
+      --primary: 199 89% 48%;
+      --primary-foreground: 222.2 47.4% 11.2%;
+      --primary-soft: 199 89% 14%;
+      --primary-strong: 199 89% 60%;
+      --warning-strong: 38 92% 55%;
+      --success-strong: 142 64% 52%;
+      --destructive-strong: 0 85% 71%;
+
+      --series-1: 199 89% 62%;
+      --series-2: 142 64% 55%;
+      --series-3: 262 85% 74%;
+      --series-4: 30 92% 62%;
+      --border: 217.2 32.6% 17.5%;
+      --input: 217.2 32.6% 26%;
+      --ring: 199 89% 48%;
+      --destructive: 0 72% 51%;
+      --destructive-soft: 0 63% 15%;
+      --success: 142 64% 45%;
+      --success-soft: 142 64% 13%;
+      --warning: 38 92% 50%;
+      --warning-soft: 38 92% 13%;
+      --info: 217 91% 60%;
+      --violet: 258 90% 70%;
+
+      --shadow: 0 1px 2px 0 hsl(0 0% 0% / .3), 0 1px 3px 0 hsl(0 0% 0% / .35);
+      --shadow-lg: 0 4px 6px -1px hsl(0 0% 0% / .35), 0 10px 15px -3px hsl(0 0% 0% / .4);
+
+      color-scheme: dark;
+    }
   }
 
   * { box-sizing: border-box; }
@@ -35,351 +100,412 @@
 
   body {
     margin: 0;
-    background: var(--void);
-    color: var(--text);
-    font: 400 13.5px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font: 400 14px/1.55 var(--sans);
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     overflow-x: hidden;
   }
 
-  /* faint plotted field, the way Monogon signage is set out */
-  body::before {
-    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    background:
-      repeating-linear-gradient(0deg,  transparent 0 47px, rgba(63,224,208,.028) 47px 48px),
-      repeating-linear-gradient(90deg, transparent 0 47px, rgba(63,224,208,.028) 47px 48px);
-    -webkit-mask-image: radial-gradient(ellipse 110% 85% at 50% 0%, #000 20%, transparent 80%);
-    mask-image: radial-gradient(ellipse 110% 85% at 50% 0%, #000 20%, transparent 80%);
+  /* The browser's own surfaces belong to the design too. */
+  ::selection { background: hsl(var(--primary) / .25); }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
+  input, textarea, select { caret-color: hsl(var(--primary)); }
+  a { color: hsl(var(--primary)); text-underline-offset: 3px; }
 
-  .frame { background: var(--edge); padding: 1px; clip-path: var(--notch); }
-  .frame-in { background: var(--panel); clip-path: var(--notch); overflow: hidden; }
-  .frame.lit { background: linear-gradient(160deg, var(--edge-lit), var(--edge) 45%); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / .35);
+    border-radius: 5px;
+    border: 2px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .55); }
+  * { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / .35) transparent; }
+
+  /* ---------- surfaces ---------- */
+
+  .frame {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .frame-in { border-radius: calc(var(--radius) - 1px); overflow: hidden; }
+  .frame.lit { border-color: hsl(var(--primary) / .45); }
 
   /* ---------- shell ---------- */
 
-  .app { display: grid; grid-template-columns: 214px 1fr; min-height: 100%; position: relative; z-index: 1; }
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100%; }
 
   nav {
-    background: linear-gradient(180deg, var(--deep), var(--void));
-    border-right: 1px solid var(--edge);
-    padding: 20px 0 16px;
+    background: hsl(var(--card));
+    border-right: 1px solid hsl(var(--border));
+    padding: 18px 0 14px;
     display: flex; flex-direction: column;
     position: sticky; top: 0; height: 100vh;
   }
 
-  .brand { padding: 0 20px 18px; position: relative; }
-  .brand::after {
-    content: ''; position: absolute; left: 20px; right: 20px; bottom: 0; height: 1px;
-    background: linear-gradient(90deg, var(--cyan-dim), transparent);
-  }
-  .brand b {
-    display: block; font: 600 12.5px/1.2 system-ui, sans-serif;
-    text-transform: uppercase; letter-spacing: .2em;
-  }
+  .brand { padding: 0 18px 16px; }
+  .brand b { display: block; font: 600 16px/1.2 var(--sans); letter-spacing: -.01em; }
   .brand span {
-    display: block; font: 500 9px/1.4 var(--mono); margin-top: 5px;
-    color: var(--cyan-dim); text-transform: uppercase; letter-spacing: .3em;
+    display: block; font: 400 12px/1.4 var(--sans); margin-top: 2px;
+    color: hsl(var(--muted-foreground));
   }
 
-  .menu { padding: 12px 0; display: flex; flex-direction: column; overflow-y: auto; }
+  .menu { padding: 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 
   nav a {
     display: flex; align-items: center; gap: 10px;
-    padding: 7px 20px; color: var(--muted); cursor: pointer;
-    font: 500 11.5px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .13em;
-    border-left: 2px solid transparent;
+    padding: 8px 10px; border-radius: var(--radius-sm);
+    color: hsl(var(--muted-foreground)); cursor: pointer;
+    font: 500 14px var(--sans);
+    transition: background .12s, color .12s;
   }
-  nav a:hover { color: var(--text); background: rgba(63,224,208,.04); }
+  nav a:hover { color: hsl(var(--foreground)); background: hsl(var(--muted)); }
   nav a.on {
-    color: var(--cyan); border-left-color: var(--cyan);
-    background: linear-gradient(90deg, rgba(63,224,208,.10), transparent 70%);
+    color: hsl(var(--primary-foreground));
+    background: hsl(var(--primary));
   }
   nav a .c {
-    margin-left: auto; font: 500 10px var(--mono); color: var(--faint);
-    border: 1px solid var(--edge); padding: 0 5px; letter-spacing: 0;
+    margin-left: auto; min-width: 20px; text-align: center;
+    font: 500 12px var(--mono); font-variant-numeric: tabular-nums;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted)); border-radius: 999px; padding: 1px 7px;
   }
-  nav a.on .c { color: var(--cyan); border-color: var(--cyan-dim); }
+  nav a.on .c {
+    color: hsl(var(--primary-foreground));
+    background: hsl(var(--primary-foreground) / .18);
+  }
 
-  .navfoot { margin-top: auto; padding: 14px 20px 0; border-top: 1px solid var(--edge); }
+  .navfoot { margin-top: auto; padding: 12px 18px 0; border-top: 1px solid hsl(var(--border)); }
   .navfoot div {
     display: flex; justify-content: space-between; gap: 10px; padding: 3px 0;
-    font: 500 9px var(--mono); text-transform: uppercase; letter-spacing: .12em; color: var(--faint);
+    font-size: 12px; color: hsl(var(--muted-foreground));
   }
-  .navfoot span { color: var(--muted); letter-spacing: 0; text-transform: none; }
+  .navfoot span { color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; }
 
   main { min-width: 0; }
 
   /* ---------- header ---------- */
 
   header {
-    display: flex; align-items: center; gap: 20px;
-    padding: 0 clamp(16px, 3vw, 30px); min-height: 58px;
-    border-bottom: 1px solid var(--edge);
-    background: linear-gradient(180deg, var(--deep), rgba(4,6,10,.85));
+    display: flex; align-items: center; gap: 18px;
+    padding: 0 clamp(16px, 3vw, 28px); min-height: 60px;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--background) / .85);
     backdrop-filter: blur(8px);
     position: sticky; top: 0; z-index: 20;
   }
 
   .status { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .led {
-    width: 7px; height: 7px; background: var(--green);
-    box-shadow: 0 0 8px var(--green); transform: rotate(45deg);
+    width: 8px; height: 8px; border-radius: 999px;
+    background: hsl(var(--success));
+    box-shadow: 0 0 0 3px hsl(var(--success) / .18);
   }
-  .led.off { background: var(--red); box-shadow: 0 0 8px var(--red); }
-  .status b {
-    font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .18em; color: var(--muted);
-  }
+  .led.off { background: hsl(var(--destructive)); box-shadow: 0 0 0 3px hsl(var(--destructive) / .18); }
+  .status b { font: 500 13px var(--sans); color: hsl(var(--muted-foreground)); }
 
   header h1 {
-    font: 600 14px system-ui, sans-serif; margin: 0;
-    letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font: 600 16px var(--sans); margin: 0; letter-spacing: -.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
-  .readout { margin-left: auto; display: flex; gap: clamp(12px, 2.2vw, 28px); flex-shrink: 0; }
+  .readout { margin-left: auto; display: flex; gap: clamp(14px, 2.2vw, 30px); flex-shrink: 0; }
   .readout div { text-align: right; }
-  .readout .k {
-    font: 500 8.5px var(--mono); color: var(--faint);
-    text-transform: uppercase; letter-spacing: .2em;
+  .readout .k { font-size: 12px; color: hsl(var(--muted-foreground)); }
+  .readout .v {
+    font: 500 14px var(--mono); font-variant-numeric: tabular-nums;
+    color: hsl(var(--foreground));
   }
-  .readout .v { font: 500 13px var(--mono); color: var(--cyan); }
 
   /* ---------- views ---------- */
 
-  .view { padding: clamp(18px, 2.6vw, 30px) clamp(16px, 3vw, 30px) 70px; max-width: 1240px; display: none; }
+  .view { padding: clamp(20px, 2.6vw, 28px) clamp(16px, 3vw, 28px) 72px; max-width: 1240px; display: none; }
   .view.on { display: block; }
 
   h2 {
-    display: flex; align-items: center; gap: 12px;
-    font: 600 10.5px system-ui, sans-serif; text-transform: uppercase; letter-spacing: .24em;
-    color: var(--cyan); margin: 0 0 14px;
+    font: 600 16px var(--sans); letter-spacing: -.01em;
+    color: hsl(var(--foreground)); margin: 0 0 12px;
   }
-  h2::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--edge-lit), transparent); }
-  h2:not(:first-child) { margin-top: 36px; }
+  h2:not(:first-child) { margin-top: 34px; }
 
-  .hint { color: var(--muted); font-size: 12.5px; margin: -6px 0 16px; max-width: 680px; }
+  .hint { color: hsl(var(--muted-foreground)); font-size: 13px; margin: -6px 0 16px; max-width: 68ch; }
 
   /* ---------- metrics ---------- */
 
+  /* Hairlines inside the one card, rather than a card per metric: the strip
+     already sits in a frame and cards inside cards read as clutter. */
   .metrics {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 1px; background: var(--edge);
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    background: hsl(var(--card));
   }
-  .metric { padding: 14px 16px; background: var(--panel); position: relative; }
-  .metric::before {
-    content: ''; position: absolute; top: 0; left: 0; width: 16px; height: 2px; background: var(--cyan-dim);
+  /* Hairlines drawn inside each cell rather than as gaps over a coloured
+     background, so a part-filled last row does not show a block of divider. */
+  .metric {
+    padding: 15px 16px;
+    box-shadow: inset -1px -1px 0 hsl(var(--border));
   }
-  .metric .k {
-    font: 500 9px var(--mono); color: var(--faint);
-    text-transform: uppercase; letter-spacing: .2em;
-  }
+  .metric .k { font-size: 12px; color: hsl(var(--muted-foreground)); }
   .metric .v {
-    font: 500 21px var(--mono); margin-top: 6px; letter-spacing: -.02em;
+    font: 600 24px var(--mono); margin-top: 4px; letter-spacing: -.02em;
     font-variant-numeric: tabular-nums;
   }
-  .metric .v small { font-size: 13px; color: var(--faint); }
-  .metric.warn .v { color: var(--amber); }
-  .metric.bad  .v { color: var(--red); }
+  .metric .v small { font-size: 14px; font-weight: 400; color: hsl(var(--muted-foreground)); }
+  .metric.warn .v { color: hsl(var(--warning)); }
+  .metric.bad  .v { color: hsl(var(--destructive)); }
 
   /* ---------- charts ---------- */
 
-  .charts { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .charts { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 
   .chart-head {
     display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-    padding: 12px 16px 8px; border-bottom: 1px solid var(--edge);
+    padding: 13px 16px 10px; border-bottom: 1px solid hsl(var(--border));
   }
   .chart-head .title {
-    font: 500 9.5px var(--mono); color: var(--faint);
-    text-transform: uppercase; letter-spacing: .2em; margin-right: auto;
+    font: 600 14px var(--sans); color: hsl(var(--foreground)); margin-right: auto;
   }
-  .chart-head .key { display: flex; align-items: center; gap: 6px; font: 500 12px var(--mono); }
-  .chart-head .key i { width: 8px; height: 8px; transform: rotate(45deg); }
+  .chart-head .key {
+    display: flex; align-items: center; gap: 6px;
+    font: 400 12px var(--sans); color: hsl(var(--muted-foreground));
+  }
+  .chart-head .key i { width: 9px; height: 9px; border-radius: 2px; }
 
   .chart svg { display: block; width: 100%; height: 150px; }
   .chart-axis {
-    display: flex; justify-content: space-between; padding: 6px 16px 12px;
-    font: 500 9px var(--mono); color: var(--faint); letter-spacing: .12em;
+    display: flex; justify-content: space-between; padding: 8px 16px 12px;
+    font: 400 12px var(--mono); font-variant-numeric: tabular-nums;
+    color: hsl(var(--muted-foreground));
   }
 
   /* ---------- tables ---------- */
 
   table { width: 100%; border-collapse: collapse; }
   thead th {
-    text-align: left; padding: 9px 15px; white-space: nowrap;
-    font: 500 9px var(--mono); color: var(--faint);
-    text-transform: uppercase; letter-spacing: .2em;
-    background: var(--raised); border-bottom: 1px solid var(--edge);
+    text-align: left; padding: 10px 15px; white-space: nowrap;
+    font: 500 12px var(--sans); color: hsl(var(--muted-foreground));
+    background: hsl(var(--elevated)); border-bottom: 1px solid hsl(var(--border));
   }
-  tbody td { padding: 10px 15px; border-bottom: 1px solid #10171f; vertical-align: middle; }
+  tbody td { padding: 11px 15px; border-bottom: 1px solid hsl(var(--border)); vertical-align: middle; }
   tbody tr:last-child td { border-bottom: 0; }
-  tbody tr:hover { background: rgba(63,224,208,.035); }
-  td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-  td.dim { color: var(--muted); }
+  tbody tr:hover { background: hsl(var(--muted) / .5); }
+  td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+  td.dim { color: hsl(var(--muted-foreground)); }
   .right { text-align: right; }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
   .name { font-weight: 500; }
-  .sub { color: var(--faint); font: 400 10.5px var(--mono); word-break: break-all; }
+  .sub {
+    color: hsl(var(--muted-foreground));
+    font: 400 12px var(--mono); word-break: break-all;
+  }
 
   /* ---------- chips ---------- */
 
   .chip {
-    display: inline-block; padding: 2px 8px;
-    font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .12em;
-    border: 1px solid var(--edge); color: var(--muted); background: var(--raised);
+    display: inline-flex; align-items: center; padding: 2px 9px;
+    font: 500 12px var(--sans); border-radius: 999px;
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground)); background: hsl(var(--muted));
   }
-  .chip.owner    { color: var(--amber); border-color: #58400f; background: #1d1405; }
-  .chip.operator { color: var(--cyan);  border-color: var(--cyan-dim); background: var(--cyan-ink); }
-  .chip.guest    { color: var(--red);   border-color: #5a2320; background: #1d0c0b; }
-  .chip.orphan   { color: var(--amber); border-color: #58400f; background: #1d1405; }
-  .chip.live     { color: var(--green); border-color: #1d4a30; background: #08190f; }
+  .chip.owner {
+    color: hsl(var(--warning-strong)); border-color: hsl(var(--warning) / .35);
+    background: hsl(var(--warning-soft));
+  }
+  .chip.operator {
+    color: hsl(var(--primary-strong)); border-color: hsl(var(--primary) / .35);
+    background: hsl(var(--primary-soft));
+  }
+  .chip.guest {
+    color: hsl(var(--destructive-strong)); border-color: hsl(var(--destructive) / .35);
+    background: hsl(var(--destructive-soft));
+  }
+  .chip.orphan {
+    color: hsl(var(--warning-strong)); border-color: hsl(var(--warning) / .35);
+    background: hsl(var(--warning-soft));
+  }
+  .chip.live {
+    color: hsl(var(--success-strong)); border-color: hsl(var(--success) / .35);
+    background: hsl(var(--success-soft));
+  }
 
   /* ---------- controls ---------- */
 
   button {
-    background: var(--raised); color: var(--muted);
-    border: 1px solid var(--edge); border-radius: 0;
-    padding: 5px 11px; cursor: pointer;
-    font: 500 10.5px var(--mono); text-transform: uppercase; letter-spacing: .12em;
-    transition: color .12s, border-color .12s, background .12s;
+    background: hsl(var(--card)); color: hsl(var(--foreground));
+    border: 1px solid hsl(var(--input)); border-radius: var(--radius-sm);
+    padding: 6px 12px; cursor: pointer;
+    font: 500 13px var(--sans);
+    transition: background .12s, border-color .12s, color .12s;
   }
-  button:hover { color: var(--cyan); border-color: var(--cyan-dim); background: var(--cyan-ink); }
-  button.warn:hover { color: var(--amber); border-color: #58400f; background: #1d1405; }
-  button.bad:hover  { color: var(--red);   border-color: #5a2320; background: #1d0c0b; }
-  button:disabled { opacity: .25; cursor: default; }
-  button:disabled:hover { color: var(--muted); border-color: var(--edge); background: var(--raised); }
+  button:hover { background: hsl(var(--muted)); }
+  button.warn { color: hsl(var(--warning)); border-color: hsl(var(--warning) / .4); }
+  button.warn:hover { background: hsl(var(--warning-soft)); }
+  button.bad { color: hsl(var(--destructive-strong)); border-color: hsl(var(--destructive) / .4); }
+  button.bad:hover { background: hsl(var(--destructive-soft)); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button:disabled:hover { background: hsl(var(--card)); }
 
   button.go {
-    background: var(--cyan); border-color: var(--cyan); color: #041014;
-    padding: 8px 20px; font-size: 11px; letter-spacing: .18em;
+    background: hsl(var(--primary)); border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    padding: 9px 18px; font-size: 14px;
   }
-  button.go:hover { background: #6df3e5; border-color: #6df3e5; color: #041014; }
-  button.go:disabled { opacity: .4; }
+  button.go:hover { background: hsl(var(--primary) / .9); }
+  button.go:disabled { opacity: .5; }
+  button.go:disabled:hover { background: hsl(var(--primary)); }
 
-  button.danger { border-color: #5a2320; color: var(--red); padding: 8px 20px; font-size: 11px; letter-spacing: .18em; }
-  button.danger:hover { background: var(--red); border-color: var(--red); color: #150404; }
+  button.danger {
+    background: hsl(var(--destructive)); border-color: hsl(var(--destructive));
+    color: #fff; padding: 9px 18px; font-size: 14px;
+  }
+  button.danger:hover { background: hsl(var(--destructive) / .9); }
 
-  .seg { display: inline-flex; border: 1px solid var(--edge); }
+  .seg {
+    display: inline-flex; padding: 2px; gap: 2px;
+    background: hsl(var(--muted)); border-radius: var(--radius-sm);
+  }
   .seg button {
-    border: 0; border-right: 1px solid var(--edge); padding: 4px 9px;
-    background: var(--panel); font-size: 10px; letter-spacing: .1em;
+    border: 0; background: transparent; padding: 4px 10px;
+    border-radius: calc(var(--radius-sm) - 2px);
+    font-size: 12px; color: hsl(var(--muted-foreground));
   }
-  .seg button:last-child { border-right: 0; }
-  .seg button.on { background: var(--cyan-ink); color: var(--cyan); box-shadow: inset 0 -2px 0 var(--cyan); }
+  .seg button:hover { color: hsl(var(--foreground)); background: transparent; }
+  .seg button.on {
+    background: hsl(var(--card)); color: hsl(var(--foreground));
+    box-shadow: var(--shadow);
+  }
 
   input, select, textarea {
-    background: #060a0f; border: 1px solid var(--edge); color: var(--text);
-    border-radius: 0; padding: 8px 11px; width: 100%;
-    font: 13px system-ui, sans-serif;
+    background: hsl(var(--background)); border: 1px solid hsl(var(--input));
+    color: hsl(var(--foreground));
+    border-radius: var(--radius-sm); padding: 8px 11px; width: 100%;
+    font: 400 14px var(--sans);
+    transition: border-color .12s, box-shadow .12s;
   }
   input:focus, select:focus, textarea:focus {
-    outline: 0; border-color: var(--cyan-dim); box-shadow: 0 0 0 1px rgba(63,224,208,.18);
+    outline: 0; border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 3px hsl(var(--ring) / .18);
   }
-  input.m, textarea.m { font-family: var(--mono); font-size: 12.5px; }
-  input::placeholder, textarea::placeholder { color: var(--faint); }
-  textarea { resize: vertical; min-height: 62px; line-height: 1.5; }
+  input.m, textarea.m { font-family: var(--mono); font-size: 13px; }
+  input::placeholder, textarea::placeholder { color: hsl(var(--muted-foreground)); }
+  textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
 
   label {
     display: block; margin-bottom: 6px;
-    font: 500 9.5px var(--mono); color: var(--faint);
-    text-transform: uppercase; letter-spacing: .18em;
+    font: 500 13px var(--sans); color: hsl(var(--foreground));
   }
 
   .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .fields .full { grid-column: 1 / -1; }
 
-  .pad { padding: clamp(15px, 2.2vw, 20px); }
+  .pad { padding: clamp(16px, 2.2vw, 20px); }
 
   /* ---------- rich text ---------- */
 
   .rt-bar {
     display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
-    padding: 7px 8px; background: var(--raised); border: 1px solid var(--edge); border-bottom: 0;
+    padding: 7px 8px; background: hsl(var(--elevated));
+    border: 1px solid hsl(var(--input)); border-bottom: 0;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   }
   .rt-bar button { padding: 3px 9px; min-width: 30px; }
   .rt-bar .sw {
-    width: 20px; height: 20px; border: 1px solid var(--edge); cursor: pointer; padding: 0;
+    width: 22px; height: 22px; border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-sm); cursor: pointer; padding: 0;
   }
-  .rt-bar .sw:hover { border-color: var(--cyan); }
-  .rt-bar .gap { width: 1px; height: 18px; background: var(--edge); margin: 0 3px; }
+  .rt-bar .sw:hover { border-color: hsl(var(--ring)); }
+  .rt-bar .gap { width: 1px; height: 18px; background: hsl(var(--border)); margin: 0 3px; }
 
   .rt-preview {
-    margin-top: 10px; padding: 12px 14px; min-height: 44px;
-    border: 1px dashed var(--edge); background: #060a0f;
-    font-size: 15px; line-height: 1.45; word-break: break-word;
+    margin-top: 10px; padding: 12px 14px; min-height: 46px;
+    border: 1px dashed hsl(var(--input)); border-radius: var(--radius-sm);
+    background: hsl(var(--elevated));
+    font-size: 16px; line-height: 1.45; word-break: break-word;
   }
-  .rt-preview:empty::before { content: 'preview'; color: var(--faint); font: 500 10px var(--mono); }
+  .rt-preview:empty::before {
+    content: 'Nothing to preview yet';
+    color: hsl(var(--muted-foreground)); font: 400 13px var(--sans);
+  }
 
   /* ---------- rows ---------- */
 
-  .rows { display: grid; gap: 1px; background: var(--edge); }
+  .rows {
+    display: grid; border: 1px solid hsl(var(--border));
+    border-radius: var(--radius); overflow: hidden; background: hsl(var(--card));
+  }
+  .rows .row + .row { border-top: 1px solid hsl(var(--border)); }
   .row {
     display: flex; align-items: center; gap: 16px;
-    padding: 12px clamp(14px, 2vw, 18px); background: var(--panel);
+    padding: 13px clamp(14px, 2vw, 18px);
   }
   .row .t { flex: 1; min-width: 0; }
-  .row .t b {
-    display: block; font: 500 12px system-ui, sans-serif;
-    text-transform: uppercase; letter-spacing: .1em;
-  }
-  .row .t span { font-size: 11.5px; color: var(--faint); }
-  label.row { margin: 0; cursor: pointer; text-transform: none; letter-spacing: normal; }
-  label.row:hover { background: var(--raised); }
+  .row .t b { display: block; font: 500 14px var(--sans); }
+  .row .t span { font-size: 12px; color: hsl(var(--muted-foreground)); }
+  label.row { margin: 0; cursor: pointer; }
+  label.row:hover { background: hsl(var(--muted) / .5); }
 
   .switch {
-    width: 38px; height: 18px; background: #121a23; border: 1px solid var(--edge);
-    position: relative; flex-shrink: 0; transition: .15s;
+    width: 40px; height: 22px; border-radius: 999px;
+    background: hsl(var(--input)); border: 0;
+    position: relative; flex-shrink: 0; transition: background .15s;
   }
   .switch::after {
     content: ''; position: absolute; top: 2px; left: 2px;
-    width: 12px; height: 12px; background: #3c4a55; transition: .15s;
+    width: 18px; height: 18px; border-radius: 999px;
+    background: #fff; box-shadow: var(--shadow); transition: left .15s;
   }
-  .switch.on { background: var(--cyan-ink); border-color: var(--cyan-dim); }
-  .switch.on::after { left: 22px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  .switch.on { background: hsl(var(--primary)); }
+  .switch.on::after { left: 20px; }
 
   /* ---------- action bar ---------- */
 
   .bar {
-    position: sticky; bottom: 0; margin-top: 26px; z-index: 10;
+    position: sticky; bottom: 0; z-index: 10; margin-top: 26px;
     display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 16px 0 6px; border-top: 1px solid var(--edge);
-    background: linear-gradient(180deg, rgba(4,6,10,0), var(--void) 45%);
+    padding: 14px 0 10px; border-top: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
   }
-  .bar.flat { position: static; background: none; border-top: 0; padding: 16px 0 0; margin-top: 4px; }
-  .bar .note {
-    font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .16em; color: var(--faint);
-  }
-  .bar .note.dirty { color: var(--amber); }
+  .bar.flat { position: static; border-top: 0; padding: 16px 0 0; margin-top: 4px; }
+  .bar .note { font-size: 13px; color: hsl(var(--muted-foreground)); }
+  .bar .note.dirty { color: hsl(var(--warning)); font-weight: 500; }
 
   /* ---------- log ---------- */
 
-  .log { font: 12px/1.7 var(--mono); max-height: min(62vh, 640px); overflow-y: auto; }
-  .log .r { display: flex; gap: 14px; padding: 3px 15px; border-bottom: 1px solid #0d131a; }
-  .log .r:hover { background: rgba(63,224,208,.035); }
-  .log .ts { color: #3b4854; flex-shrink: 0; }
-  .log .lv { width: 46px; flex-shrink: 0; font-weight: 600; font-size: 10.5px; letter-spacing: .1em; }
-  .log .msg { color: #b6c4ce; word-break: break-word; }
-  .lv.INFO  { color: var(--cyan-dim); }
-  .lv.WARN  { color: var(--amber); }
-  .lv.ERROR { color: var(--red); }
-  .lv.JOIN  { color: var(--green); }
-  .lv.LEAVE { color: var(--violet); }
+  .log {
+    font: 13px/1.7 var(--mono);
+    max-height: min(62vh, 640px); overflow-y: auto;
+  }
+  .log .r {
+    display: flex; gap: 14px; padding: 4px 15px;
+    border-bottom: 1px solid hsl(var(--border) / .6);
+  }
+  .log .r:hover { background: hsl(var(--muted) / .5); }
+  .log .ts { color: hsl(var(--muted-foreground)); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .log .lv { width: 52px; flex-shrink: 0; font-weight: 600; font-size: 12px; }
+  .log .msg { color: hsl(var(--foreground)); word-break: break-word; }
+  .lv.INFO  { color: hsl(var(--info)); }
+  .lv.WARN  { color: hsl(var(--warning)); }
+  .lv.ERROR { color: hsl(var(--destructive-strong)); }
+  .lv.JOIN  { color: hsl(var(--success)); }
+  .lv.LEAVE { color: hsl(var(--violet)); }
 
   .filters { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
   .filters input { width: min(280px, 100%); }
 
-  .empty { padding: 34px 18px; text-align: center; }
+  .empty { padding: 40px 18px; text-align: center; }
   .empty b {
-    display: block; color: var(--muted); margin-bottom: 5px;
-    font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .2em;
+    display: block; color: hsl(var(--foreground)); margin-bottom: 4px;
+    font: 500 14px var(--sans);
   }
-  .empty span { color: var(--faint); font-size: 12.5px; }
-
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: var(--void); }
-  ::-webkit-scrollbar-thumb { background: var(--edge); }
-  ::-webkit-scrollbar-thumb:hover { background: var(--edge-lit); }
+  .empty span { color: hsl(var(--muted-foreground)); font-size: 13px; }
 
   /* ================= responsive ================= */
 
@@ -387,17 +513,17 @@
     .app { grid-template-columns: 1fr; }
     nav {
       position: sticky; top: 0; z-index: 30; height: auto; flex-direction: row;
-      align-items: center; padding: 0; border-right: 0; border-bottom: 1px solid var(--edge);
+      align-items: center; padding: 0; border-right: 0;
+      border-bottom: 1px solid hsl(var(--border));
       overflow-x: auto; scrollbar-width: none;
     }
     nav::-webkit-scrollbar { display: none; }
     .brand { padding: 12px 16px; flex-shrink: 0; }
-    .brand::after.brand span { display: none; }
-    .menu { flex-direction: row; padding: 0; overflow: visible; }
-    nav a { border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; padding: 14px; }
-    nav a.on { border-left: 0; border-bottom-color: var(--cyan); background: rgba(63,224,208,.07); }
+    .brand span { display: none; }
+    .menu { flex-direction: row; padding: 8px; overflow: visible; }
+    nav a { white-space: nowrap; padding: 8px 12px; }
     .navfoot { display: none; }
-    header { top: 47px; }
+    header { top: 55px; }
   }
 
   @media (max-width: 640px) {
@@ -408,7 +534,7 @@
     header h1 { grid-column: 2; }
     .readout {
       grid-column: 1 / -1; margin-left: 0; justify-content: space-between; width: 100%;
-      padding-top: 10px; border-top: 1px solid var(--edge);
+      padding-top: 10px; border-top: 1px solid hsl(var(--border));
     }
     .readout div { text-align: left; }
     .readout div:last-child { text-align: right; }
@@ -418,17 +544,18 @@
 
     /* A seven-column table at 375px is unreadable, so each row becomes a record. */
     .stack thead { display: none; }
-    .stack.stack tbody.stack tr.stack td { display: block; width: 100%; }
-    .stack tr { border-bottom: 1px solid var(--edge); padding: 8px 0; }
+    .stack tr { border-bottom: 1px solid hsl(var(--border)); padding: 8px 0; }
     .stack tr:last-child { border-bottom: 0; }
-    .stack td {
-      border: 0; padding: 5px 15px; text-align: left;
-      display: grid; grid-template-columns: 88px 1fr; gap: 12px; align-items: center;
+    /* One rule owns display here. A separate, more specific `display: block`
+       silently beat the grid and ran each label into its value. */
+    .stack tbody tr td {
+      border: 0; padding: 5px 15px; text-align: left; width: 100%;
+      display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+      align-items: center; justify-items: start;
     }
     .stack td::before {
       content: attr(data-label);
-      font: 500 8.5px var(--mono); color: var(--faint);
-      text-transform: uppercase; letter-spacing: .18em;
+      font: 500 12px var(--sans); color: hsl(var(--muted-foreground));
     }
     .stack .acts { justify-content: flex-start; }
 
@@ -457,12 +584,9 @@
     <div class="menu">
       <a data-tab="overview" class="on">Overview</a>
       <a data-tab="players">Players <i class="c" id="nPlayers">0</i></a>
-      <a data-tab="map">Map</a>
-      <a data-tab="analytics">Analytics</a>
-      <a data-tab="resources">Resources</a>
-      <a data-tab="ranks">Ranks <i class="c" id="nRanks">0</i></a>
-      <a data-tab="bans">Bans <i class="c" id="nBans">0</i></a>
       <a data-tab="world">World <i class="c" id="nWorld">0</i></a>
+      <a data-tab="moderation">Moderation <i class="c" id="nBans">0</i></a>
+      <a data-tab="insights">Insights</a>
       <a data-tab="settings">Settings</a>
       <a data-tab="log">Log</a>
     </div>
@@ -497,7 +621,6 @@
       <div class="frame"><div class="frame-in"><div class="log" id="miniLog" style="max-height:300px"></div></div></div>
     </section>
 
-    <!-- ========== PLAYERS ========== -->
     <section class="view" id="v-players">
       <h2>Connected players</h2>
       <p class="hint">
@@ -508,8 +631,7 @@
       <div class="frame"><div class="frame-in" id="players"></div></div>
     </section>
 
-    <!-- ========== MAP ========== -->
-    <section class="view" id="v-map">
+    <section class="view" id="v-world">
       <h2>Current level</h2>
       <div class="frame lit"><div class="frame-in pad" id="currentLevel"></div></div>
 
@@ -564,43 +686,24 @@
           </div>
         </div>
       </div></div>
-    </section>
-
-    <!-- ========== ANALYTICS ========== -->
-    <section class="view" id="v-analytics">
-      <h2>Session analytics</h2>
+      <h2>World control</h2>
       <p class="hint">
-        Sampled every five seconds and held in memory, so the graphs reset when the
-        server restarts.
+        The server owns nothing and simulates nothing, it only remembers what exists
+        so late joiners can be caught up. An entity whose owner left has no machine
+        applying physics to it and hangs in place until it is culled.
       </p>
-      <div class="filters">
-        <div class="seg" id="rangeSeg"></div>
-      </div>
-      <div class="charts">
-        <div class="frame"><div class="frame-in"><div class="chart" id="cPlayers"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cEntities"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cPackets"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cBandwidth"></div></div></div>
-      </div>
+      <div class="frame"><div class="frame-in pad">
+        <div class="bar flat" style="margin:0;padding:0">
+          <button class="danger" onclick="clearWorld()">Clear every entity</button>
+          <span class="note" id="worldNote"></span>
+        </div>
+      </div></div>
+
+      <h2>Tracked entities</h2>
+      <div class="frame"><div class="frame-in" id="entities"></div></div>
     </section>
 
-    <!-- ========== RESOURCES ========== -->
-    <section class="view" id="v-resources">
-      <h2>Process</h2>
-      <div class="filters"><div class="seg" id="rangeSegRes"></div></div>
-      <div class="frame lit"><div class="frame-in"><div class="metrics" id="resMetrics"></div></div></div>
-
-      <div class="charts" style="margin-top:16px">
-        <div class="frame"><div class="frame-in"><div class="chart" id="cCpu"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cMemory"></div></div></div>
-      </div>
-
-      <h2>Host machine</h2>
-      <div class="frame"><div class="frame-in"><div class="metrics" id="hostMetrics"></div></div></div>
-    </section>
-
-    <!-- ========== RANKS ========== -->
-    <section class="view" id="v-ranks">
+    <section class="view" id="v-moderation">
       <h2>Saved ranks</h2>
       <p class="hint">
         Anyone not listed joins as Default. Guest sits below Default, for holding
@@ -625,10 +728,6 @@
         </div>
         <div class="bar flat"><button class="go" onclick="addRank()">Assign rank</button></div>
       </div></div>
-    </section>
-
-    <!-- ========== BANS ========== -->
-    <section class="view" id="v-bans">
       <h2>Ban list</h2>
       <p class="hint">
         A banned SteamID is refused during the handshake, before it is ever given a
@@ -647,26 +746,34 @@
       </div></div>
     </section>
 
-    <!-- ========== WORLD ========== -->
-    <section class="view" id="v-world">
-      <h2>World control</h2>
+    <section class="view" id="v-insights">
+      <h2>Session analytics</h2>
       <p class="hint">
-        The server owns nothing and simulates nothing, it only remembers what exists
-        so late joiners can be caught up. An entity whose owner left has no machine
-        applying physics to it and hangs in place until it is culled.
+        Sampled every five seconds and held in memory, so the graphs reset when the
+        server restarts.
       </p>
-      <div class="frame"><div class="frame-in pad">
-        <div class="bar flat" style="margin:0;padding:0">
-          <button class="danger" onclick="clearWorld()">Clear every entity</button>
-          <span class="note" id="worldNote"></span>
-        </div>
-      </div></div>
+      <div class="filters">
+        <div class="seg" id="rangeSeg"></div>
+      </div>
+      <div class="charts">
+        <div class="frame"><div class="frame-in"><div class="chart" id="cPlayers"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cEntities"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cPackets"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cBandwidth"></div></div></div>
+      </div>
+      <h2>Process</h2>
+      <div class="filters"><div class="seg" id="rangeSegRes"></div></div>
+      <div class="frame lit"><div class="frame-in"><div class="metrics" id="resMetrics"></div></div></div>
 
-      <h2>Tracked entities</h2>
-      <div class="frame"><div class="frame-in" id="entities"></div></div>
+      <div class="charts" style="margin-top:16px">
+        <div class="frame"><div class="frame-in"><div class="chart" id="cCpu"></div></div></div>
+        <div class="frame"><div class="frame-in"><div class="chart" id="cMemory"></div></div></div>
+      </div>
+
+      <h2>Host machine</h2>
+      <div class="frame"><div class="frame-in"><div class="metrics" id="hostMetrics"></div></div></div>
     </section>
 
-    <!-- ========== SETTINGS ========== -->
     <section class="view" id="v-settings">
       <h2>Server control</h2>
       <div class="frame"><div class="frame-in pad">
@@ -792,7 +899,6 @@
       </div>
     </section>
 
-    <!-- ========== LOG ========== -->
     <section class="view" id="v-log">
       <h2>Server log</h2>
       <div class="filters">
@@ -925,7 +1031,14 @@ function unityToHtml(raw) {
   return out;
 }
 
-const SWATCHES = ['#3fe0d0', '#4ae08c', '#ffab3d', '#ff6058', '#a98bff', '#5b9dff', '#ffffff'];
+/* Chart colours come from the stylesheet so each theme gets a readable set. */
+function series(n) {
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue('--series-' + n).trim();
+  return v ? 'hsl(' + v + ')' : '#888';
+}
+
+const SWATCHES = ['#0284c7', '#15803d', '#b45309', '#b91c1c', '#7c3aed', '#0f172a', '#ffffff'];
 
 function buildRichBar(barId, areaId, previewId) {
   const bar = $(barId);
@@ -1075,7 +1188,7 @@ document.querySelectorAll('nav a').forEach(a => {
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + tab));
     window.scrollTo(0, 0);
 
-    if (tab === 'analytics' || tab === 'resources') pollHistory();
+    if (tab === 'insights') pollHistory();
     render();
   };
 });
@@ -1099,7 +1212,7 @@ async function pollHistory() {
     const d = await (await fetch('/api/history?range=' + historyRange)).json();
     history = d.samples;
     historyStep = d.stepSeconds || 5;
-    if (tab === 'analytics' || tab === 'resources') render();
+    if (tab === 'insights') render();
   } catch { /* the state poll already reports a dead link */ }
 }
 
@@ -1119,18 +1232,14 @@ function render() {
   $('fVersion').textContent = 'v' + d.server.version;
 
   $('nPlayers').textContent = d.players.length;
-  $('nRanks').textContent = d.roster.length;
   $('nBans').textContent = d.bans.length;
   $('nWorld').textContent = d.entities.total;
 
   if (tab === 'overview') renderOverview(d);
   if (tab === 'players') $('players').innerHTML = playerTable(d, true);
-  if (tab === 'map') renderMap(d);
-  if (tab === 'analytics') renderAnalytics();
-  if (tab === 'resources') renderResources(d);
-  if (tab === 'ranks') renderRanks(d);
-  if (tab === 'bans') renderBans(d);
-  if (tab === 'world') renderWorld(d);
+  if (tab === 'world') { renderMap(d); renderWorld(d); }
+  if (tab === 'moderation') { renderRanks(d); renderBans(d); }
+  if (tab === 'insights') { renderAnalytics(); renderResources(d); }
   if (tab === 'settings') renderSettings(d);
   if (tab === 'log') renderLog(d);
 }
@@ -1350,19 +1459,19 @@ function renderAnalytics() {
   buildRangePicker('rangeSeg');
 
   drawChart($('cPlayers'), 'Players',
-    [{ name: 'online', color: '#4ae08c', data: history.map(s => s.players) }], v => Math.round(v));
+    [{ name: 'online', color: series(2), data: history.map(s => s.players) }], v => Math.round(v));
 
   drawChart($('cEntities'), 'Entities in world',
-    [{ name: 'tracked', color: '#3fe0d0', data: history.map(s => s.entities) }], v => num(Math.round(v)));
+    [{ name: 'tracked', color: series(1), data: history.map(s => s.entities) }], v => num(Math.round(v)));
 
   drawChart($('cPackets'), 'Packets per second', [
-    { name: 'in',  color: '#5b9dff', data: rate(history, 'packetsIn') },
-    { name: 'out', color: '#a98bff', data: rate(history, 'packetsOut') },
+    { name: 'in',  color: series(1), data: rate(history, 'packetsIn') },
+    { name: 'out', color: series(3), data: rate(history, 'packetsOut') },
   ], v => Math.round(v));
 
   drawChart($('cBandwidth'), 'Bandwidth', [
-    { name: 'in',  color: '#3fe0d0', data: rate(history, 'bytesIn') },
-    { name: 'out', color: '#ffab3d', data: rate(history, 'bytesOut') },
+    { name: 'in',  color: series(1), data: rate(history, 'bytesIn') },
+    { name: 'out', color: series(4), data: rate(history, 'bytesOut') },
   ], v => bytes(v) + '/s');
 }
 
@@ -1400,10 +1509,10 @@ function renderResources(d) {
     '<div class="v">' + p[1] + '</div></div>').join('');
 
   drawChart($('cCpu'), 'CPU',
-    [{ name: 'process', color: '#ffab3d', data: history.map(s => s.cpu) }], v => v.toFixed(1) + '%');
+    [{ name: 'process', color: series(4), data: history.map(s => s.cpu) }], v => v.toFixed(1) + '%');
 
   drawChart($('cMemory'), 'Working set',
-    [{ name: 'resident', color: '#3fe0d0', data: history.map(s => s.memory) }], v => bytes(v));
+    [{ name: 'resident', color: series(1), data: history.map(s => s.memory) }], v => bytes(v));
 }
 
 /* ---------- lists ---------- */
@@ -1693,7 +1802,7 @@ pollHistory();
 
 setInterval(poll, 1000);
 setInterval(() => {
-  if (tab === 'analytics' || tab === 'resources') pollHistory();
+  if (tab === 'insights') pollHistory();
 }, 5000);
 </script>
 </body>
