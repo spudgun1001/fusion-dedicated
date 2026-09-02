@@ -16,17 +16,20 @@ public sealed class BlocklistEvaluator
     private readonly GlobalModBlacklist? _global;
     private readonly IReadOnlyDictionary<string, int> _catalogue;
     private readonly BlocklistFile? _file;
+    private readonly bool _extended;
 
     public BlocklistEvaluator(
         IReadOnlySet<string> operatorBarcodes,
         GlobalModBlacklist? global = null,
         IReadOnlyDictionary<string, int>? catalogue = null,
-        BlocklistFile? file = null)
+        BlocklistFile? file = null,
+        bool extendedProtection = false)
     {
         _operatorBarcodes = operatorBarcodes;
         _global = global;
         _catalogue = catalogue ?? new Dictionary<string, int>();
         _file = file?.Enabled == true ? file : null;
+        _extended = extendedProtection;
     }
 
     public BlockVerdict Check(string barcode, PermissionLevel senderRank = PermissionLevel.Default)
@@ -37,6 +40,22 @@ public sealed class BlocklistEvaluator
         }
 
         bool whitelisted = _file?.Whitelist.Contains(barcode, StringComparer.Ordinal) == true;
+
+        if (!whitelisted && _extended)
+        {
+            if (BuiltInSafety.Barcodes.Contains(barcode))
+            {
+                return new BlockVerdict(true, "built-in", "on the built-in AntiNuke list");
+            }
+
+            foreach (string keyword in BuiltInSafety.Keywords)
+            {
+                if (barcode.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new BlockVerdict(true, "built-in", $"barcode contains '{keyword}'");
+                }
+            }
+        }
 
         if (!whitelisted && _file != null)
         {

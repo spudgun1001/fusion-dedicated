@@ -1,52 +1,16 @@
 {
-    "_comment": "Spawn rules for this server. Edit freely, or delete this file to turn the layer off entirely. Reloaded automatically when saved.",
-
-    "enabled": true,
-
-    "_barcodes": "Exact barcodes to refuse. Ported from BoneLabAntiNuke.",
-    "barcodes": [
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.MicroNukeGrenade",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.TimedNuke",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionMicroNuke",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionTimedNuke",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.M72LAW",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.M72LawINF",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.LAWRocket",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.KCB4VoidTunnelingDevice",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionVoidSuction",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.Missile",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.MiniMissile",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.IncinMissile",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionMissile",
-        "BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionFlameMissile",
-        "SLZ.BONELAB.Core.Spawnable.GameplaySystems",
-        "SLZ.BONELAB.Core.Spawnable.RigManagerBlank",
-        "Rett64bit.DBDPack.Avatar.Pig",
-        "cheetoboa.DL2improved.Avatar.DL2IMPDemolishermassive"
-    ],
-
-    "_keywords": "Matched anywhere in a barcode, case-insensitively, so a repackaged nuke nobody has listed is still caught. Keep these specific: a short or common word will block innocent items.",
-    "keywords": [
-        "nuke",
-        "nuclear",
-        "tsar",
-        "fatman",
-        "littleboy",
-        "atombomb",
-        "warhead",
-        "icbm",
-        "blackhole",
-        "singularity"
-    ],
-
-    "_whitelist": "Allowed even when a barcode or keyword rule above would block them. Does not override Fusion's community list.",
-    "whitelist": [],
-
-    "_operatorOnly": "Only Operator and above may spawn these.",
-    "operatorOnly": [],
-
-    "_extended": "Used when ExtendedProtection is on in server.json.",
-    "maxSpawnsPerSecond": 5,
-    "maxNicknameChangesPerMinute": 3,
-    "reservedNicknames": []
+  "_comment": "Your own spawn rules, added on top of the built-in AntiNuke list. The built-in list applies whenever ExtendedProtection is on in server.json, so deleting this file does not turn protection off. Reloaded automatically when saved.",
+  "enabled": true,
+  "_barcodes": "Exact barcodes to refuse, in addition to the built-in list.",
+  "barcodes": [],
+  "_keywords": "Matched anywhere in a barcode, case-insensitively. Keep these specific: a short or common word will block innocent items.",
+  "keywords": [],
+  "_whitelist": "Allowed even when a built-in rule or a rule above would block them. Does not override Fusion's community list.",
+  "whitelist": [],
+  "_operatorOnly": "Only Operator and above may spawn these.",
+  "operatorOnly": [],
+  "_extended": "Used when ExtendedProtection is on. Omit a value to take the built-in default.",
+  "maxSpawnsPerSecond": 5,
+  "maxNicknameChangesPerMinute": 3,
+  "reservedNicknames": []
 }

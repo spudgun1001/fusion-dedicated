@@ -98,14 +98,13 @@ public sealed class FusionServer : IDisposable
                 .Where(m => m.ModId > 0)
                 .GroupBy(m => m.Barcode)
                 .ToDictionary(g => g.Key, g => g.First().ModId, StringComparer.Ordinal),
-            file);
+            file,
+            Config.ExtendedProtection);
 
-        bool extended = Config.ExtendedProtection && file != null;
+        var limits = ExtendedLimits.Resolve(Config.ExtendedProtection, file);
 
-        _rateLimiter = new SpawnRateLimiter(extended ? file!.MaxSpawnsPerSecond : 0);
-        _nicknames = new NicknameGuard(
-            extended ? file!.MaxNicknameChangesPerMinute : 0,
-            extended ? file!.ReservedNicknames : Array.Empty<string>());
+        _rateLimiter = new SpawnRateLimiter(limits.MaxSpawnsPerSecond);
+        _nicknames = new NicknameGuard(limits.MaxNicknameChangesPerMinute, limits.ReservedNicknames);
     }
 
     public void Dispose()

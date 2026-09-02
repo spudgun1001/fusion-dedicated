@@ -33,9 +33,8 @@ public sealed class Dashboard
     private string Prefix => $"http://{_config.DashboardHost}:{_config.DashboardPort}/";
 
     /// <summary>Address a human can actually type.</summary>
-    public string Url => _config.DashboardHost is "+" or "*"
-        ? $"http://<this-machine-ip>:{_config.DashboardPort}/"
-        : $"http://{_config.DashboardHost}:{_config.DashboardPort}/";
+    public string Url => DashboardAddress.Format(
+        _config.DashboardHost, _config.DashboardPublicHost, _config.DashboardPort);
 
     public bool IsListening => _listener.IsListening;
 

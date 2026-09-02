@@ -98,15 +98,24 @@ public static class Program
 
         server.RebuildBlocklist();
 
-        if (blocklist.Current is { } rules)
+        if (config.ExtendedProtection)
         {
-            server.Log("INFO", $"Blocklist: {rules.Barcodes.Count} barcodes, " +
-                               $"{rules.Keywords.Count} keywords, " +
-                               $"extended protection {(config.ExtendedProtection ? "on" : "off")}");
+            server.Log("INFO", $"Extended protection on: {BuiltInSafety.Barcodes.Count} built-in " +
+                               $"barcodes, {BuiltInSafety.Keywords.Count} keywords");
         }
         else
         {
-            server.Log("WARN", "No blocklist.json. Spawn rules come from the community list only.");
+            server.Log("WARN", "Extended protection is off. The built-in AntiNuke rules do not apply.");
+        }
+
+        if (blocklist.Current is { } rules)
+        {
+            server.Log("INFO", $"Blocklist: {rules.Barcodes.Count} barcodes, " +
+                               $"{rules.Keywords.Count} keywords");
+        }
+        else
+        {
+            server.Log("INFO", "No blocklist.json, so no server-specific rules on top.");
         }
 
         if (config.GlobalListsEnabled)
@@ -240,7 +249,6 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine($"  Panel:   {dashboard.Url}");
         Console.WriteLine($"  Code:    {config.ServerCode}");
-        Console.WriteLine($"  Ctrl+C   to stop");
         Console.WriteLine();
 
         // ---- main loop ----

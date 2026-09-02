@@ -309,6 +309,12 @@ public sealed class ServerConfig
     /// </summary>
     public string DashboardHost { get; set; } = "localhost";
 
+    /// <summary>
+    /// The address this server was allocated, used only to print a panel link a
+    /// person can actually open. Binding to "+" says nothing about how to reach it.
+    /// </summary>
+    public string DashboardPublicHost { get; set; } = "";
+
     /// <summary>Username for the panel's HTTP Basic prompt.</summary>
     public string DashboardUser { get; set; } = "admin";
 
