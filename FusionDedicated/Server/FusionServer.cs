@@ -344,7 +344,27 @@ public sealed class FusionServer : IDisposable
 
     private readonly IntPtr[] _messageBuffer = new IntPtr[128];
 
+    /// <summary>
+    /// Drains the poll group. One pass returns at most a bufferful, which at a 16ms
+    /// tick caps throughput around 8000 messages a second — reachable on a busy
+    /// server, and the backlog only grows once it is. Keep pulling until a short
+    /// batch comes back, bounded so a flood cannot starve the rest of the loop.
+    /// </summary>
     public void Receive()
+    {
+        for (var pass = 0; pass < MaxReceivePasses; pass++)
+        {
+            if (ReceiveBatch() < _messageBuffer.Length)
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>Bounds one tick at 2048 messages, leaving room for ticks and lobby updates.</summary>
+    private const int MaxReceivePasses = 16;
+
+    private int ReceiveBatch()
     {
         int count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(_pollGroup, _messageBuffer, _messageBuffer.Length);
 
@@ -371,6 +391,8 @@ public sealed class FusionServer : IDisposable
                 SteamNetworkingMessage_t.Release(_messageBuffer[i]);
             }
         }
+
+        return count;
     }
 
     private void HandleMessage(HSteamNetConnection connection, byte[] message)
