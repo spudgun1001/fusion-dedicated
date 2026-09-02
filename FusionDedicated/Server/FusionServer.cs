@@ -14,7 +14,7 @@ public sealed record ServerLogEntry(DateTime At, string Level, string Message);
 /// IDs and relays traffic between clients.
 ///
 /// It deliberately never takes ownership of an entity. In Fusion only an entity's
-/// owner simulates it, so a server that owns nothing needs no physics at all — it
+/// owner simulates it, so a server that owns nothing needs no physics at all, it
 /// only has to remember what exists so late joiners can be caught up.
 /// </summary>
 public sealed class FusionServer : IDisposable
@@ -244,7 +244,7 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}) — {reason}");
+        Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}), {reason}");
 
         NoteDeparture(player.DisplayName, reason);
 
@@ -299,7 +299,7 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>
     /// Players leaving one by one is ordinary. Several going within a few seconds of
-    /// each other is not — it means one shared cause, and the reasons the transport
+    /// each other is not, it means one shared cause, and the reasons the transport
     /// gave are the only clue to what it was. Worth calling out loudly at the time,
     /// because reconstructing it afterwards is close to impossible.
     /// </summary>
@@ -328,7 +328,7 @@ public sealed class FusionServer : IDisposable
 
         var span = (now - recent[0].At).TotalSeconds;
 
-        // People do leave together — friends finishing a session look exactly like a
+        // People do leave together, friends finishing a session look exactly like a
         // fault if you only count departures. What separates the two is the reason
         // the transport gave: a clean close is somebody choosing to go, while a
         // timeout means their client stopped answering.
@@ -337,16 +337,16 @@ public sealed class FusionServer : IDisposable
         if (faults < 2)
         {
             Log("INFO", $"{recent.Count} players left within {span:F1}s, all disconnecting " +
-                        $"normally — {Players.Count} remain");
+                        $"normally, {Players.Count} remain");
             return;
         }
 
         Log("ERROR", $"MASS DISCONNECT: {faults} of {recent.Count} departures in {span:F1}s " +
-                     $"look like faults — {Players.Count} remain, {Entities.Count} entities in world");
+                     $"look like faults, {Players.Count} remain, {Entities.Count} entities in world");
 
         foreach (var (at, name, why) in recent)
         {
-            Log("ERROR", $"  {at.ToLocalTime():HH:mm:ss}  {(IsFault(why) ? "FAULT" : "clean")}  {name} — {why}");
+            Log("ERROR", $"  {at.ToLocalTime():HH:mm:ss}  {(IsFault(why) ? "FAULT" : "clean")}  {name}, {why}");
         }
     }
 
@@ -356,7 +356,7 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>
     /// Drains the poll group. One pass returns at most a bufferful, which at a 16ms
-    /// tick caps throughput around 8000 messages a second — reachable on a busy
+    /// tick caps throughput around 8000 messages a second, reachable on a busy
     /// server, and the backlog only grows once it is. Keep pulling until a short
     /// batch comes back, bounded so a flood cannot starve the rest of the loop.
     /// </summary>
@@ -429,7 +429,7 @@ public sealed class FusionServer : IDisposable
         else
         {
             // Anything arriving before a player is registered is part of the join
-            // attempt — a path worth seeing in full while it is still new.
+            // attempt, a path worth seeing in full while it is still new.
             Log("INFO", $"Packet from an unidentified connection: tag={tag}, {message.Length} bytes, " +
                         $"hex={Convert.ToHexString(message.AsSpan(0, Math.Min(message.Length, 24)))}");
         }
@@ -502,7 +502,7 @@ public sealed class FusionServer : IDisposable
 
         if (request == null)
         {
-            Log("WARN", "ConnectionRequest did not parse — rejecting");
+            Log("WARN", "ConnectionRequest did not parse, rejecting");
             SteamNetworkingSockets.CloseConnection(connection, 0, "Bad request", false);
             return;
         }
@@ -604,12 +604,12 @@ public sealed class FusionServer : IDisposable
         {
             Log("WARN", $"{player.DisplayName} is on Fusion's global ban list " +
                         $"as '{globalBan.Username}': {globalBan.Reason}. " +
-                        "Not enforced — ban them here if you agree.");
+                        "Not enforced, ban them here if you agree.");
         }
 
         Players.Add(player);
 
-        Log("JOIN", $"{player.DisplayName} joined — SmallID {player.SmallId}, " +
+        Log("JOIN", $"{player.DisplayName} joined. SmallID {player.SmallId}, " +
                     $"v{request.Version.Major}.{request.Version.Minor}, " +
                     $"{player.Permission.ToFusionString()}, avatar '{request.AvatarBarcode}'");
 
@@ -629,7 +629,7 @@ public sealed class FusionServer : IDisposable
         SendTo(connection, ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
             reliable: true);
 
-        // 4. Gamemode metadata — empty on a plain relay.
+        // 4. Gamemode metadata, empty on a plain relay.
         SendTo(connection, ServerProtocol.WriteEmptyDynamicsAssignment(), reliable: true);
 
         // 5. The rules: privacy, combat toggles and which level each action needs.
@@ -671,7 +671,7 @@ public sealed class FusionServer : IDisposable
         if (Entities.Count >= Config.MaxEntities)
         {
             // Make room from abandoned props rather than refusing. A refused spawn is
-            // invisible to the player — they pull the trigger and nothing happens —
+            // invisible to the player, they pull the trigger and nothing happens -
             // and once the world is full it stays full, so every spawn after that
             // fails for everyone.
             var evicted = Entities.EvictOldest(Config.EvictBatchSize);
@@ -679,7 +679,7 @@ public sealed class FusionServer : IDisposable
             if (evicted.Count > 0)
             {
                 DespawnOnClients(evicted);
-                Log("INFO", $"World at capacity — evicted {evicted.Count} abandoned entities");
+                Log("INFO", $"World at capacity, evicted {evicted.Count} abandoned entities");
             }
 
             if (Entities.Count >= Config.MaxEntities)
@@ -691,8 +691,8 @@ public sealed class FusionServer : IDisposable
         }
 
         // Only what they actually spawned. The last player standing inherits everyone
-        // else's leftovers — one player was holding 1071 entities after a night of
-        // this — and counting those would have the guard purge and eventually kick
+        // else's leftovers, one player was holding 1071 entities after a night of
+        // this, and counting those would have the guard purge and eventually kick
         // whoever stayed longest, for other people's props.
         int owned = Entities.Entities.Count(e => e.OwnerSmallId == sender.SmallId && !e.Inherited);
         var verdict = Guard.Check(sender, owned);
@@ -762,7 +762,7 @@ public sealed class FusionServer : IDisposable
                 if (damage is { } dealt && Config.MaxRemoteDamage > 0 && dealt > Config.MaxRemoteDamage)
                 {
                     Log("WARN", $"{sender.DisplayName} sent {dealt:0} damage, over the " +
-                                $"{Config.MaxRemoteDamage:0} cap — dropped");
+                                $"{Config.MaxRemoteDamage:0} cap, dropped");
                     return false;
                 }
 
@@ -773,7 +773,7 @@ public sealed class FusionServer : IDisposable
                 {
                     Log("WARN", $"{sender.DisplayName} tried to teleport someone but is " +
                                 $"{sender.Permission.ToFusionString()}, not " +
-                                $"{Config.Teleportation.ToFusionString()} — dropped");
+                                $"{Config.Teleportation.ToFusionString()}, dropped");
                     return false;
                 }
 
@@ -799,7 +799,7 @@ public sealed class FusionServer : IDisposable
             case GateProtocol.TagSlowMoButton:
                 if (Config.SlowMoMode == 0)
                 {
-                    Log("WARN", $"{sender.DisplayName} pressed slow motion, which is disabled — dropped");
+                    Log("WARN", $"{sender.DisplayName} pressed slow motion, which is disabled, dropped");
                     return false;
                 }
 
@@ -845,7 +845,7 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>
     /// Handles a moderation command a player issued from the in-game menu. The client
-    /// hides the buttons it thinks you may not use, but that is only a hint — the
+    /// hides the buttons it thinks you may not use, but that is only a hint, the
     /// server is the thing that actually decides.
     /// </summary>
     private void HandlePermissionCommand(ConnectedPlayer sender, byte[] message)
@@ -1004,7 +1004,7 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        // The server owns no mods, so it cannot look this up itself — but whoever
+        // The server owns no mods, so it cannot look this up itself, but whoever
         // spawned the item can. Hand the question to them; their reply is already
         // addressed back to the asker, and the server learns the answer in passing.
         byte? holder = FindHolder(barcode, except: sender.SmallId);
@@ -1023,7 +1023,7 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        Log("WARN", $"{sender.DisplayName} asked for mod info on '{barcode}' — " +
+        Log("WARN", $"{sender.DisplayName} asked for mod info on '{barcode}', " +
                     "nobody here knows it, so they cannot download it");
     }
 
@@ -1050,7 +1050,7 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>
     /// Watches replies going past so the server builds up a catalogue of the mods its
-    /// players use. Once learned, a barcode can be served directly — including to
+    /// players use. Once learned, a barcode can be served directly, including to
     /// someone who joins long after the original owner left.
     /// </summary>
     private void HandleModInfoResponse(ConnectedPlayer sender, byte[] message)
@@ -1066,7 +1066,7 @@ public sealed class FusionServer : IDisposable
             if (Config.LearnMod(barcode, r.ModId, r.ModFileId))
             {
                 Config.Save(Program.ConfigPath);
-                Log("INFO", $"Learned '{barcode}' is mod.io {r.ModId} — the server can serve it from now on");
+                Log("INFO", $"Learned '{barcode}' is mod.io {r.ModId}, the server can serve it from now on");
             }
         }
 
@@ -1082,13 +1082,13 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     public int PurgeEntitiesOf(byte smallId)
     {
-        // If the owner has already gone, name someone who is still here — see
+        // If the owner has already gone, name someone who is still here, see
         // ClearAllEntities for why an unresolvable sender is ignored by clients.
         byte despawner = Players.Get(smallId) != null
             ? smallId
             : Players.Players.FirstOrDefault()?.SmallId ?? smallId;
 
-        // Their own spawns only — sweeping up inherited props would delete the work of
+        // Their own spawns only, sweeping up inherited props would delete the work of
         // players who have since left.
         var doomed = Entities.Entities
             .Where(e => e.OwnerSmallId == smallId && !e.Inherited)
@@ -1110,7 +1110,7 @@ public sealed class FusionServer : IDisposable
     /// The despawn is attributed to a connected player rather than to the relay's own
     /// ID. A dedicated server never announces itself as a player, so small ID 0 names
     /// nobody the clients know about, and a despawn from a sender they cannot resolve
-    /// is not acted on — the entity would disappear from the server's books while
+    /// is not acted on, the entity would disappear from the server's books while
     /// staying in everyone's world.
     /// </summary>
     public int ClearAllEntities(bool includeDiscovered = false)
@@ -1162,7 +1162,7 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     public async Task RestartAsync(string reason, int graceSeconds)
     {
-        Log("WARN", $"Restart requested — disconnecting {Players.Count} players");
+        Log("WARN", $"Restart requested, disconnecting {Players.Count} players");
 
         foreach (var player in Players.Players)
         {
@@ -1351,11 +1351,11 @@ public sealed class FusionServer : IDisposable
 
         switch (relayType)
         {
-            case 0: // None — meant for the server alone
+            case 0: // None, meant for the server alone
             case 1: // ToServer
                 return;
 
-            case 2: // ToClients — everyone, sender included
+            case 2: // ToClients, everyone, sender included
                 Broadcast(stamped, reliable);
                 return;
 
@@ -1446,8 +1446,8 @@ public sealed class FusionServer : IDisposable
     public void Tick()
     {
         // A client builds its rules purely from the ServerSettings message. If it ever
-        // misses one — or its own scene-load hook overwrites LobbyInfo with local
-        // preferences — it falls back to LobbyInfo.Empty, where mortality and knockout
+        // misses one, or its own scene-load hook overwrites LobbyInfo with local
+        // preferences, it falls back to LobbyInfo.Empty, where mortality and knockout
         // are both off. In game that looks like being unkillable with nothing happening
         // on death, so it is worth a small reliable message to keep everyone converged.
         if (Players.Count > 0)
@@ -1469,7 +1469,7 @@ public sealed class FusionServer : IDisposable
             // Forgetting them here is not enough: they stay in every client's world,
             // and their ids go back in the pool. Since ids are only a ushort, a busy
             // server works its way round the range in about a week and would then
-            // hand a recycled id to a prop the clients still have — two different
+            // hand a recycled id to a prop the clients still have, two different
             // objects under one id. So the cull has to be broadcast, not just booked.
             DespawnOnClients(removed);
 

@@ -87,8 +87,8 @@ public class RconPacketTests
     [Fact]
     public void Utf8_bodies_survive_the_round_trip()
     {
-        var decoded = RconCodec.Decode(RconCodec.Encode(new RconPacket(1, 2, "café — ok")));
+        var decoded = RconCodec.Decode(RconCodec.Encode(new RconPacket(1, 2, "café, ok")));
 
-        Assert.Equal("café — ok", decoded.Body);
+        Assert.Equal("café, ok", decoded.Body);
     }
 }

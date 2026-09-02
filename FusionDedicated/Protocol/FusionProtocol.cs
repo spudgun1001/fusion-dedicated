@@ -11,7 +11,7 @@ public static class FusionProtocol
     private const byte RelayTypeToOtherClients = 3;
     private const byte ChannelUnreliable = 1;
 
-    // RelayType.None — used before the client has a proper player ID assigned.
+    // RelayType.None, used before the client has a proper player ID assigned.
     private const byte RelayTypeNone = 0;
 
     // NetworkChannel.Reliable
@@ -47,7 +47,7 @@ public static class FusionProtocol
 
         if (avatarStats != null && avatarStats.Length == AvatarStatsSize)
         {
-            // Real proportions captured from a live player — see TryReadConnectionResponse.
+            // Real proportions captured from a live player, see TryReadConnectionResponse.
             payload.WriteRaw(avatarStats);
         }
         else
@@ -119,7 +119,7 @@ public static class FusionProtocol
     /// <summary>
     /// Reads a MessageRoute out of a prefix and returns the Sender.
     ///
-    /// The shape depends on the relay type — ToTarget carries a nullable target byte
+    /// The shape depends on the relay type. ToTarget carries a nullable target byte
     /// and ToTargets a length-prefixed list, both BEFORE the sender. Assuming a fixed
     /// layout silently shifts every later field, which is what broke SpawnResponse
     /// parsing: real responses arrive as ToTarget, not ToClients.
@@ -157,7 +157,7 @@ public static class FusionProtocol
 
     /// <summary>
     /// Builds a PlayerPoseUpdate. Unlike the connection request this carries a real
-    /// relay route, so the host knows which player the pose belongs to — it is
+    /// relay route, so the host knows which player the pose belongs to, it is
     /// dropped outright without our assigned SmallID.
     /// </summary>
     public static byte[] BuildPlayerPoseUpdate(byte senderSmallId, FusionRigPose pose)
@@ -198,7 +198,7 @@ public static class FusionProtocol
     ///
     /// Layout confirmed byte-for-byte against a capture of a real grab:
     ///   Handedness(1) GrabGroup(1) IsGrabbed(1) TargetInBase(19) index(2) id(2) = 26
-    /// TargetInBase is the grip attach offset — position as 3 raw floats, then a
+    /// TargetInBase is the grip attach offset, position as 3 raw floats, then a
     /// SerializedQuaternion (3 shorts + a sign byte).
     /// </summary>
     public static byte[] BuildGrab(byte senderSmallId, Handedness hand, ushort gripIndex, ushort entityId,
@@ -208,7 +208,7 @@ public static class FusionProtocol
 
         payload.Write((byte)hand);
         payload.Write(GrabGroupEntity);
-        payload.Write(true); // IsGrabbed — RequestGrab drops the message without it
+        payload.Write(true); // IsGrabbed. RequestGrab drops the message without it
 
         // SerializedTransform: uncompressed position, compressed rotation.
         payload.Write(targetPosition.X);
@@ -223,7 +223,7 @@ public static class FusionProtocol
     }
 
     /// <summary>
-    /// Release carries nothing but the hand — confirmed against a 10 byte capture.
+    /// Release carries nothing but the hand, confirmed against a 10 byte capture.
     /// </summary>
     public static byte[] BuildRelease(byte senderSmallId, Handedness hand)
     {
@@ -285,7 +285,7 @@ public static class FusionProtocol
                 continue;
             }
 
-            // SerializedQuaternion.PRECISION_OFFSET — note this is 10000, unlike the
+            // SerializedQuaternion.PRECISION_OFFSET, note this is 10000, unlike the
             // 30000 used by SerializedShortVector3.
             writer.WriteInt16((short)(components[i] * 10000f));
         }
@@ -572,7 +572,7 @@ public static class FusionProtocol
     }
 
     /// <summary>
-    /// Drives a world entity we own. Velocity matters for throwing — the receiving
+    /// Drives a world entity we own. Velocity matters for throwing, the receiving
     /// side extrapolates from it, so a release with velocity reads as a throw.
     /// </summary>
     public static byte[] BuildEntityPoseUpdate(byte senderSmallId, ushort entityId, Vec3 position,

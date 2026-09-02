@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace FusionDedicated;
 
 /// <summary>
-/// Mirrors LabFusion's PermissionLevel. Values must match — clients compare against
+/// Mirrors LabFusion's PermissionLevel. Values must match, clients compare against
 /// the numbers we publish in the lobby info.
 /// </summary>
 public enum PermissionLevel : sbyte
@@ -54,7 +54,7 @@ public sealed class LevelEntry
 
 /// <summary>
 /// A barcode the server has learned the mod.io origin of. The server owns no mods
-/// itself, so this is built up from what players tell it — see FusionServer's mod
+/// itself, so this is built up from what players tell it, see FusionServer's mod
 /// info brokering.
 /// </summary>
 public sealed class ModCatalogEntry
@@ -107,7 +107,7 @@ public sealed class ServerConfig
     /// <summary>Shown in the in-game server browser.</summary>
     public string ServerName { get; set; } = "Dedicated Fusion Server";
 
-    public string Description { get; set; } = "Headless relay — no host required";
+    public string Description { get; set; } = "Headless relay, no host required";
 
     /// <summary>0 public, 1 private, 2 friends only, 3 locked.</summary>
     public int Privacy { get; set; } = 0;
@@ -209,7 +209,7 @@ public sealed class ServerConfig
 
     /// <summary>
     /// A dedicated server simulates nothing, so entities whose owner left have no one
-    /// applying gravity to them — they hang in place. Culling keeps the world tidy.
+    /// applying gravity to them, they hang in place. Culling keeps the world tidy.
     /// </summary>
     public bool CullOrphanedEntities { get; set; } = true;
 
@@ -260,7 +260,7 @@ public sealed class ServerConfig
 
     // ---- crash protection ----
     // A dedicated server never simulates anything, so a spawn flood costs it almost
-    // nothing — but every client has to instantiate each prop, and enough of them at
+    // nothing, but every client has to instantiate each prop, and enough of them at
     // once is what drops a whole lobby at the same moment.
 
     public bool AntiSpamEnabled { get; set; } = true;
@@ -292,7 +292,7 @@ public sealed class ServerConfig
     /// <summary>
     /// Directory for the server's own append-only log. Kept separate from whatever
     /// the start command redirects stdout to, because that file gets truncated every
-    /// time the server is relaunched — which is exactly when you least want to lose
+    /// time the server is relaunched, which is exactly when you least want to lose
     /// the history.
     /// </summary>
     public string LogDirectory { get; set; } = "logs";
@@ -449,7 +449,7 @@ public sealed class ServerConfig
     /// <summary>
     /// Reads the config, reporting why rather than reverting in silence. A panel that
     /// writes 1 or "true" for a boolean used to throw here, and the old catch handed
-    /// back defaults — quietly losing the name, slots and every password with it.
+    /// back defaults, quietly losing the name, slots and every password with it.
     /// </summary>
     public static ServerConfig Load(string path, out string? error)
     {
@@ -496,7 +496,7 @@ public sealed class ServerConfig
         }
         catch
         {
-            // Not fatal — the server runs fine from in-memory defaults.
+            // Not fatal, the server runs fine from in-memory defaults.
         }
     }
 }

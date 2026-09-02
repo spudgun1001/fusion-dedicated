@@ -392,7 +392,7 @@
     }
     nav::-webkit-scrollbar { display: none; }
     .brand { padding: 12px 16px; flex-shrink: 0; }
-    .brand::after, .brand span { display: none; }
+    .brand::after.brand span { display: none; }
     .menu { flex-direction: row; padding: 0; overflow: visible; }
     nav a { border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; padding: 14px; }
     nav a.on { border-left: 0; border-bottom-color: var(--cyan); background: rgba(63,224,208,.07); }
@@ -418,7 +418,7 @@
 
     /* A seven-column table at 375px is unreadable, so each row becomes a record. */
     .stack thead { display: none; }
-    .stack, .stack tbody, .stack tr, .stack td { display: block; width: 100%; }
+    .stack.stack tbody.stack tr.stack td { display: block; width: 100%; }
     .stack tr { border-bottom: 1px solid var(--edge); padding: 8px 0; }
     .stack tr:last-child { border-bottom: 0; }
     .stack td {
@@ -468,9 +468,9 @@
     </div>
 
     <div class="navfoot">
-      <div>Lobby <span id="fLobby">—</span></div>
-      <div>Level <span id="fLevel">—</span></div>
-      <div>Build <span id="fVersion">—</span></div>
+      <div>Lobby <span id="fLobby">-</span></div>
+      <div>Level <span id="fLevel">-</span></div>
+      <div>Build <span id="fVersion">-</span></div>
     </div>
   </nav>
 
@@ -479,9 +479,9 @@
       <div class="status"><i class="led" id="led"></i><b id="statusText">linking</b></div>
       <h1 id="hName">Fusion Dedicated</h1>
       <div class="readout">
-        <div><div class="k">Code</div><div class="v" id="hCode">—</div></div>
-        <div><div class="k">Crew</div><div class="v" id="hPlayers">—</div></div>
-        <div><div class="k">Uptime</div><div class="v" id="hUptime">—</div></div>
+        <div><div class="k">Code</div><div class="v" id="hCode">-</div></div>
+        <div><div class="k">Crew</div><div class="v" id="hPlayers">-</div></div>
+        <div><div class="k">Uptime</div><div class="v" id="hUptime">-</div></div>
       </div>
     </header>
 
@@ -501,7 +501,7 @@
     <section class="view" id="v-players">
       <h2>Connected players</h2>
       <p class="hint">
-        Rank changes apply immediately — nobody has to reconnect. A rank is stored
+        Rank changes apply immediately, nobody has to reconnect. A rank is stored
         against the SteamID, so it still holds next time they join. Purge deletes
         everything a player has spawned without removing the player.
       </p>
@@ -516,7 +516,7 @@
       <h2>Map list</h2>
       <p class="hint">
         Loading a map sends everyone to it and clears the world, since entities belong
-        to the level they spawned in. For a modded map, give its mod.io id — a player
+        to the level they spawned in. For a modded map, give its mod.io id, a player
         who does not have it asks the server which mod to fetch, and downloads it.
       </p>
       <div class="frame"><div class="frame-in" id="levels"></div></div>
@@ -527,7 +527,7 @@
           <div class="full">
             <label>Vanilla level</label>
             <select id="mVanilla" onchange="pickVanilla()">
-              <option value="">— pick to fill the fields below —</option>
+              <option value="">- pick to fill the fields below -</option>
             </select>
           </div>
           <div class="full"><label>Title</label><input id="mTitle" placeholder="Museum Basement"></div>
@@ -545,7 +545,7 @@
       <p class="hint">
         The server owns no mods, so it cannot look a modded item up itself. When a
         player asks where one came from, the server forwards the question to whoever
-        spawned it and remembers the answer — after which it can serve that mod to
+        spawned it and remembers the answer, after which it can serve that mod to
         anyone, including people who join long after the original owner left.
       </p>
       <div class="frame"><div class="frame-in" id="modCatalog"></div></div>
@@ -554,7 +554,7 @@
       <p class="hint">
         The browser draws a server's picture from the level's mod.io thumbnail, so
         setting a mod.io id on the current map is what gives this server a custom
-        image. There is no way to point it at an arbitrary URL — the id is the hook.
+        image. There is no way to point it at an arbitrary URL, the id is the hook.
       </p>
       <div class="frame"><div class="frame-in pad">
         <div class="fields">
@@ -651,7 +651,7 @@
     <section class="view" id="v-world">
       <h2>World control</h2>
       <p class="hint">
-        The server owns nothing and simulates nothing — it only remembers what exists
+        The server owns nothing and simulates nothing, it only remembers what exists
         so late joiners can be caught up. An entity whose owner left has no machine
         applying physics to it and hangs in place until it is culled.
       </p>
@@ -712,7 +712,7 @@
 
       <h2>Crash protection</h2>
       <p class="hint">
-        A spawn flood costs this server almost nothing — it never simulates anything —
+        A spawn flood costs this server almost nothing, it never simulates anything -
         but every client has to build each prop, which is what drops a whole lobby at
         once. These limits are sized for what clients survive. Early strikes only
         delete the offending props; a kick comes after repeated attempts.
@@ -766,7 +766,7 @@
       <h2>Permission gates</h2>
       <p class="hint">
         The minimum rank each action needs. Clients hide the buttons they think you
-        may not press, but the server checks again before acting — so these are
+        may not press, but the server checks again before acting, so these are
         enforced, not cosmetic.
       </p>
       <div class="frame"><div class="frame-in"><div class="rows" id="gates"></div></div></div>
@@ -898,7 +898,7 @@ const empty = (t, n) => '<div class="empty"><b>' + t + '</b><span>' + n + '</spa
 /**
  * Renders the TextMeshPro subset BONELAB understands, so what you type in the
  * panel looks like what the server browser will show. Everything is escaped
- * first — the preview must never be able to inject markup of its own.
+ * first, the preview must never be able to inject markup of its own.
  */
 function unityToHtml(raw) {
   let out = esc(raw);
@@ -1053,7 +1053,7 @@ function hash(s) {
 /**
  * Turns cumulative counters into per-second rates. The spacing between points
  * changes with the selected range, so it comes from the server rather than being
- * assumed — at a month per chart the gap is hours, not seconds.
+ * assumed, at a month per chart the gap is hours, not seconds.
  */
 function rate(samples, key) {
   const out = [];
@@ -1110,12 +1110,12 @@ function render() {
   const d = state;
 
   $('hName').textContent = stripForTitle(d.server.name) || 'Fusion Dedicated';
-  $('hCode').textContent = d.server.code || '—';
+  $('hCode').textContent = d.server.code || '-';
   $('hPlayers').textContent = d.players.length + '/' + d.server.maxPlayers;
   $('hUptime').textContent = duration(d.server.uptimeSeconds);
 
-  $('fLobby').textContent = d.server.lobbyId ? String(d.server.lobbyId).slice(-8) : '—';
-  $('fLevel').textContent = stripForTitle(d.server.level) || '—';
+  $('fLobby').textContent = d.server.lobbyId ? String(d.server.lobbyId).slice(-8) : '-';
+  $('fLevel').textContent = stripForTitle(d.server.level) || '-';
   $('fVersion').textContent = 'v' + d.server.version;
 
   $('nPlayers').textContent = d.players.length;
@@ -1172,7 +1172,7 @@ function playerTable(d, actions) {
         '<div class="sub">' + esc(p.platformId) + ' · v' + p.version + '</div></td>' +
       '<td data-label="Rank">' + (actions ? rankPicker(p) : levelChip(p.permission)) + '</td>' +
       '<td class="dim" data-label="Avatar" style="font-size:12px">' +
-        esc(p.avatar.split('.').pop() || '—') + '</td>' +
+        esc(p.avatar.split('.').pop() || '-') + '</td>' +
       '<td class="m right dim" data-label="Owns">' + p.entities + '</td>' +
       '<td class="m right dim" data-label="Online">' + duration(p.onlineSeconds) + '</td>' +
       '<td class="m right dim" data-label="Traffic">' + bytes(p.bytesIn + p.bytesOut) + '</td>' +
@@ -1204,7 +1204,7 @@ function renderMap(d) {
     '</div>';
 
   if (!$('mVanilla').dataset.filled) {
-    $('mVanilla').innerHTML = '<option value="">— pick to fill the fields below —</option>' +
+    $('mVanilla').innerHTML = '<option value="">- pick to fill the fields below -</option>' +
       VANILLA.map(v => '<option value="' + v[1] + '">' + v[0] + '</option>').join('');
     $('mVanilla').dataset.filled = '1';
   }
@@ -1222,7 +1222,7 @@ function renderMap(d) {
           : '<span class="chip">vanilla</span>') + '</td>' +
         '<td data-label="Status">' + (l.active
           ? '<span class="chip live">loaded</span>'
-          : '<span class="sub">—</span>') + '</td>' +
+          : '<span class="sub">-</span>') + '</td>' +
         '<td class="right" data-label="Actions"><div class="acts">' +
           '<button onclick="loadLevel(\'' + esc(l.barcode) + '\')"' +
             (l.active ? ' disabled' : '') + '>Load</button>' +

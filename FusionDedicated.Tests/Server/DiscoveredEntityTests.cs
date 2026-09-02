@@ -3,8 +3,8 @@ using FusionDedicated.Server;
 namespace FusionDedicated.Tests.Server;
 
 /// <summary>
-/// Entities a client makes without a spawn request — picking up a scene prop, the
-/// constrainer — are relayed but never registered, so they are invisible to the
+/// Entities a client makes without a spawn request, picking up a scene prop, the
+/// constrainer, are relayed but never registered, so they are invisible to the
 /// panel and to cleanup. A pose update for an unknown id is them announcing
 /// themselves.
 /// </summary>

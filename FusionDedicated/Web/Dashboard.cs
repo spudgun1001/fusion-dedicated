@@ -427,7 +427,7 @@ public sealed class Dashboard
             range = key,
             points = samples.Count,
             // Counters are cumulative, so the panel needs the spacing to turn them
-            // into rates — and the spacing changes with the range.
+            // into rates, and the spacing changes with the range.
             stepSeconds = samples.Count > 1
                 ? Math.Max(1, (int)(samples[^1].At - samples[0].At).TotalSeconds / (samples.Count - 1))
                 : 5,

@@ -118,7 +118,7 @@ public static class ServerProtocol
         }
         else
         {
-            // Neutral proportions rather than zeros — zeroed limbs divide by zero
+            // Neutral proportions rather than zeros, zeroed limbs divide by zero
             // when the receiver builds a rig.
             for (var i = 0; i < FusionProtocol.AvatarStatFloatCount; i++)
             {
@@ -160,7 +160,7 @@ public static class ServerProtocol
     }
 
     /// <summary>
-    /// Disconnect with a reason — used to reject a join or kick someone.
+    /// Disconnect with a reason, used to reject a join or kick someone.
     /// </summary>
     public static byte[] WriteDisconnect(ulong platformId, string reason)
     {
@@ -203,15 +203,15 @@ public static class ServerProtocol
         message.Write(TagPlayerMetadataResponse);
         message.Write(RelayTypeToClients);
         message.Write(ChannelReliable);
-        message.WriteNullable(null); // Sender — the server itself has no small ID
+        message.WriteNullable(null); // Sender, the server itself has no small ID
         message.WriteBlock(payload.ToArray());
 
         return message.ToArray();
     }
 
     /// <summary>
-    /// A client asking for an entity to be removed. DespawnRequest is server-only —
-    /// clients never act on it directly — so nothing despawns unless the server
+    /// A client asking for an entity to be removed. DespawnRequest is server-only -
+    /// clients never act on it directly, so nothing despawns unless the server
     /// answers with a DespawnResponse of its own.
     /// </summary>
     public static (ushort EntityId, bool DespawnEffect)? TryReadDespawnRequest(ReadOnlySpan<byte> message)
@@ -261,7 +261,7 @@ public static class ServerProtocol
     /// <summary>
     /// A client that is missing the current level asks the host which mod.io mod it
     /// comes from. On a dedicated server there is no game install to look the answer
-    /// up in, so the operator supplies the ids and this hands them over — which is
+    /// up in, so the operator supplies the ids and this hands them over, which is
     /// what lets a modded map download itself on join.
     /// </summary>
     public static (byte? Target, string Barcode, uint TrackerId)? TryReadModInfoRequest(
@@ -299,8 +299,8 @@ public static class ServerProtocol
 
     /// <summary>
     /// Reads a ModInfoResponse so the server can learn the mod.io ids its players
-    /// already know. The response carries no barcode — only the tracker id the
-    /// request went out with — so the caller has to remember which barcode that was.
+    /// already know. The response carries no barcode, only the tracker id the
+    /// request went out with, so the caller has to remember which barcode that was.
     /// </summary>
     public static (byte? Target, int ModId, int? ModFileId, uint TrackerId)? TryReadModInfoResponse(
         ReadOnlySpan<byte> message)
@@ -348,7 +348,7 @@ public static class ServerProtocol
     /// </summary>
     public static byte[]? RetargetToTarget(byte[] message, byte newTarget)
     {
-        // Prefix: tag, relayType, channel, target(nullable), ...
+        // Prefix: tag, relayType, channel, target(nullable)...
         if (message.Length < 5 || message[1] != 4 || message[3] == 0)
         {
             return null;
@@ -361,8 +361,8 @@ public static class ServerProtocol
     }
 
     /// <summary>
-    /// ModInfoResponse. Layout is SerializedModIOFile — mod id, nullable file id,
-    /// a has-file flag and the platform the files were built for — then the tracker
+    /// ModInfoResponse. Layout is SerializedModIOFile, mod id, nullable file id,
+    /// a has-file flag and the platform the files were built for, then the tracker
     /// id the request came in with.
     /// </summary>
     public static byte[] WriteModInfoResponse(byte targetSmallId, int modId, int? modFileId,
@@ -389,7 +389,7 @@ public static class ServerProtocol
         message.Write((byte)4);          // ToTarget
         message.Write(ChannelReliable);
         message.WriteNullable(targetSmallId);
-        message.WriteNullable(null);     // Sender — the relay has no small ID
+        message.WriteNullable(null);     // Sender, the relay has no small ID
         message.WriteBlock(payload.ToArray());
 
         return message.ToArray();

@@ -44,18 +44,18 @@ from Steam instead:
 
 1. **Lobbies.** A Fusion "server" is a Steam lobby carrying a handful of metadata
    keys, and the in-game browser is a Steam lobby query. To be listed at all, you
-   must be able to create a Steam lobby — which means being a signed-in Steam client.
+   must be able to create a Steam lobby, which means being a signed-in Steam client.
 2. **Transport.** Players connect over Steam Datagram Relay, Valve's relay network.
    That is why no port forwarding is needed, and also why the server cannot simply
    open a socket and skip Steam.
 
 So this server signs in to Steam and stays signed in. Nothing is spoofed and it is
-not pretending to be a game — it uses the same mechanisms Fusion itself uses.
+not pretending to be a game, it uses the same mechanisms Fusion itself uses.
 
 **Why SteamVR?** Fusion initialises Steamworks under **app ID 250820 (SteamVR)**
 rather than BONELAB's own ID, so all its lobby metadata and relay traffic live under
 that app. This server does the same, which is exactly what allows the two to find
-each other. Steam only lets an app initialise if the signed-in account owns it —
+each other. Steam only lets an app initialise if the signed-in account owns it -
 hence the requirement below.
 
 **You do not need BONELAB on the server account.** Only SteamVR, which is free.
@@ -69,7 +69,7 @@ hence the requirement below.
 | OS | Any Linux with systemd (x86-64), desktop or headless |
 | Runtime | .NET 9 |
 | Packages | Xvfb, Steam |
-| Steam account | a **separate** account with **SteamVR** added — both free |
+| Steam account | a **separate** account with **SteamVR** added, both free |
 | Steamworks SDK | `libsteam_api.so`, supplied once |
 | Network | nothing to open |
 
@@ -94,12 +94,12 @@ in to a graphical session.
 
 ## Setting up the Steam account
 
-Do this before installing — it is the step people miss.
+Do this before installing, it is the step people miss.
 
 ### 1. Use a separate account
 
 Steam allows **one active session per account**. If the server signs in as you, you
-get signed out of your own games — and it keeps happening, because the server signs
+get signed out of your own games, and it keeps happening, because the server signs
 back in automatically.
 
 Create a second free account for the server. It costs nothing and needs no purchases.
@@ -125,7 +125,7 @@ Steam Guard needs a human the first time. After installing (below), run:
 ~/fusiondedicated/steam-login.sh
 ```
 
-On a desktop it opens Steam normally — sign in and close it. On a headless machine it
+On a desktop it opens Steam normally, sign in and close it. On a headless machine it
 starts the virtual display and exposes it over VNC on loopback, printing the exact
 SSH tunnel command to use. Credentials are cached afterwards and the services handle
 themselves from then on.
@@ -144,7 +144,7 @@ cd fusion-dedicated
 
 1. **Detects your distribution** (Arch, Debian/Ubuntu, Fedora/RHEL, openSUSE) and
    checks for `dotnet` 9+, `Xvfb` and `steam`. For anything missing it shows the
-   exact package command and asks first — it never installs behind your back, and
+   exact package command and asks first, it never installs behind your back, and
    declining simply prints the command for later.
 2. **Builds** the server with `dotnet publish` into `~/fusiondedicated`
    (override with `FUSION_INSTALL_DIR`).
@@ -152,13 +152,13 @@ cd fusion-dedicated
    `~/steamworks_sdk`. If it is missing it says where to get it rather than failing
    later for an unclear reason.
 4. **Creates `server.json`** from `server.example.json`, leaving an existing one
-   alone — re-running the installer is safe.
+   alone, re-running the installer is safe.
 5. **Writes two helper scripts** into the install directory: `steam-login.sh` for the
    one-time sign-in, and `steam-supervisor.sh`, which keeps Steam under systemd's
    control (its launcher forks and exits, which would otherwise make systemd restart
    it in a loop).
-6. **Writes three systemd user units** — `fusion-xvfb`, `fusion-steam`,
-   `fusion-server` — no root required, then reloads the daemon.
+6. **Writes three systemd user units**, `fusion-xvfb`, `fusion-steam`,
+   `fusion-server`, no root required, then reloads the daemon.
 7. **Checks lingering**, which is what lets user services start at boot without you
    logging in, and prints the one command needing `sudo` if it is off.
 
@@ -167,8 +167,8 @@ It does not start anything and does not touch your Steam account.
 ### Supplying libsteam_api.so
 
 Valve's redistributable is not bundled here, because it is not ours to publish. Get
-the [Steamworks SDK](https://partner.steamgames.com/downloads/list) — a free Steam
-account is enough — then either:
+the [Steamworks SDK](https://partner.steamgames.com/downloads/list), a free Steam
+account is enough, then either:
 
 ```bash
 STEAMWORKS_SDK=/path/to/steamworks_sdk ./install.sh
@@ -204,7 +204,7 @@ A healthy start looks like this:
 Steam: your-account-name (76561198...)
 Waiting for the Steam relay network...
 INFO  Relay socket listening as SteamID 76561198...
-INFO  Lobby published: 109775242... — the server is visible in the browser
+INFO  Lobby published: 109775242..., the server is visible in the browser
 INFO  Control panel: http://<this-machine-ip>:8778/
 ```
 
@@ -223,7 +223,7 @@ The split is deliberate:
 - **`fusion-steam`** runs Steam through a supervisor that blocks while it lives.
   Steam's launcher forks and returns immediately, so a naive unit would decide the
   service had finished and restart it every few seconds.
-- **`fusion-server`** is the relay, tied to Steam with `PartOf` — if Steam goes, both
+- **`fusion-server`** is the relay, tied to Steam with `PartOf`, if Steam goes, both
   are rebuilt. Steam's networking library does occasionally assert and take the
   process down with it; this is what recovers unattended, usually in under a minute.
 
@@ -244,11 +244,11 @@ then open <http://localhost:8778>.
 | Overview | players, entities, traffic, live log |
 | Players | rank, kick, ban, purge a player's props |
 | Map | 25 vanilla levels, plus modded maps by barcode |
-| Analytics / Resources | CPU, memory, players, bandwidth — 10 minutes to a month |
+| Analytics / Resources | CPU, memory, players, bandwidth, 10 minutes to a month |
 | Ranks / Bans | persistent, keyed by SteamID |
 | Settings | gameplay rules, permission gates, spam protection, restart |
 
-Settings changes reach connected players immediately — no reconnect needed.
+Settings changes reach connected players immediately, no reconnect needed.
 
 ### ⚠️ There is no authentication
 
@@ -256,7 +256,7 @@ Anyone who can reach port 8778 can kick, ban, restart the server, wipe the world
 change the map. No login, no token.
 
 Keep `DashboardHost` on `localhost` and tunnel in. Setting it to `"+"` publishes an
-unauthenticated admin interface on every interface — acceptable on a network you
+unauthenticated admin interface on every interface, acceptable on a network you
 control, never on a machine with a public IP.
 
 ---
@@ -281,7 +281,7 @@ person asking.
 
 ## Spam protection
 
-A spawn flood costs the server almost nothing — it simulates nothing — but every
+A spawn flood costs the server almost nothing, it simulates nothing, but every
 *client* must instantiate each prop. Enough at once and an entire lobby drops while
 the server idles at 2% CPU. The limits are therefore sized for what clients survive,
 not what the server survives.
@@ -303,7 +303,7 @@ When a player leaves, their props are handed to whoever is still connected so th
 keep being simulated instead of freezing mid-air. The catch is that they stop being
 ownerless, so ordinary orphan cleanup never sees them again and the world only grows.
 Left unchecked it reaches the entity cap, and from then on **every spawn is silently
-refused** — the player pulls the trigger and nothing happens.
+refused**, the player pulls the trigger and nothing happens.
 
 So inherited props that have not moved for `InheritedTimeoutSeconds` (15 minutes by
 default) are removed. Anything a player is actively using keeps sending position
@@ -322,7 +322,7 @@ refused spawns over two days to zero.
 
 `server.json` is created from `server.example.json` on first run, and rewritten
 whenever a setting changes in the panel. It holds ban lists, the rank roster and the
-learned mod catalogue — **all keyed by other people's SteamIDs**, which is why it is
+learned mod catalogue, **all keyed by other people's SteamIDs**, which is why it is
 gitignored.
 
 | Key | Meaning |
@@ -336,7 +336,7 @@ gitignored.
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard (`Owner` by default) |
-| `DashboardHost` | `localhost` or `+` — see the warning above |
+| `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 
 Most of these are editable in the panel; the file is the source of truth on restart.
@@ -352,7 +352,7 @@ account's library.
 
 **Server starts but never appears in the browser**
 Look for `Lobby published` in the log. If it is missing, Steam is up but the lobby
-was refused — usually a signed-out client. If it is present and players still cannot
+was refused, usually a signed-out client. If it is present and players still cannot
 see it, check `Privacy` in `server.json` and that `VersionMajor`/`VersionMinor` match
 their Fusion build.
 
@@ -394,7 +394,7 @@ found a holder, so treat it as untested rather than as a feature.
 
 **Known limits:**
 
-- Entities created directly by clients — picking up scene props, the constrainer —
+- Entities created directly by clients, picking up scene props, the constrainer -
   are relayed but not tracked, so "Clear every entity" cannot remove them.
 - Entity IDs are a `ushort`. A busy server works through the range in roughly a week
   of continuous uptime and then reuses freed IDs. Culled entities are properly
@@ -408,7 +408,7 @@ found a holder, so treat it as untested rather than as a feature.
 
 ## Platform
 
-Any systemd Linux on x86-64, desktop or headless — the installer adapts to the
+Any systemd Linux on x86-64, desktop or headless, the installer adapts to the
 distribution. Developed and run on Arch; other distributions use the same mechanisms
 and should work, but if yours needs a tweak a PR to `install.sh` is welcome.
 
@@ -446,7 +446,7 @@ Issues and pull requests are welcome. Useful things to include in a bug report:
 - your Fusion version and the server's `VersionMajor`/`VersionMinor`
 - your distribution, if it is an install problem
 - whether players disconnected with `Closing Connection` (a normal exit) or
-  `Timeout; remote problem` (a client that stopped responding) — the distinction
+  `Timeout; remote problem` (a client that stopped responding), the distinction
   matters a great deal when diagnosing
 
 ---

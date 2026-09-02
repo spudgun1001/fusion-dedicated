@@ -4,7 +4,7 @@ namespace FusionDedicated.Commands;
 
 /// <summary>
 /// Parses one command line and carries it out. Commands carry no rank, because
-/// whoever reaches the console or RCON already controls the process — and that is
+/// whoever reaches the console or RCON already controls the process, and that is
 /// the only way to grant Owner, since no in-game path can.
 /// </summary>
 public sealed class CommandProcessor
@@ -221,7 +221,7 @@ public sealed class CommandProcessor
         }
 
         return string.Join(Environment.NewLine, _target.Players.Select(p =>
-            $"  {p.Name} ({p.PlatformId}) {p.Rank} — {p.EntityCount} entities"));
+            $"  {p.Name} ({p.PlatformId}) {p.Rank}, {p.EntityCount} entities"));
     }
 
     private string Level(string[] args)

@@ -5,7 +5,7 @@ namespace FusionDedicated.Server;
 ///
 /// A relay server is the wrong place to notice trouble by feeling slow: it never
 /// simulates anything, so a thousand props cost it a dictionary entry each. Every
-/// client, though, has to instantiate and simulate all of them — which is why a
+/// client, though, has to instantiate and simulate all of them, which is why a
 /// flood shows up as the entire lobby dropping at once while the server sits at
 /// idle. So the limits here are about what clients can survive, not what the
 /// server can.
@@ -37,7 +37,7 @@ public sealed class SpawnGuard
 
     /// <summary>
     /// Set when an exempt player crossed a limit, so the caller can log it. Purely
-    /// informational — nothing is enforced against an exempt player.
+    /// informational, nothing is enforced against an exempt player.
     /// </summary>
     public string? ExemptOverrun { get; private set; }
 
@@ -118,7 +118,7 @@ public sealed class SpawnGuard
         // At most one strike per window. While a burst is still inside the window
         // every following spawn also trips, so counting each one would burn through
         // the whole allowance in the same second and there would be no warning
-        // phase at all — which is exactly what happened the first time this fired.
+        // phase at all, which is exactly what happened the first time this fired.
         var window = TimeSpan.FromSeconds(Math.Max(1, _config.SpawnWindowSeconds));
 
         if (now - tracker.LastStrike >= window)
@@ -134,7 +134,7 @@ public sealed class SpawnGuard
             Kick: kick,
             Purge: true,
             Reason: kick
-                ? $"{what} — strike {tracker.Strikes}, removing them"
-                : $"{what} — strike {tracker.Strikes}, dropping the spawn");
+                ? $"{what}, strike {tracker.Strikes}, removing them"
+                : $"{what}, strike {tracker.Strikes}, dropping the spawn");
     }
 }

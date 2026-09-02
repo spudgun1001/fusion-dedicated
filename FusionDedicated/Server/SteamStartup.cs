@@ -29,6 +29,50 @@ public static class SteamStartup
         }
     }
 
+    /// <summary>
+    /// Retries until Steam is ready. A fresh install spends minutes updating itself,
+    /// and SteamAPI_Init reports no running instance the whole time, so a single
+    /// attempt turns a slow start into a crash. A missing native library is not
+    /// retried: that never becomes true by waiting.
+    /// </summary>
+    public static SteamInitResult InitWithRetry(
+        Func<bool> init, int attempts, Action<string> log, Action<int> wait)
+    {
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            var result = TryInit(init);
+
+            if (result == SteamInitResult.Ok)
+            {
+                if (attempt > 1)
+                {
+                    log($"Steam answered on attempt {attempt}.");
+                }
+
+                return result;
+            }
+
+            if (result == SteamInitResult.NativeLibraryMissing)
+            {
+                return result;
+            }
+
+            if (attempt == attempts)
+            {
+                return result;
+            }
+
+            if (attempt == 1 || attempt % 6 == 0)
+            {
+                log($"Steam is not ready yet (attempt {attempt} of {attempts}); still waiting.");
+            }
+
+            wait(attempt);
+        }
+
+        return SteamInitResult.RefusedByClient;
+    }
+
     public static string Explain(SteamInitResult result) => result switch
     {
         SteamInitResult.NativeLibraryMissing =>

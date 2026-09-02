@@ -4,7 +4,7 @@ namespace FusionDedicated.Server.Safety;
 
 /// <summary>
 /// Who may not speak. Keyed by SteamID so a mute survives a reconnect, and held in
-/// memory only — a mute is a this-session thing, unlike a ban.
+/// memory only. A mute lasts the session, unlike a ban.
 /// </summary>
 public sealed class MuteList
 {

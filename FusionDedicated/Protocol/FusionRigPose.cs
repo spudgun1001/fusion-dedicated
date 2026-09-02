@@ -26,7 +26,7 @@ public record struct Quat(float X, float Y, float Z, float W)
 }
 
 /// <summary>
-/// Fusion's RigPose. Only three transforms are synced — headset, left and right
+/// Fusion's RigPose. Only three transforms are synced, headset, left and right
 /// controller (RigAbstractor.TransformSyncCount == 3).
 /// </summary>
 public sealed class FusionRigPose
@@ -61,13 +61,13 @@ public sealed class FusionRigPose
 
         static byte Compress(float value) => (byte)(Math.Clamp(value, 0f, 1f) * 255f);
 
-        w.Write(Compress(trigger));   // IndexCurl — the trigger finger
+        w.Write(Compress(trigger));   // IndexCurl, the trigger finger
         w.Write(Compress(grip));      // MiddleCurl
         w.Write(Compress(grip));      // RingCurl
         w.Write(Compress(grip));      // PinkyCurl
         w.Write(Compress(grip));      // ThumbCurl
         w.Write(Compress(grip));      // SolvedGrip
-        w.Write(Compress(trigger));   // PrimaryAxis — trigger pull amount
+        w.Write(Compress(trigger));   // PrimaryAxis, trigger pull amount
 
         w.Write((byte)0);             // ControllerType, one byte precision
 

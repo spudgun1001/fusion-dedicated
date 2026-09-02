@@ -28,7 +28,7 @@ public sealed class TrackedEntity
 
     /// <summary>
     /// True when the owner left and nobody has taken over. A dedicated server runs no
-    /// physics, so an orphan simply hangs wherever it was — it needs adopting or culling.
+    /// physics, so an orphan simply hangs wherever it was, it needs adopting or culling.
     /// </summary>
     public bool IsOrphaned => OwnerSmallId == null;
 
@@ -47,7 +47,7 @@ public sealed class TrackedEntity
 ///
 /// This is the piece that replaces physics on a dedicated server. Fusion gives each
 /// entity an owner, and only that owner simulates it; the host merely relays. So a
-/// server that never owns anything never simulates anything — but it must still know
+/// server that never owns anything never simulates anything, but it must still know
 /// what exists, in order to catch late joiners up.
 /// </summary>
 public sealed class EntityRegistry
@@ -93,7 +93,7 @@ public sealed class EntityRegistry
     /// <summary>
     /// First id a prop may take.
     ///
-    /// Clients permanently reserve entity ids 0-255 for player rigs — every client
+    /// Clients permanently reserve entity ids 0-255 for player rigs, every client
     /// runs ReserveID over the whole player range at startup, and a player's rig is
     /// registered under their own small id. Allocating a prop below this therefore
     /// does not merely clash with another prop, it lands on top of a person, so a
@@ -241,7 +241,7 @@ public sealed class EntityRegistry
 
     /// <summary>
     /// Called when a player leaves. Their entities lose their simulator, so they are
-    /// handed to whoever is named as heir — or left orphaned if the server is alone.
+    /// handed to whoever is named as heir, or left orphaned if the server is alone.
     /// </summary>
     public List<TrackedEntity> Orphan(byte departedSmallId, byte? heir)
     {

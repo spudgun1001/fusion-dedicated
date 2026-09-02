@@ -5,7 +5,7 @@ namespace FusionDedicated.Server;
 /// <summary>
 /// Samples what the server costs to run, and keeps a rolling history so the panel
 /// can draw it. Everything here is read straight from the process and, on Linux,
-/// from /proc — no counters library, nothing to install on the host.
+/// from /proc. No counters library, nothing to install on the host.
 /// </summary>
 public sealed class ResourceMonitor
 {
@@ -36,7 +36,7 @@ public sealed class ResourceMonitor
     /// <summary>
     /// Minute-resolution rows kept on disk. The in-memory ring only spans a couple of
     /// hours and dies with the process, so anything asking for a day or more reads
-    /// from here instead — which also means the graphs survive a restart.
+    /// from here instead, which also means the graphs survive a restart.
     /// </summary>
     private readonly List<Sample> _minutes = new();
 

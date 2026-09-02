@@ -35,7 +35,7 @@ public sealed class RankFileWatcher : IDisposable
                 {
                     if (_store.ReloadIfChanged())
                     {
-                        _log($"Reloaded ranks.json — {_store.Entries.Count} players listed");
+                        _log($"Reloaded ranks.json, {_store.Entries.Count} players listed");
                     }
                 }
                 catch (Exception ex)

@@ -7,7 +7,7 @@ namespace FusionDedicated.Server;
 ///
 /// The same object goes to two places: into the Steam lobby's metadata, where the
 /// server browser reads it, and into a ServerSettings message, which is how a live
-/// client learns the rules it has to obey. Building it once keeps the two in step —
+/// client learns the rules it has to obey. Building it once keeps the two in step -
 /// a setting changed in the panel takes effect for players already in the server
 /// rather than only for the next person to look at the browser.
 ///

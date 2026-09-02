@@ -34,7 +34,7 @@ public sealed class LobbyPublisher : IDisposable
 
     /// <summary>
     /// Creates the lobby. Steamworks.NET reports the result through a CallResult, so
-    /// this bridges it onto a Task — the caller must keep pumping SteamAPI callbacks
+    /// this bridges it onto a Task, the caller must keep pumping SteamAPI callbacks
     /// while awaiting, or it will never complete.
     /// </summary>
     public Task<bool> PublishAsync(int maxPlayers)

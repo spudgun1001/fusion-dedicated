@@ -23,7 +23,7 @@ public sealed class ConnectedPlayer
 
     /// <summary>
     /// Set once a disconnect has been sent. The socket does not close instantly, so
-    /// without this their in-flight packets keep being processed — which made one
+    /// without this their in-flight packets keep being processed, which made one
     /// kick fire seven times.
     /// </summary>
     public bool Kicked { get; set; }

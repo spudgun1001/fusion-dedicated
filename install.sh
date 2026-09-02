@@ -3,7 +3,7 @@
 # Installs Fusion Dedicated as systemd user services.
 #
 # Works on any systemd distribution, headless or desktop. Everything runs as your
-# own user — no root — except installing distribution packages, which the script
+# own user, no root, except installing distribution packages, which the script
 # offers to do and never does behind your back.
 #
 set -euo pipefail
@@ -50,13 +50,13 @@ detect_distro() {
     esac
 }
 
-# Offers to install a missing package. Declining is fine — it just reports.
+# Offers to install a missing package. Declining is fine, it just reports.
 want() {
     local binary="$1" package="$2" why="$3"
 
     command -v "$binary" >/dev/null && { ok "$binary"; return 0; }
 
-    warn "$binary is missing — $why"
+    warn "$binary is missing, $why"
 
     if [ -z "$PM" ]; then
         echo "      Install \"$package\" with your package manager, then re-run."
@@ -79,7 +79,7 @@ detect_distro
 
 say "Checking prerequisites${PM:+ (detected $PM)}"
 
-command -v systemctl >/dev/null || die "systemd is required — this installer sets up user services."
+command -v systemctl >/dev/null || die "systemd is required, this installer sets up user services."
 [ -d /run/systemd/system ] || die "systemd is not running as init on this machine."
 
 MISSING=0
@@ -129,7 +129,7 @@ if [ ! -f "$INSTALL_DIR/libsteam_api.so" ]; then
         cp "$FOUND" "$INSTALL_DIR/libsteam_api.so"
         ok "libsteam_api.so from $FOUND"
     else
-        warn "libsteam_api.so is missing — the server cannot start without it"
+        warn "libsteam_api.so is missing, the server cannot start without it"
         echo "      It is a Valve redistributable, so it is not shipped here."
         echo "      Get the Steamworks SDK: https://partner.steamgames.com/downloads/list"
         echo "      Then:  STEAMWORKS_SDK=/path/to/sdk $0"
@@ -180,7 +180,7 @@ SUP
 chmod +x "$INSTALL_DIR/steam-supervisor.sh"
 
 # One-time sign-in helper. Steam Guard needs a human, and on a headless box there is
-# no screen to be a human at — so this optionally exposes the virtual display over
+# no screen to be a human at, so this optionally exposes the virtual display over
 # VNC just long enough to log in.
 cat > "$INSTALL_DIR/steam-login.sh" <<'LOGIN'
 #!/usr/bin/env bash
@@ -195,7 +195,7 @@ if [ -n "${DISPLAY:-}" ] && [ "${1:-}" != "--headless" ]; then
     exec steam -no-browser
 fi
 
-echo "No desktop session — starting a virtual display and exposing it over VNC."
+echo "No desktop session, starting a virtual display and exposing it over VNC."
 command -v x11vnc >/dev/null || {
     echo "x11vnc is required for headless sign-in. Install it and re-run." >&2
     exit 1
@@ -293,7 +293,7 @@ ok "fusion-xvfb, fusion-steam, fusion-server"
 LINGER="$(loginctl show-user "$USER" -p Linger --value 2>/dev/null || echo no)"
 
 if [ "$LINGER" != "yes" ]; then
-    warn "Lingering is off — services will stop when you log out"
+    warn "Lingering is off, services will stop when you log out"
     echo "      Enable with:  sudo loginctl enable-linger $USER"
 else
     ok "lingering enabled (services survive logout and start at boot)"
@@ -305,7 +305,7 @@ echo
 say "Installed to $INSTALL_DIR"
 cat <<DONE
 
-  1. Sign in to Steam once — Steam Guard needs a human:
+  1. Sign in to Steam once. Steam Guard needs a human:
 
        $INSTALL_DIR/steam-login.sh
 
@@ -327,7 +327,7 @@ cat <<DONE
        then browse to http://localhost:8778
 
      To expose it on your LAN instead, set "DashboardHost": "+" in
-     $INSTALL_DIR/server.json — but read the security note in the README,
+     $INSTALL_DIR/server.json, but read the security note in the README,
      because the panel has no login.
 
 DONE

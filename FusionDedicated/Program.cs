@@ -38,7 +38,13 @@ public static class Program
         // ---- Steam ----
         // The app id comes from steam_appid.txt next to the binary; Fusion runs under
         // SteamVR's id rather than BONELAB's, and so does this.
-        var steam = SteamStartup.TryInit(SteamAPI.Init);
+        // Steam spends minutes updating itself on a fresh install and reports no
+        // running instance throughout, so give it time rather than crashing.
+        var steam = SteamStartup.InitWithRetry(
+            SteamAPI.Init,
+            attempts: 120,
+            log: Console.WriteLine,
+            wait: _ => Thread.Sleep(TimeSpan.FromSeconds(5)));
 
         if (steam != SteamInitResult.Ok)
         {
@@ -50,8 +56,8 @@ public static class Program
 
         SteamNetworkingUtils.InitRelayNetworkAccess();
 
-        // Callbacks must be pumped continuously or every await below — lobby creation
-        // especially — never completes. The main loop takes over afterwards.
+        // Callbacks must be pumped continuously or every await below never completes,
+        // lobby creation especially. The main loop takes over afterwards.
         using var startupPump = new CancellationTokenSource();
 
         var pumpTask = Task.Run(async () =>
@@ -100,7 +106,7 @@ public static class Program
         }
         else
         {
-            server.Log("WARN", "No blocklist.json — spawn rules come from the community list only.");
+            server.Log("WARN", "No blocklist.json. Spawn rules come from the community list only.");
         }
 
         if (config.GlobalListsEnabled)
@@ -151,7 +157,7 @@ public static class Program
 
         if (config.WhitelistEnabled)
         {
-            server.Log("WARN", $"Whitelist is ON — {members.Entries.Count} players may join. " +
+            server.Log("WARN", $"Whitelist is ON, {members.Entries.Count} players may join. " +
                                "An empty list locks everyone out, including you.");
         }
 
@@ -203,11 +209,11 @@ public static class Program
         if (await lobby.PublishAsync(config.MaxPlayers))
         {
             lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
-            server.Log("INFO", $"Lobby published: {lobby.LobbyId} — the server is visible in the browser");
+            server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
         }
         else
         {
-            server.Log("ERROR", "Could not create the Steam lobby — the server is invisible in the browser");
+            server.Log("ERROR", "Could not create the Steam lobby. The server is invisible in the browser.");
         }
 
         // ---- dashboard ----
@@ -258,7 +264,7 @@ public static class Program
         };
 
         // A restart re-launches this same process, so the panel's button works no
-        // matter how the server was started — no wrapper script required.
+        // matter how the server was started. No wrapper script is required.
         var restarting = false;
 
         server.RestartRequested += () =>
@@ -293,12 +299,12 @@ public static class Program
 
                 if (bans.ReloadIfChanged())
                 {
-                    server.Log("INFO", $"Reloaded bans.json — {bans.Entries.Count} listed");
+                    server.Log("INFO", $"Reloaded bans.json, {bans.Entries.Count} listed");
                 }
 
                 if (members.ReloadIfChanged())
                 {
-                    server.Log("INFO", $"Reloaded whitelist.json — {members.Entries.Count} listed");
+                    server.Log("INFO", $"Reloaded whitelist.json, {members.Entries.Count} listed");
                 }
 
                 if (bans.SweepExpired() > 0)
@@ -373,7 +379,7 @@ public static class Program
         // sets INVOCATION_ID for every unit it starts, which is how we can tell.
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("INVOCATION_ID")))
         {
-            Console.WriteLine("Running under systemd — exiting and letting it restart us.");
+            Console.WriteLine("Running under systemd, exiting and letting it restart us.");
             return;
         }
 
@@ -410,7 +416,7 @@ public static class Program
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine();
         Console.WriteLine("  ╔══════════════════════════════════════════════╗");
-        Console.WriteLine("  ║   FUSION DEDICATED — headless relay server    ║");
+        Console.WriteLine("  ║   FUSION DEDICATED, headless relay server    ║");
         Console.WriteLine("  ╚══════════════════════════════════════════════╝");
         Console.ResetColor();
         Console.WriteLine();
