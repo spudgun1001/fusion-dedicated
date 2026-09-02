@@ -39,3 +39,7 @@ docs/
 
 # The ban list is keyed by other people's SteamIDs, like server.json.
 bans.json
+
+# Whitelist and moderation trail hold other people's SteamIDs.
+whitelist.json
+moderation.log

@@ -19,7 +19,11 @@ public interface ICommandTarget
 
     void Kick(byte smallId, string reason);
 
-    void Ban(ulong platformId, string name, string reason);
+    void Ban(ulong platformId, string name, string reason, TimeSpan? duration);
+
+    void Mute(ulong platformId, string name);
+
+    void Unmute(ulong platformId, string name);
 
     bool Unban(ulong platformId);
 

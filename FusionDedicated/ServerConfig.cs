@@ -248,6 +248,16 @@ public sealed class ServerConfig
     /// <summary>Largest single hit a client may deal to another. 0 disables the cap.</summary>
     public float MaxRemoteDamage { get; set; } = 200f;
 
+    /// <summary>Only players listed in whitelist.json may join when this is on.</summary>
+    public bool WhitelistEnabled { get; set; }
+
+    /// <summary>
+    /// Whether "clear every entity" also removes entities the server only learned
+    /// about from pose updates. Off by default: one may be a scene prop, and
+    /// despawning that desynchronises every client.
+    /// </summary>
+    public bool ClearDiscoveredEntities { get; set; }
+
     // ---- crash protection ----
     // A dedicated server never simulates anything, so a spawn flood costs it almost
     // nothing — but every client has to instantiate each prop, and enough of them at

@@ -26,8 +26,12 @@ public sealed class ServerCommandTarget : ICommandTarget
 
     public void Kick(byte smallId, string reason) => _server.Kick(smallId, reason);
 
-    public void Ban(ulong platformId, string name, string reason)
-        => _server.Ban(platformId, name, reason);
+    public void Ban(ulong platformId, string name, string reason, TimeSpan? duration)
+        => _server.Ban(platformId, name, reason, duration, Server.Audit.AuditChannel.Console);
+
+    public void Mute(ulong platformId, string name) => _server.MutePlayer(platformId, name);
+
+    public void Unmute(ulong platformId, string name) => _server.UnmutePlayer(platformId, name);
 
     public bool Unban(ulong platformId) => _server.Unban(platformId);
 

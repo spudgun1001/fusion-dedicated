@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
+using FusionDedicated.Server.Audit;
 using FusionDedicated.Server.Safety;
 using Steamworks;
 
@@ -76,6 +77,15 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>When set, bans.json is authoritative over the config ban list.</summary>
     public Bans.BanStore? BanList { get; set; }
+
+    /// <summary>Voice mutes, for this session only.</summary>
+    public MuteList Mutes { get; } = new();
+
+    /// <summary>Members-only door. Off unless the operator turns it on.</summary>
+    public Whitelist? Members { get; set; }
+
+    /// <summary>Record of who was moderated and how.</summary>
+    public AuditLog? AuditTrail { get; set; }
 
     public void RebuildBlocklist()
     {
@@ -455,7 +465,15 @@ public sealed class FusionServer : IDisposable
                 return;
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
-                TrackEntityPose(message);
+                TrackEntityPose(sender, message);
+                break;
+
+            case FusionProtocol.TagPlayerVoiceChat when sender != null:
+                if (Mutes.IsMuted(sender.PlatformId))
+                {
+                    return;
+                }
+
                 break;
 
             case GateProtocol.TagPlayerRepDamage when sender != null:
@@ -513,6 +531,13 @@ public sealed class FusionServer : IDisposable
         if (Players.IsFull)
         {
             Reject("Server is full! Wait for someone to leave.");
+            return;
+        }
+
+        if (Members is { Enabled: true } members && !members.MayJoin(platformId))
+        {
+            Log("WARN", $"Refused {platformId}: not on the whitelist");
+            SteamNetworkingSockets.CloseConnection(connection, 0, "Not on this server's whitelist", false);
             return;
         }
 
@@ -1088,15 +1113,16 @@ public sealed class FusionServer : IDisposable
     /// is not acted on — the entity would disappear from the server's books while
     /// staying in everyone's world.
     /// </summary>
-    public int ClearAllEntities()
+    public int ClearAllEntities(bool includeDiscovered = false)
     {
         byte despawner = Players.Players.FirstOrDefault()?.SmallId ?? PlayerRegistry.ServerSmallId;
 
-        var doomed = Entities.Entities.Select(e => e.Id).ToList();
+        // Clear() decides what is eligible; discovered entities are held back unless
+        // asked for, because one may be a scene prop rather than a spawn.
+        var doomed = Entities.Clear(includeDiscovered);
 
         foreach (ushort id in doomed)
         {
-            Entities.Remove(id);
             Broadcast(ServerProtocol.WriteDespawnResponse(despawner, id, false), reliable: true);
         }
 
@@ -1179,10 +1205,20 @@ public sealed class FusionServer : IDisposable
     }
 
     public void Ban(ulong platformId, string username, string reason)
+        => Ban(platformId, username, reason, null, AuditChannel.Panel);
+
+    public void Ban(ulong platformId, string username, string reason,
+        TimeSpan? duration, AuditChannel channel)
+    {
+        AuditTrail?.Record(channel, duration is null ? "ban" : "tempban", username, platformId, reason);
+        BanInternal(platformId, username, reason, duration);
+    }
+
+    private void BanInternal(ulong platformId, string username, string reason, TimeSpan? duration)
     {
         if (BanList is { } list)
         {
-            list.Ban(platformId, username, reason);
+            list.Ban(platformId, username, reason, duration);
             list.Save();
         }
         else
@@ -1198,6 +1234,24 @@ public sealed class FusionServer : IDisposable
         }
 
         Log("WARN", $"Banned {(string.IsNullOrWhiteSpace(username) ? platformId.ToString() : username)}: {reason}");
+    }
+
+    public void MutePlayer(ulong platformId, string name)
+    {
+        if (Mutes.Mute(platformId))
+        {
+            AuditTrail?.Record(AuditChannel.Console, "mute", name, platformId, "");
+            Log("WARN", $"Muted {(string.IsNullOrWhiteSpace(name) ? platformId.ToString() : name)}");
+        }
+    }
+
+    public void UnmutePlayer(ulong platformId, string name)
+    {
+        if (Mutes.Unmute(platformId))
+        {
+            AuditTrail?.Record(AuditChannel.Console, "unmute", name, platformId, "");
+            Log("INFO", $"Unmuted {(string.IsNullOrWhiteSpace(name) ? platformId.ToString() : name)}");
+        }
     }
 
     public bool Unban(ulong platformId)
@@ -1270,15 +1324,20 @@ public sealed class FusionServer : IDisposable
         Broadcast(response.ToArray(), reliable: true);
     }
 
-    private void TrackEntityPose(byte[] message)
+    private void TrackEntityPose(ConnectedPlayer sender, byte[] message)
     {
         var pose = FusionProtocol.TryReadEntityPose(message);
 
-        if (pose != null)
+        if (pose == null)
         {
-            Entities.UpdatePosition(pose.Value.EntityId,
-                pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z);
+            return;
         }
+
+        // A pose for an id we never handed out is a client-made entity telling us it
+        // exists. Registering it is what makes it visible; removing it is not safe
+        // without knowing whether it is a scene prop, so that stays opt-in.
+        Entities.NotePose(pose.Value.EntityId, sender.SmallId,
+            pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z);
     }
 
     // ---- relaying ----

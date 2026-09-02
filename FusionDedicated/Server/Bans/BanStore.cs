@@ -14,6 +14,12 @@ public sealed class BanRecord
 
     [JsonPropertyName("bannedAt")]
     public DateTime BannedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>When the ban lifts. Null is permanent, which is the default.</summary>
+    [JsonPropertyName("expiresAt")]
+    public DateTime? ExpiresAt { get; set; }
+
+    public bool HasExpired => ExpiresAt is { } at && at <= DateTime.UtcNow;
 }
 
 /// <summary>
@@ -46,23 +52,23 @@ public sealed class BanStore
 
     public DateTime LastWriteSeen { get; private set; }
 
+    /// <summary>The active ban, or null when there is none or it has lapsed.</summary>
     public BanRecord? Find(ulong platformId)
     {
         lock (_lock)
         {
-            return _entries.TryGetValue(platformId, out var entry) ? entry : null;
+            if (!_entries.TryGetValue(platformId, out var entry))
+            {
+                return null;
+            }
+
+            return entry.HasExpired ? null : entry;
         }
     }
 
-    public bool IsBanned(ulong platformId)
-    {
-        lock (_lock)
-        {
-            return _entries.ContainsKey(platformId);
-        }
-    }
+    public bool IsBanned(ulong platformId) => Find(platformId) != null;
 
-    public void Ban(ulong platformId, string name, string reason)
+    public void Ban(ulong platformId, string name, string reason, TimeSpan? duration = null)
     {
         lock (_lock)
         {
@@ -71,7 +77,24 @@ public sealed class BanStore
                 Name = name,
                 Reason = string.IsNullOrWhiteSpace(reason) ? "Banned from Server" : reason,
                 BannedAt = DateTime.UtcNow,
+                ExpiresAt = duration is { } d ? DateTime.UtcNow + d : null,
             };
+        }
+    }
+
+    /// <summary>Removes lapsed bans. Returns how many went.</summary>
+    public int SweepExpired()
+    {
+        lock (_lock)
+        {
+            var gone = _entries.Where(e => e.Value.HasExpired).Select(e => e.Key).ToList();
+
+            foreach (ulong id in gone)
+            {
+                _entries.Remove(id);
+            }
+
+            return gone.Count;
         }
     }
 

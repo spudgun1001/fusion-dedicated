@@ -8,7 +8,9 @@ public class FakeTarget : ICommandTarget
     public List<CommandPlayer> Roster { get; } = new();
     public List<(ulong Id, string Name, PermissionLevel Level)> Ranks { get; } = new();
     public List<(byte SmallId, string Reason)> Kicks { get; } = new();
-    public List<(ulong Id, string Name, string Reason)> Bans { get; } = new();
+    public List<(ulong Id, string Name, string Reason, TimeSpan? Duration)> Bans { get; } = new();
+    public List<ulong> Mutes { get; } = new();
+    public List<ulong> Unmutes { get; } = new();
     public List<ulong> Unbans { get; } = new();
     public List<byte> Purges { get; } = new();
     public List<(string Barcode, string Title)> Levels { get; } = new();
@@ -20,8 +22,12 @@ public class FakeTarget : ICommandTarget
 
     public void Kick(byte smallId, string reason) => Kicks.Add((smallId, reason));
 
-    public void Ban(ulong platformId, string name, string reason)
-        => Bans.Add((platformId, name, reason));
+    public void Ban(ulong platformId, string name, string reason, TimeSpan? duration)
+        => Bans.Add((platformId, name, reason, duration));
+
+    public void Mute(ulong platformId, string name) => Mutes.Add(platformId);
+
+    public void Unmute(ulong platformId, string name) => Unmutes.Add(platformId);
 
     public bool Unban(ulong platformId)
     {
@@ -191,5 +197,61 @@ public class CommandProcessorTests
         _processor.Execute("PROMOTE spudgun OWNER");
 
         Assert.Equal(PermissionLevel.Owner, _target.Ranks.Single().Level);
+    }
+
+    [Fact]
+    public void Ban_with_a_duration_is_temporary()
+    {
+        _processor.Execute("ban spudgun 2h being a nuisance");
+
+        var ban = _target.Bans.Single();
+
+        Assert.Equal(TimeSpan.FromHours(2), ban.Duration);
+        Assert.Equal("being a nuisance", ban.Reason);
+    }
+
+    [Fact]
+    public void A_reason_that_is_not_a_duration_still_bans_permanently()
+    {
+        _processor.Execute("ban spudgun cheating");
+
+        var ban = _target.Bans.Single();
+
+        Assert.Null(ban.Duration);
+        Assert.Equal("cheating", ban.Reason);
+    }
+
+    [Fact]
+    public void Ban_with_permanent_spelled_out_has_no_expiry()
+    {
+        _processor.Execute("ban spudgun permanent griefing");
+
+        Assert.Null(_target.Bans.Single().Duration);
+        Assert.Equal("griefing", _target.Bans.Single().Reason);
+    }
+
+    [Fact]
+    public void Mute_and_unmute_reach_the_target()
+    {
+        _processor.Execute("mute spudgun");
+        _processor.Execute("unmute spudgun");
+
+        Assert.Equal(76561198000000000UL, _target.Mutes.Single());
+        Assert.Equal(76561198000000000UL, _target.Unmutes.Single());
+    }
+
+    [Fact]
+    public void Mute_without_a_name_explains_the_usage()
+    {
+        Assert.Contains("usage", _processor.Execute("mute"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Help_mentions_the_new_commands()
+    {
+        string help = _processor.Execute("help");
+
+        Assert.Contains("mute", help);
+        Assert.Contains("duration", help);
     }
 }

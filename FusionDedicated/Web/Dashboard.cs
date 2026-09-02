@@ -143,7 +143,24 @@ public sealed class Dashboard
                 return;
 
             case "/api/clear":
-                ServeJson(context, new { ok = true, removed = _server.ClearAllEntities() });
+                ServeJson(context, new
+                {
+                    ok = true,
+                    removed = _server.ClearAllEntities(
+                        query["includeDiscovered"] == "1" || _config.ClearDiscoveredEntities),
+                });
+                return;
+
+            case "/api/mute":
+                HandleMute(context, query, muted: true);
+                return;
+
+            case "/api/unmute":
+                HandleMute(context, query, muted: false);
+                return;
+
+            case "/api/audit":
+                ServeJson(context, _server.AuditTrail?.Recent(200) ?? Array.Empty<object>().Cast<object>());
                 return;
 
             case "/api/purge":
@@ -295,6 +312,20 @@ public sealed class Dashboard
                     online = players.Any(p => p.PlatformId == e.PlatformId),
                 }).ToArray(),
 
+            muted = _server.Mutes.Muted.Select(id => id.ToString()).ToArray(),
+
+            whitelist = new
+            {
+                enabled = _server.Members?.Enabled ?? false,
+                count = _server.Members?.Entries.Count ?? 0,
+            },
+
+            world = new
+            {
+                total = _server.Entities.Count,
+                discovered = _server.Entities.DiscoveredCount,
+            },
+
             // bans.json when it is in use, falling back to the config list so a
             // server upgraded mid-life still shows its old bans.
             bans = (_server.BanList is { } list
@@ -307,6 +338,8 @@ public sealed class Dashboard
                     username = b.Item2,
                     reason = b.Item3,
                     bannedAt = b.Item4.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    expiresAt = _server.BanList?.Find(b.Item1)?.ExpiresAt?
+                        .ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 }).ToArray(),
 
             entities = new
@@ -450,6 +483,29 @@ public sealed class Dashboard
         }
 
         _config.Save(Program.ConfigPath);
+        ServeJson(context, new { ok = true });
+    }
+
+    private void HandleMute(HttpListenerContext context, NameValueCollection query, bool muted)
+    {
+        if (!ulong.TryParse(query["platformId"], out ulong platformId))
+        {
+            context.Response.StatusCode = 400;
+            ServeJson(context, new { ok = false, error = "platformId is required" });
+            return;
+        }
+
+        string name = _server.Players.GetByPlatformId(platformId)?.DisplayName ?? "";
+
+        if (muted)
+        {
+            _server.MutePlayer(platformId, name);
+        }
+        else
+        {
+            _server.UnmutePlayer(platformId, name);
+        }
+
         ServeJson(context, new { ok = true });
     }
 

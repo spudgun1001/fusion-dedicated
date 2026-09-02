@@ -2,6 +2,7 @@ using FusionDedicated;
 using FusionDedicated.Server;
 using FusionDedicated.Commands;
 using FusionDedicated.Commands.Rcon;
+using FusionDedicated.Server.Audit;
 using FusionDedicated.Server.Bans;
 using FusionDedicated.Server.Ranks;
 using FusionDedicated.Server.Safety;
@@ -129,7 +130,34 @@ public static class Program
         }
 
         server.BanList = bans;
-        server.Log("INFO", $"Bans: {bans.Entries.Count} listed");
+
+        int lapsed = bans.SweepExpired();
+
+        if (lapsed > 0)
+        {
+            bans.Save();
+        }
+
+        server.Log("INFO", $"Bans: {bans.Entries.Count} listed" +
+                           (lapsed > 0 ? $", {lapsed} expired and lifted" : ""));
+
+        var members = new Whitelist(Path.Combine(AppContext.BaseDirectory, "whitelist.json"))
+        {
+            Enabled = config.WhitelistEnabled,
+        };
+
+        members.ReloadIfChanged();
+        server.Members = members;
+
+        if (config.WhitelistEnabled)
+        {
+            server.Log("WARN", $"Whitelist is ON — {members.Entries.Count} players may join. " +
+                               "An empty list locks everyone out, including you.");
+        }
+
+        server.AuditTrail = new AuditLog(Path.IsPathRooted(config.LogDirectory)
+            ? config.LogDirectory
+            : Path.Combine(AppContext.BaseDirectory, config.LogDirectory));
 
         var ranks = new RankStore(Path.Combine(AppContext.BaseDirectory, "ranks.json"));
         ranks.Load();
@@ -266,6 +294,16 @@ public static class Program
                 if (bans.ReloadIfChanged())
                 {
                     server.Log("INFO", $"Reloaded bans.json — {bans.Entries.Count} listed");
+                }
+
+                if (members.ReloadIfChanged())
+                {
+                    server.Log("INFO", $"Reloaded whitelist.json — {members.Entries.Count} listed");
+                }
+
+                if (bans.SweepExpired() > 0)
+                {
+                    bans.Save();
                 }
 
                 server.Tick();

@@ -13,6 +13,12 @@ public sealed class TrackedEntity
     /// </summary>
     public bool Inherited { get; set; }
 
+    /// <summary>
+    /// Learned from a pose update rather than a spawn request, so its barcode is
+    /// unknown and it may be a scene prop somebody picked up rather than a spawn.
+    /// </summary>
+    public bool Discovered { get; set; }
+
     public DateTime SpawnedAt { get; } = DateTime.UtcNow;
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
@@ -93,6 +99,11 @@ public sealed class EntityRegistry
     /// does not merely clash with another prop, it lands on top of a person, so a
     /// real host never hands out anything under 256.
     /// </summary>
+    public int DiscoveredCount
+    {
+        get { lock (_lock) { return _entities.Values.Count(e => e.Discovered); } }
+    }
+
     public const ushort FirstEntityId = 256;
 
     /// <summary>Next id the allocator will try. Exposed so pressure is visible.</summary>
@@ -185,6 +196,41 @@ public sealed class EntityRegistry
         }
     }
 
+    /// <summary>
+    /// Records a pose, registering the entity if this is the first we have heard of
+    /// it. Ids below FirstEntityId are player rigs and are left alone.
+    /// </summary>
+    public void NotePose(ushort id, byte owner, float x, float y, float z)
+    {
+        if (id < FirstEntityId)
+        {
+            return;
+        }
+
+        lock (_lock)
+        {
+            if (_entities.TryGetValue(id, out var entity))
+            {
+                entity.X = x;
+                entity.Y = y;
+                entity.Z = z;
+                entity.LastUpdate = DateTime.UtcNow;
+                return;
+            }
+
+            _entities[id] = new TrackedEntity
+            {
+                Id = id,
+                Barcode = "",
+                OwnerSmallId = owner,
+                Discovered = true,
+                X = x,
+                Y = y,
+                Z = z,
+            };
+        }
+    }
+
     public bool Remove(ushort id)
     {
         lock (_lock)
@@ -226,7 +272,7 @@ public sealed class EntityRegistry
 
         lock (_lock)
         {
-            foreach (var entity in _entities.Values.Where(e => e.IsOrphaned && e.LastUpdate < cutoff).ToList())
+            foreach (var entity in _entities.Values.Where(e => !e.Discovered && e.IsOrphaned && e.LastUpdate < cutoff).ToList())
             {
                 _entities.Remove(entity.Id);
                 removed.Add(entity.Id);
@@ -292,11 +338,26 @@ public sealed class EntityRegistry
         return removed;
     }
 
-    public void Clear()
+    /// <summary>
+    /// Removes everything and reports what went. Discovered entities are held back
+    /// unless asked for: one may be a scene prop, and despawning that desynchronises
+    /// every client.
+    /// </summary>
+    public List<ushort> Clear(bool includeDiscovered = false)
     {
         lock (_lock)
         {
-            _entities.Clear();
+            var removed = _entities.Values
+                .Where(e => includeDiscovered || !e.Discovered)
+                .Select(e => e.Id)
+                .ToList();
+
+            foreach (ushort id in removed)
+            {
+                _entities.Remove(id);
+            }
+
+            return removed;
         }
     }
 }

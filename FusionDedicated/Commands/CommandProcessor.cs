@@ -1,3 +1,5 @@
+using FusionDedicated.Server.Bans;
+
 namespace FusionDedicated.Commands;
 
 /// <summary>
@@ -10,7 +12,9 @@ public sealed class CommandProcessor
     private const string Usage = """
         promote <who> <guest|default|operator|owner>
         kick <who> [reason]
-        ban <who> [reason]
+        ban <who> [duration] [reason]   duration: 30m, 2h, 7d, or permanent
+        mute <who>
+        unmute <who>
         unban <steamid>
         purge <who>
         players
@@ -41,6 +45,8 @@ public sealed class CommandProcessor
             "promote" => Promote(args),
             "kick" => Kick(args),
             "ban" => Ban(args),
+            "mute" => SetMute(args, muted: true),
+            "unmute" => SetMute(args, muted: false),
             "unban" => Unban(args),
             "purge" => Purge(args),
             "players" => ListPlayers(),
@@ -106,7 +112,7 @@ public sealed class CommandProcessor
     {
         if (args.Length < 1)
         {
-            return "Usage: ban <who> [reason]";
+            return "Usage: ban <who> [duration] [reason]";
         }
 
         var resolved = Resolve(args[0]);
@@ -116,10 +122,58 @@ public sealed class CommandProcessor
             return resolved.Error;
         }
 
-        string reason = args.Length > 1 ? string.Join(' ', args[1..]) : "Banned by an administrator";
-        _target.Ban(resolved.PlatformId, resolved.Name, reason);
+        // A second word is a duration only if it reads like one, so "ban bob cheating"
+        // still bans permanently for cheating rather than failing on a bad duration.
+        var rest = args[1..];
+        TimeSpan? duration = null;
 
-        return $"Banned {resolved.Name}: {reason}";
+        if (rest.Length > 0 && BanDuration.IsRecognised(rest[0]))
+        {
+            duration = BanDuration.TryParse(rest[0]);
+            rest = rest[1..];
+        }
+
+        string reason = rest.Length > 0 ? string.Join(' ', rest) : "Banned by an administrator";
+
+        _target.Ban(resolved.PlatformId, resolved.Name, reason, duration);
+
+        string howLong = duration is { } d ? $" for {Describe(d)}" : "";
+
+        return $"Banned {resolved.Name}{howLong}: {reason}";
+    }
+
+    private static string Describe(TimeSpan span) => span switch
+    {
+        { TotalDays: >= 1 } => $"{span.TotalDays:0.#} days",
+        { TotalHours: >= 1 } => $"{span.TotalHours:0.#} hours",
+        _ => $"{span.TotalMinutes:0} minutes",
+    };
+
+    private string SetMute(string[] args, bool muted)
+    {
+        string verb = muted ? "mute" : "unmute";
+
+        if (args.Length < 1)
+        {
+            return $"Usage: {verb} <who>";
+        }
+
+        var resolved = Resolve(args[0]);
+
+        if (resolved.Error != null)
+        {
+            return resolved.Error;
+        }
+
+        if (muted)
+        {
+            _target.Mute(resolved.PlatformId, resolved.Name);
+            return $"Muted {(resolved.Connected ? resolved.Name : resolved.PlatformId.ToString())}.";
+        }
+
+        _target.Unmute(resolved.PlatformId, resolved.Name);
+
+        return $"Unmuted {(resolved.Connected ? resolved.Name : resolved.PlatformId.ToString())}.";
     }
 
     private string Unban(string[] args)
