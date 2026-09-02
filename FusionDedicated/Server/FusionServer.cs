@@ -432,6 +432,17 @@ public sealed class FusionServer : IDisposable
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
                 TrackEntityPose(message);
                 break;
+
+            case GateProtocol.TagPlayerRepDamage when sender != null:
+            case GateProtocol.TagPlayerRepTeleport when sender != null:
+            case GateProtocol.TagPlayerRepAvatar when sender != null:
+            case GateProtocol.TagSlowMoButton when sender != null:
+                if (!PassesGates(sender, tag, message))
+                {
+                    return;
+                }
+
+                break;
         }
 
         if (sender != null)
@@ -675,6 +686,73 @@ public sealed class FusionServer : IDisposable
     /// server alone. Clients only remove an object when they receive a matching
     /// DespawnResponse, so the server has to answer or nothing ever disappears.
     /// </summary>
+    /// <summary>
+    /// Extended protection for message types that are otherwise relayed unread.
+    /// Returns false when the message should be dropped instead of forwarded.
+    /// </summary>
+    private bool PassesGates(ConnectedPlayer sender, byte tag, byte[] message)
+    {
+        if (!Config.ExtendedProtection)
+        {
+            return true;
+        }
+
+        switch (tag)
+        {
+            case GateProtocol.TagPlayerRepDamage:
+                float? damage = GateProtocol.TryReadDamage(message);
+
+                if (damage is { } dealt && Config.MaxRemoteDamage > 0 && dealt > Config.MaxRemoteDamage)
+                {
+                    Log("WARN", $"{sender.DisplayName} sent {dealt:0} damage, over the " +
+                                $"{Config.MaxRemoteDamage:0} cap — dropped");
+                    return false;
+                }
+
+                return true;
+
+            case GateProtocol.TagPlayerRepTeleport:
+                if (!sender.Permission.IsAtLeast(Config.Teleportation))
+                {
+                    Log("WARN", $"{sender.DisplayName} tried to teleport someone but is " +
+                                $"{sender.Permission.ToFusionString()}, not " +
+                                $"{Config.Teleportation.ToFusionString()} — dropped");
+                    return false;
+                }
+
+                return true;
+
+            case GateProtocol.TagPlayerRepAvatar:
+                string? barcode = GateProtocol.TryReadAvatarBarcode(message);
+
+                if (barcode != null)
+                {
+                    var verdict = _blocklist.Check(barcode, sender.Permission);
+
+                    if (verdict.Blocked)
+                    {
+                        Log("WARN", $"{sender.DisplayName} tried to wear '{barcode}', denied by " +
+                                    $"the {verdict.Layer} blocklist: {verdict.Reason}");
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case GateProtocol.TagSlowMoButton:
+                if (Config.SlowMoMode == 0)
+                {
+                    Log("WARN", $"{sender.DisplayName} pressed slow motion, which is disabled — dropped");
+                    return false;
+                }
+
+                return true;
+
+            default:
+                return true;
+        }
+    }
+
     private void HandleDespawnRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = ServerProtocol.TryReadDespawnRequest(message);

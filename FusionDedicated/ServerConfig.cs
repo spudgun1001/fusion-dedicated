@@ -218,6 +218,9 @@ public sealed class ServerConfig
     /// </summary>
     public bool ExtendedProtection { get; set; } = true;
 
+    /// <summary>Largest single hit a client may deal to another. 0 disables the cap.</summary>
+    public float MaxRemoteDamage { get; set; } = 200f;
+
     // ---- crash protection ----
     // A dedicated server never simulates anything, so a spawn flood costs it almost
     // nothing — but every client has to instantiate each prop, and enough of them at
