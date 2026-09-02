@@ -73,6 +73,33 @@ public sealed class BanEntry
     public DateTime BannedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// Accepts the several ways a control panel spells a boolean. Pterodactyl variables
+/// are strings, and jq will happily write 1 or "true" into the file.
+/// </summary>
+public sealed class ForgivingBoolConverter : JsonConverter<bool>
+{
+    public override bool Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+        => reader.TokenType switch
+        {
+            JsonTokenType.True => true,
+            JsonTokenType.False => false,
+            JsonTokenType.Number => reader.GetInt32() != 0,
+            JsonTokenType.String => ParseString(reader.GetString()),
+            _ => throw new JsonException($"Cannot read a boolean from {reader.TokenType}."),
+        };
+
+    private static bool ParseString(string? raw) => raw?.Trim().ToLowerInvariant() switch
+    {
+        "true" or "1" or "yes" or "on" => true,
+        "false" or "0" or "no" or "off" => false,
+        _ => throw new JsonException($"'{raw}' is not a boolean."),
+    };
+
+    public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
+        => writer.WriteBooleanValue(value);
+}
+
 public sealed class ServerConfig
 {
     // ---- identity ----
@@ -404,11 +431,20 @@ public sealed class ServerConfig
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new JsonStringEnumConverter(), new ForgivingBoolConverter() },
     };
 
-    public static ServerConfig Load(string path)
+    public static ServerConfig Load(string path) => Load(path, out _);
+
+    /// <summary>
+    /// Reads the config, reporting why rather than reverting in silence. A panel that
+    /// writes 1 or "true" for a boolean used to throw here, and the old catch handed
+    /// back defaults — quietly losing the name, slots and every password with it.
+    /// </summary>
+    public static ServerConfig Load(string path, out string? error)
     {
+        error = null;
+
         if (!File.Exists(path))
         {
             var fresh = new ServerConfig();
@@ -423,8 +459,9 @@ public sealed class ServerConfig
             config = JsonSerializer.Deserialize<ServerConfig>(File.ReadAllText(path), Options)
                      ?? new ServerConfig();
         }
-        catch
+        catch (Exception ex)
         {
+            error = ex.Message;
             return new ServerConfig();
         }
 

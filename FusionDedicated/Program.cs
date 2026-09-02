@@ -17,9 +17,15 @@ public static class Program
 
         ConfigPath = args.FirstOrDefault(a => a.EndsWith(".json")) ?? "server.json";
 
-        var config = ServerConfig.Load(ConfigPath);
+        var config = ServerConfig.Load(ConfigPath, out string? configError);
 
-        if (string.IsNullOrWhiteSpace(config.ServerCode))
+        if (configError != null)
+        {
+            Console.WriteLine($"WARNING: {ConfigPath} could not be read ({configError}).");
+            Console.WriteLine("Running on defaults. The file is left untouched so you can fix it;");
+            Console.WriteLine("every setting from the panel is being ignored until you do.");
+        }
+        else if (string.IsNullOrWhiteSpace(config.ServerCode))
         {
             config.ServerCode = LobbyPublisher.GenerateCode();
             config.Save(ConfigPath);
