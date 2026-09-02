@@ -74,6 +74,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>The owner's editable blocklist.json, when present.</summary>
     public BlocklistStore? Blocklist { get; set; }
 
+    /// <summary>When set, bans.json is authoritative over the config ban list.</summary>
+    public Bans.BanStore? BanList { get; set; }
+
     public void RebuildBlocklist()
     {
         var file = Blocklist?.Current;
@@ -488,6 +491,13 @@ public sealed class FusionServer : IDisposable
         if (Players.IsFull)
         {
             Reject("Server is full! Wait for someone to leave.");
+            return;
+        }
+
+        if (BanList?.Find(platformId) is { } fileBan)
+        {
+            Log("WARN", $"Refused {platformId}: banned ({fileBan.Reason})");
+            SteamNetworkingSockets.CloseConnection(connection, 0, fileBan.Reason, false);
             return;
         }
 
@@ -1148,7 +1158,15 @@ public sealed class FusionServer : IDisposable
 
     public void Ban(ulong platformId, string username, string reason)
     {
-        Config.Ban(platformId, username, reason);
+        if (BanList is { } list)
+        {
+            list.Ban(platformId, username, reason);
+            list.Save();
+        }
+        else
+        {
+            Config.Ban(platformId, username, reason);
+        }
 
         var player = Players.GetByPlatformId(platformId);
 
@@ -1162,7 +1180,17 @@ public sealed class FusionServer : IDisposable
 
     public bool Unban(ulong platformId)
     {
-        if (!Config.Unban(platformId))
+        bool removed = BanList is { } list && list.Unban(platformId);
+
+        if (removed)
+        {
+            BanList!.Save();
+        }
+
+        // A ban made before bans.json existed still lives in the config.
+        removed |= Config.Unban(platformId);
+
+        if (!removed)
         {
             return false;
         }

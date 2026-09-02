@@ -36,3 +36,6 @@ ranks.json
 
 # Design specs and implementation plans stay local.
 docs/
+
+# The ban list is keyed by other people's SteamIDs, like server.json.
+bans.json

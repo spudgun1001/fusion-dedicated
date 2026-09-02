@@ -295,14 +295,18 @@ public sealed class Dashboard
                     online = players.Any(p => p.PlatformId == e.PlatformId),
                 }).ToArray(),
 
-            bans = _config.Bans
-                .OrderByDescending(b => b.BannedAt)
+            // bans.json when it is in use, falling back to the config list so a
+            // server upgraded mid-life still shows its old bans.
+            bans = (_server.BanList is { } list
+                    ? list.Entries.Select(e => (e.Key, e.Value.Name, e.Value.Reason, e.Value.BannedAt))
+                    : _config.Bans.Select(b => (b.PlatformId, b.Username, b.Reason, b.BannedAt)))
+                .OrderByDescending(b => b.Item4)
                 .Select(b => new
                 {
-                    platformId = b.PlatformId.ToString(),
-                    username = b.Username,
-                    reason = b.Reason,
-                    bannedAt = b.BannedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    platformId = b.Item1.ToString(),
+                    username = b.Item2,
+                    reason = b.Item3,
+                    bannedAt = b.Item4.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 }).ToArray(),
 
             entities = new

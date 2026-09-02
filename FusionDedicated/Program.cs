@@ -2,6 +2,7 @@ using FusionDedicated;
 using FusionDedicated.Server;
 using FusionDedicated.Commands;
 using FusionDedicated.Commands.Rcon;
+using FusionDedicated.Server.Bans;
 using FusionDedicated.Server.Ranks;
 using FusionDedicated.Server.Safety;
 using FusionDedicated.Web;
@@ -115,6 +116,20 @@ public static class Program
             server.Log("INFO", $"Safety lists: {safety.Mods?.Mods.Count ?? 0} blacklisted mods, " +
                                $"{safety.Bans?.Bans.Count ?? 0} global bans");
         }
+
+        var bans = new BanStore(Path.Combine(AppContext.BaseDirectory, "bans.json"));
+        bans.ReloadIfChanged();
+
+        int migratedBans = bans.MigrateFrom(config.Bans);
+
+        if (migratedBans > 0)
+        {
+            bans.Save();
+            server.Log("INFO", $"Migrated {migratedBans} bans into bans.json");
+        }
+
+        server.BanList = bans;
+        server.Log("INFO", $"Bans: {bans.Entries.Count} listed");
 
         var ranks = new RankStore(Path.Combine(AppContext.BaseDirectory, "ranks.json"));
         ranks.Load();
@@ -246,6 +261,11 @@ public static class Program
                 {
                     server.RebuildBlocklist();
                     server.Log("INFO", "Reloaded blocklist.json");
+                }
+
+                if (bans.ReloadIfChanged())
+                {
+                    server.Log("INFO", $"Reloaded bans.json — {bans.Entries.Count} listed");
                 }
 
                 server.Tick();
