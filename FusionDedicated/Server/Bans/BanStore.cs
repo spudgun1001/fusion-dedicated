@@ -31,32 +31,57 @@ public sealed class BanStore
 
     private readonly string _path;
     private Dictionary<ulong, BanRecord> _entries = new();
+    private readonly object _lock = new();
 
     public BanStore(string path)
     {
         _path = path;
     }
 
-    public IReadOnlyDictionary<ulong, BanRecord> Entries => _entries;
+    /// <summary>A snapshot. The panel enumerates this while other threads write.</summary>
+    public IReadOnlyDictionary<ulong, BanRecord> Entries
+    {
+        get { lock (_lock) { return new Dictionary<ulong, BanRecord>(_entries); } }
+    }
 
     public DateTime LastWriteSeen { get; private set; }
 
     public BanRecord? Find(ulong platformId)
-        => _entries.TryGetValue(platformId, out var entry) ? entry : null;
+    {
+        lock (_lock)
+        {
+            return _entries.TryGetValue(platformId, out var entry) ? entry : null;
+        }
+    }
 
-    public bool IsBanned(ulong platformId) => _entries.ContainsKey(platformId);
+    public bool IsBanned(ulong platformId)
+    {
+        lock (_lock)
+        {
+            return _entries.ContainsKey(platformId);
+        }
+    }
 
     public void Ban(ulong platformId, string name, string reason)
     {
-        _entries[platformId] = new BanRecord
+        lock (_lock)
         {
-            Name = name,
-            Reason = string.IsNullOrWhiteSpace(reason) ? "Banned from Server" : reason,
-            BannedAt = DateTime.UtcNow,
-        };
+            _entries[platformId] = new BanRecord
+            {
+                Name = name,
+                Reason = string.IsNullOrWhiteSpace(reason) ? "Banned from Server" : reason,
+                BannedAt = DateTime.UtcNow,
+            };
+        }
     }
 
-    public bool Unban(ulong platformId) => _entries.Remove(platformId);
+    public bool Unban(ulong platformId)
+    {
+        lock (_lock)
+        {
+            return _entries.Remove(platformId);
+        }
+    }
 
     /// <summary>Reads the file, keeping the current list if it will not parse.</summary>
     public void Load()
@@ -86,7 +111,10 @@ public sealed class BanStore
                 }
             }
 
-            _entries = rebuilt;
+            lock (_lock)
+            {
+                _entries = rebuilt;
+            }
         }
         catch (JsonException)
         {
@@ -98,7 +126,12 @@ public sealed class BanStore
     {
         try
         {
-            var forDisk = _entries.ToDictionary(p => p.Key.ToString(), p => p.Value);
+            Dictionary<string, BanRecord> forDisk;
+
+            lock (_lock)
+            {
+                forDisk = _entries.ToDictionary(p => p.Key.ToString(), p => p.Value);
+            }
 
             Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? ".");
             File.WriteAllText(_path, JsonSerializer.Serialize(forDisk, Options));
@@ -140,21 +173,24 @@ public sealed class BanStore
     {
         var added = 0;
 
-        foreach (var entry in existing)
+        lock (_lock)
         {
-            if (_entries.ContainsKey(entry.PlatformId))
+            foreach (var entry in existing)
             {
-                continue;
+                if (_entries.ContainsKey(entry.PlatformId))
+                {
+                    continue;
+                }
+
+                _entries[entry.PlatformId] = new BanRecord
+                {
+                    Name = entry.Username,
+                    Reason = entry.Reason,
+                    BannedAt = entry.BannedAt,
+                };
+
+                added++;
             }
-
-            _entries[entry.PlatformId] = new BanRecord
-            {
-                Name = entry.Username,
-                Reason = entry.Reason,
-                BannedAt = entry.BannedAt,
-            };
-
-            added++;
         }
 
         return added;

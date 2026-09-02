@@ -28,36 +28,49 @@ public sealed class RankStore
 
     private readonly string _path;
     private Dictionary<ulong, RankEntry> _entries = new();
+    private readonly object _lock = new();
 
     public RankStore(string path)
     {
         _path = path;
     }
 
-    public IReadOnlyDictionary<ulong, RankEntry> Entries => _entries;
+    /// <summary>A snapshot. The panel enumerates this while other threads write.</summary>
+    public IReadOnlyDictionary<ulong, RankEntry> Entries
+    {
+        get { lock (_lock) { return new Dictionary<ulong, RankEntry>(_entries); } }
+    }
 
     public PermissionLevel Get(ulong platformId)
-        => _entries.TryGetValue(platformId, out var entry) ? entry.Rank : PermissionLevel.Default;
+    {
+        lock (_lock)
+        {
+            return _entries.TryGetValue(platformId, out var entry) ? entry.Rank : PermissionLevel.Default;
+        }
+    }
 
     public void Set(ulong platformId, string username, PermissionLevel level)
     {
-        if (level == PermissionLevel.Default)
+        lock (_lock)
         {
-            _entries.Remove(platformId);
-            return;
-        }
+            if (level == PermissionLevel.Default)
+            {
+                _entries.Remove(platformId);
+                return;
+            }
 
-        if (!_entries.TryGetValue(platformId, out var entry))
-        {
-            entry = new RankEntry();
-            _entries[platformId] = entry;
-        }
+            if (!_entries.TryGetValue(platformId, out var entry))
+            {
+                entry = new RankEntry();
+                _entries[platformId] = entry;
+            }
 
-        entry.Rank = level;
+            entry.Rank = level;
 
-        if (!string.IsNullOrWhiteSpace(username))
-        {
-            entry.Name = username;
+            if (!string.IsNullOrWhiteSpace(username))
+            {
+                entry.Name = username;
+            }
         }
     }
 
@@ -89,7 +102,10 @@ public sealed class RankStore
                 }
             }
 
-            _entries = rebuilt;
+            lock (_lock)
+            {
+                _entries = rebuilt;
+            }
         }
         catch (JsonException)
         {
@@ -101,7 +117,12 @@ public sealed class RankStore
     {
         try
         {
-            var forDisk = _entries.ToDictionary(p => p.Key.ToString(), p => p.Value);
+            Dictionary<string, RankEntry> forDisk;
+
+            lock (_lock)
+            {
+                forDisk = _entries.ToDictionary(p => p.Key.ToString(), p => p.Value);
+            }
 
             Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? ".");
             File.WriteAllText(_path, JsonSerializer.Serialize(forDisk, Options));
@@ -120,9 +141,12 @@ public sealed class RankStore
 
         foreach (var entry in existing)
         {
-            if (_entries.ContainsKey(entry.PlatformId))
+            lock (_lock)
             {
-                continue;
+                if (_entries.ContainsKey(entry.PlatformId))
+                {
+                    continue;
+                }
             }
 
             Set(entry.PlatformId, entry.Username, entry.Level);
@@ -139,12 +163,19 @@ public sealed class RankStore
 
         foreach (ulong id in ids)
         {
-            if (Get(id) >= level)
+            string name;
+
+            lock (_lock)
             {
-                continue;
+                if (Get(id) >= level)
+                {
+                    continue;
+                }
+
+                name = _entries.TryGetValue(id, out var e) ? e.Name : "";
             }
 
-            Set(id, _entries.TryGetValue(id, out var e) ? e.Name : "", level);
+            Set(id, name, level);
             added++;
         }
 
