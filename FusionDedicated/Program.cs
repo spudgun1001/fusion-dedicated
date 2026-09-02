@@ -416,7 +416,7 @@ public static class Program
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine();
         Console.WriteLine("  ╔══════════════════════════════════════════════╗");
-        Console.WriteLine("  ║   FUSION DEDICATED, headless relay server    ║");
+        Console.WriteLine("  ║   FUSION DEDICATED - headless relay server   ║");
         Console.WriteLine("  ╚══════════════════════════════════════════════╝");
         Console.ResetColor();
         Console.WriteLine();
