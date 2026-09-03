@@ -152,7 +152,7 @@
   }
 
   .brand { padding: 0 18px 16px; }
-  .brand b { display: block; font: 600 16px/1.2 var(--sans); letter-spacing: -.01em; }
+  .brand b { display: block; font: 600 17px/1.2 var(--sans); letter-spacing: -.02em; }
   .brand span {
     display: block; font: 400 12px/1.4 var(--sans); margin-top: 2px;
     color: hsl(var(--muted-foreground));
@@ -161,26 +161,29 @@
   .menu { padding: 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 
   nav a {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px; border-radius: var(--radius-sm);
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 12px; border-radius: var(--radius-sm);
     color: hsl(var(--muted-foreground)); cursor: pointer;
     font: 500 14px var(--sans);
-    transition: background .12s, color .12s;
+    transition: background .14s ease, color .14s ease;
   }
-  nav a:hover { color: hsl(var(--foreground)); background: hsl(var(--muted)); }
+  nav a svg { width: 17px; height: 17px; flex-shrink: 0; opacity: .85; }
+  nav a:hover { color: hsl(var(--foreground)); background: hsl(var(--muted) / .7); }
   nav a.on {
-    color: hsl(var(--primary-foreground));
-    background: hsl(var(--primary));
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / .12);
+    font-weight: 600;
   }
+  nav a.on svg { opacity: 1; }
   nav a .c {
-    margin-left: auto; min-width: 20px; text-align: center;
-    font: 500 12px var(--mono); font-variant-numeric: tabular-nums;
+    margin-left: auto; min-width: 22px; text-align: center;
+    font: 500 12px var(--sans); font-variant-numeric: tabular-nums;
     color: hsl(var(--muted-foreground));
-    background: hsl(var(--muted)); border-radius: 999px; padding: 1px 7px;
+    background: hsl(var(--muted)); border-radius: 999px; padding: 2px 8px;
   }
   nav a.on .c {
-    color: hsl(var(--primary-foreground));
-    background: hsl(var(--primary-foreground) / .18);
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / .16);
   }
 
   .navfoot { margin-top: auto; padding: 12px 18px 0; border-top: 1px solid hsl(var(--border)); }
@@ -213,7 +216,7 @@
   .status b { font: 500 13px var(--sans); color: hsl(var(--muted-foreground)); }
 
   header h1 {
-    font: 600 16px var(--sans); margin: 0; letter-spacing: -.01em;
+    font: 600 17px var(--sans); margin: 0; letter-spacing: -.02em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
@@ -227,37 +230,46 @@
 
   /* ---------- views ---------- */
 
-  .view { padding: clamp(20px, 2.6vw, 28px) clamp(16px, 3vw, 28px) 72px; max-width: 1240px; display: none; }
+  .view { padding: clamp(24px, 2.8vw, 34px) clamp(18px, 3vw, 32px) 80px; max-width: 1240px; display: none; }
   .view.on { display: block; }
 
   h2 {
-    font: 600 16px var(--sans); letter-spacing: -.01em;
-    color: hsl(var(--foreground)); margin: 0 0 12px;
+    font: 600 20px var(--sans); letter-spacing: -.02em;
+    color: hsl(var(--foreground)); margin: 0 0 14px;
   }
-  h2:not(:first-child) { margin-top: 34px; }
+  h2:not(:first-child) { margin-top: 44px; }
 
-  .hint { color: hsl(var(--muted-foreground)); font-size: 13px; margin: -6px 0 16px; max-width: 68ch; }
+  .hint { color: hsl(var(--muted-foreground)); font-size: 14px; margin: -8px 0 18px; max-width: 68ch; line-height: 1.5; }
 
   /* ---------- metrics ---------- */
 
   /* Hairlines inside the one card, rather than a card per metric: the strip
      already sits in a frame and cards inside cards read as clutter. */
+  /* Each figure is its own card, so a part-filled last row simply ends rather
+     than leaving ruled empty cells. The wrapper stops being a card so there are
+     no boxes inside boxes. */
+  .frame:has(> .frame-in > .metrics) {
+    background: none; border: 0; box-shadow: none;
+  }
   .metrics {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    background: hsl(var(--card));
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 12px;
   }
-  /* Hairlines drawn inside each cell rather than as gaps over a coloured
-     background, so a part-filled last row does not show a block of divider. */
   .metric {
-    padding: 15px 16px;
-    box-shadow: inset -1px -1px 0 hsl(var(--border));
+    padding: 16px 18px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
   }
-  .metric .k { font-size: 12px; color: hsl(var(--muted-foreground)); }
+  .metric .k { font-size: 12px; color: hsl(var(--muted-foreground)); letter-spacing: .01em; }
   .metric .v {
-    font: 600 24px var(--mono); margin-top: 4px; letter-spacing: -.02em;
-    font-variant-numeric: tabular-nums;
+    font: 600 28px var(--sans); margin-top: 5px; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums; line-height: 1.15;
   }
-  .metric .v small { font-size: 14px; font-weight: 400; color: hsl(var(--muted-foreground)); }
+  .metric .v small {
+    font-size: 15px; font-weight: 500; color: hsl(var(--muted-foreground));
+    letter-spacing: -.01em;
+  }
   .metric.warn .v { color: hsl(var(--warning)); }
   .metric.bad  .v { color: hsl(var(--destructive)); }
 
@@ -289,11 +301,14 @@
 
   table { width: 100%; border-collapse: collapse; }
   thead th {
-    text-align: left; padding: 10px 15px; white-space: nowrap;
+    text-align: left; padding: 11px 16px; white-space: nowrap;
     font: 500 12px var(--sans); color: hsl(var(--muted-foreground));
     background: hsl(var(--elevated)); border-bottom: 1px solid hsl(var(--border));
   }
-  tbody td { padding: 11px 15px; border-bottom: 1px solid hsl(var(--border)); vertical-align: middle; }
+  tbody td {
+    padding: 13px 16px; vertical-align: middle;
+    border-bottom: 1px solid hsl(var(--border) / .7);
+  }
   tbody tr:last-child td { border-bottom: 0; }
   tbody tr:hover { background: hsl(var(--muted) / .5); }
   td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; }
@@ -301,7 +316,7 @@
   .right { text-align: right; }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
-  .name { font-weight: 500; }
+  .name { font-weight: 600; letter-spacing: -.01em; }
   .sub {
     color: hsl(var(--muted-foreground));
     font: 400 12px var(--mono); word-break: break-all;
@@ -582,13 +597,13 @@
     </div>
 
     <div class="menu">
-      <a data-tab="overview" class="on">Overview</a>
-      <a data-tab="players">Players <i class="c" id="nPlayers">0</i></a>
-      <a data-tab="world">World <i class="c" id="nWorld">0</i></a>
-      <a data-tab="moderation">Moderation <i class="c" id="nBans">0</i></a>
-      <a data-tab="insights">Insights</a>
-      <a data-tab="settings">Settings</a>
-      <a data-tab="log">Log</a>
+      <a data-tab="overview" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h4l3 7 4-16 3 9h4"/></svg>Overview</a>
+      <a data-tab="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/></svg>Players <i class="c" id="nPlayers">0</i></a>
+      <a data-tab="world"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg>World <i class="c" id="nWorld">0</i></a>
+      <a data-tab="moderation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.4-3 7.9-7 9-4-1.1-7-4.6-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Moderation <i class="c" id="nBans">0</i></a>
+      <a data-tab="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>Insights</a>
+      <a data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>Settings</a>
+      <a data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h16M4 18h11"/></svg>Log</a>
     </div>
 
     <div class="navfoot">
