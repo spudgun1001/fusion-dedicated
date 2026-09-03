@@ -222,7 +222,8 @@ public static class Program
         }
         else
         {
-            server.Log("ERROR", "Could not create the Steam lobby. The server is invisible in the browser.");
+            server.Log("WARN", "No Steam lobby yet, so the server is not in the browser. " +
+                               "Steam may still be signing in; trying again every 30s.");
         }
 
         // ---- dashboard ----
@@ -284,6 +285,7 @@ public static class Program
         var lastLobbyUpdate = DateTime.UtcNow;
         var lastTick = DateTime.UtcNow;
         var lastSample = DateTime.UtcNow;
+        var lobbyRetry = new LobbyRetry(TimeSpan.FromSeconds(30));
 
         while (!quit.IsCancellationRequested)
         {
@@ -295,6 +297,15 @@ public static class Program
             {
                 lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
                 lastLobbyUpdate = DateTime.UtcNow;
+            }
+
+            // Steam can take minutes to sign in. Asking once at startup left the
+            // server invisible for good when it had not finished by then.
+            if (lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow)
+                && await lobby.PublishAsync(config.MaxPlayers))
+            {
+                lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
+                server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
             }
 
             if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
