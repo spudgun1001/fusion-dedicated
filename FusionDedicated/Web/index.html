@@ -16,24 +16,25 @@
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 43%;
     --primary: 199 89% 48%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary-foreground: 0 0% 100%;
     --primary-soft: 204 94% 94%;
     /* Darker ramp steps, for text sitting on the soft tints. The 500 is a
        surface colour and does not carry small text on a pale ground. */
     --primary-strong: 201 96% 32%;
     --warning-strong: 38 92% 27%;
     --success-strong: 142 72% 26%;
-    /* The 500-level red is a fill. Small text on a dark ground needs its own,
-       lighter step, which is what BadgerPanel's own notes call for. */
     --destructive-strong: 0 72% 42%;
 
     --series-1: 201 96% 32%;
     --series-2: 142 72% 26%;
     --series-3: 262 70% 45%;
     --series-4: 25 90% 35%;
+
     --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 78%;
+    --input: 214.3 31.8% 80%;
     --ring: 199 89% 36%;
+    --grid: 214 32% 88%;
+
     --destructive: 0 72% 45%;
     --destructive-soft: 0 86% 97%;
     --success: 142 72% 30%;
@@ -43,53 +44,58 @@
     --info: 217 80% 42%;
     --violet: 262 83% 50%;
 
-    --radius: 0.5rem;
-    --radius-sm: 0.375rem;
-    --shadow: 0 1px 2px 0 hsl(222 47% 11% / .06), 0 1px 3px 0 hsl(222 47% 11% / .08);
-    --shadow-lg: 0 4px 6px -1px hsl(222 47% 11% / .07), 0 10px 15px -3px hsl(222 47% 11% / .09);
+    --radius: 8px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 2px hsl(222 47% 11% / .05);
+    --shadow-pop: 0 2px 4px -1px hsl(222 47% 11% / .08), 0 8px 20px -6px hsl(222 47% 11% / .14);
 
     --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
             "Helvetica Neue", Arial, sans-serif;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
             "Liberation Mono", monospace;
 
+    --ease: cubic-bezier(.16, 1, .3, 1);
+
     color-scheme: light;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: 222.2 84% 4.9%;
+      --background: 222 47% 5%;
       --foreground: 210 40% 98%;
-      --card: 222 47% 7%;
-      --elevated: 217.2 32.6% 12%;
-      --muted: 217.2 32.6% 17.5%;
-      --muted-foreground: 215 20.2% 65.1%;
-      --primary: 199 89% 48%;
-      --primary-foreground: 222.2 47.4% 11.2%;
-      --primary-soft: 199 89% 14%;
-      --primary-strong: 199 89% 60%;
-      --warning-strong: 38 92% 55%;
-      --success-strong: 142 64% 52%;
-      --destructive-strong: 0 85% 71%;
+      --card: 222 44% 7.5%;
+      --elevated: 217 33% 11%;
+      --muted: 217 33% 15%;
+      --muted-foreground: 215 20% 63%;
+      --primary: 199 89% 52%;
+      --primary-foreground: 222 47% 8%;
+      --primary-soft: 199 89% 15%;
+      --primary-strong: 199 89% 64%;
+      --warning-strong: 38 92% 60%;
+      --success-strong: 142 64% 56%;
+      --destructive-strong: 0 85% 72%;
 
       --series-1: 199 89% 62%;
       --series-2: 142 64% 55%;
       --series-3: 262 85% 74%;
       --series-4: 30 92% 62%;
-      --border: 217.2 32.6% 17.5%;
-      --input: 217.2 32.6% 26%;
-      --ring: 199 89% 48%;
-      --destructive: 0 72% 51%;
-      --destructive-soft: 0 63% 15%;
-      --success: 142 64% 45%;
-      --success-soft: 142 64% 13%;
-      --warning: 38 92% 50%;
-      --warning-soft: 38 92% 13%;
-      --info: 217 91% 60%;
-      --violet: 258 90% 70%;
 
-      --shadow: 0 1px 2px 0 hsl(0 0% 0% / .3), 0 1px 3px 0 hsl(0 0% 0% / .35);
-      --shadow-lg: 0 4px 6px -1px hsl(0 0% 0% / .35), 0 10px 15px -3px hsl(0 0% 0% / .4);
+      --border: 217 33% 16%;
+      --input: 217 33% 24%;
+      --ring: 199 89% 52%;
+      --grid: 217 33% 14%;
+
+      --destructive: 0 72% 51%;
+      --destructive-soft: 0 63% 14%;
+      --success: 142 64% 45%;
+      --success-soft: 142 64% 12%;
+      --warning: 38 92% 50%;
+      --warning-soft: 38 92% 12%;
+      --info: 217 91% 62%;
+      --violet: 258 90% 72%;
+
+      --shadow: 0 1px 2px hsl(0 0% 0% / .4);
+      --shadow-pop: 0 2px 4px -1px hsl(0 0% 0% / .4), 0 8px 20px -6px hsl(0 0% 0% / .55);
 
       color-scheme: dark;
     }
@@ -102,14 +108,14 @@
     margin: 0;
     background: hsl(var(--background));
     color: hsl(var(--foreground));
-    font: 400 14px/1.55 var(--sans);
+    font: 400 14px/1.5 var(--sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
   }
 
   /* The browser's own surfaces belong to the design too. */
-  ::selection { background: hsl(var(--primary) / .25); }
+  ::selection { background: hsl(var(--primary) / .22); }
   :focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
@@ -118,182 +124,183 @@
   input, textarea, select { caret-color: hsl(var(--primary)); }
   a { color: hsl(var(--primary)); text-underline-offset: 3px; }
 
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / .35);
-    border-radius: 5px;
-    border: 2px solid hsl(var(--background));
+    background: hsl(var(--muted-foreground) / .3);
+    border-radius: 6px;
+    border: 3px solid hsl(var(--background));
   }
-  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .55); }
-  * { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / .35) transparent; }
-
-  /* ---------- surfaces ---------- */
-
-  .frame {
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-  }
-  .frame-in { border-radius: calc(var(--radius) - 1px); overflow: hidden; }
-  .frame.lit { border-color: hsl(var(--primary) / .45); }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / .5); }
+  * { scrollbar-width: thin; scrollbar-color: hsl(var(--muted-foreground) / .3) transparent; }
 
   /* ---------- shell ---------- */
 
-  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100%; }
+  .app { display: grid; grid-template-columns: 228px 1fr; min-height: 100%; }
 
   nav {
     background: hsl(var(--card));
     border-right: 1px solid hsl(var(--border));
-    padding: 18px 0 14px;
+    padding: 20px 0 16px;
     display: flex; flex-direction: column;
     position: sticky; top: 0; height: 100vh;
   }
 
-  .brand { padding: 0 18px 16px; }
-  .brand b { display: block; font: 600 17px/1.2 var(--sans); letter-spacing: -.02em; }
-  .brand span {
-    display: block; font: 400 12px/1.4 var(--sans); margin-top: 2px;
-    color: hsl(var(--muted-foreground));
+  .brand {
+    padding: 0 20px 20px;
+    font: 600 15px var(--sans); letter-spacing: -.02em;
+  }
+  .brand i {
+    font-style: normal; font-weight: 400;
+    color: hsl(var(--muted-foreground)); margin-left: 5px;
   }
 
-  .menu { padding: 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .menu { padding: 0 10px; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
 
   nav a {
     display: flex; align-items: center; gap: 11px;
-    padding: 9px 12px; border-radius: var(--radius-sm);
+    padding: 8px 10px; border-radius: var(--radius-sm);
     color: hsl(var(--muted-foreground)); cursor: pointer;
-    font: 500 14px var(--sans);
-    transition: background .14s ease, color .14s ease;
+    font: 500 13.5px var(--sans);
+    transition: background .12s var(--ease), color .12s var(--ease);
   }
-  nav a svg { width: 17px; height: 17px; flex-shrink: 0; opacity: .85; }
-  nav a:hover { color: hsl(var(--foreground)); background: hsl(var(--muted) / .7); }
-  nav a.on {
-    color: hsl(var(--primary));
-    background: hsl(var(--primary) / .12);
-    font-weight: 600;
-  }
-  nav a.on svg { opacity: 1; }
+  nav a svg { width: 16px; height: 16px; flex-shrink: 0; }
+  nav a:hover { color: hsl(var(--foreground)); background: hsl(var(--muted) / .6); }
+  nav a.on { color: hsl(var(--foreground)); background: hsl(var(--muted)); }
+  nav a.on svg { color: hsl(var(--primary)); }
+
   nav a .c {
-    margin-left: auto; min-width: 22px; text-align: center;
+    margin-left: auto;
     font: 500 12px var(--sans); font-variant-numeric: tabular-nums;
     color: hsl(var(--muted-foreground));
-    background: hsl(var(--muted)); border-radius: 999px; padding: 2px 8px;
   }
-  nav a.on .c {
-    color: hsl(var(--primary));
-    background: hsl(var(--primary) / .16);
-  }
+  nav a.on .c { color: hsl(var(--foreground)); }
 
-  .navfoot { margin-top: auto; padding: 12px 18px 0; border-top: 1px solid hsl(var(--border)); }
+  .navfoot { margin-top: auto; padding: 14px 20px 0; }
   .navfoot div {
-    display: flex; justify-content: space-between; gap: 10px; padding: 3px 0;
+    display: flex; justify-content: space-between; gap: 10px; padding: 2px 0;
     font-size: 12px; color: hsl(var(--muted-foreground));
   }
-  .navfoot span { color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; }
+  .navfoot span {
+    color: hsl(var(--foreground)); font-variant-numeric: tabular-nums;
+    max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 
   main { min-width: 0; }
 
   /* ---------- header ---------- */
 
   header {
-    display: flex; align-items: center; gap: 18px;
-    padding: 0 clamp(16px, 3vw, 28px); min-height: 60px;
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 clamp(20px, 3vw, 36px); min-height: 58px;
     border-bottom: 1px solid hsl(var(--border));
-    background: hsl(var(--background) / .85);
-    backdrop-filter: blur(8px);
+    background: hsl(var(--background) / .8);
+    backdrop-filter: blur(10px);
     position: sticky; top: 0; z-index: 20;
   }
 
-  .status { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .led {
-    width: 8px; height: 8px; border-radius: 999px;
+    width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0;
     background: hsl(var(--success));
-    box-shadow: 0 0 0 3px hsl(var(--success) / .18);
+    box-shadow: 0 0 0 3px hsl(var(--success) / .16);
   }
-  .led.off { background: hsl(var(--destructive)); box-shadow: 0 0 0 3px hsl(var(--destructive) / .18); }
-  .status b { font: 500 13px var(--sans); color: hsl(var(--muted-foreground)); }
+  .led.off { background: hsl(var(--destructive)); box-shadow: 0 0 0 3px hsl(var(--destructive) / .16); }
 
   header h1 {
-    font: 600 17px var(--sans); margin: 0; letter-spacing: -.02em;
+    font: 600 15px var(--sans); margin: 0; letter-spacing: -.015em;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  header .st { font-size: 13px; color: hsl(var(--muted-foreground)); flex-shrink: 0; }
 
-  .readout { margin-left: auto; display: flex; gap: clamp(14px, 2.2vw, 30px); flex-shrink: 0; }
+  .readout { margin-left: auto; display: flex; gap: clamp(18px, 2.4vw, 34px); flex-shrink: 0; }
   .readout div { text-align: right; }
-  .readout .k { font-size: 12px; color: hsl(var(--muted-foreground)); }
+  .readout .k { font-size: 11.5px; color: hsl(var(--muted-foreground)); }
   .readout .v {
-    font: 500 14px var(--mono); font-variant-numeric: tabular-nums;
-    color: hsl(var(--foreground));
+    font: 500 13.5px var(--mono); font-variant-numeric: tabular-nums;
+    margin-top: 1px;
   }
 
   /* ---------- views ---------- */
 
-  .view { padding: clamp(24px, 2.8vw, 34px) clamp(18px, 3vw, 32px) 80px; max-width: 1240px; display: none; }
-  .view.on { display: block; }
+  .view {
+    padding: clamp(26px, 3vw, 38px) clamp(20px, 3vw, 36px) 90px;
+    max-width: 1180px; display: none;
+  }
+  .view.on { display: block; animation: rise .22s var(--ease) both; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: none; }
+  }
 
   h2 {
-    font: 600 20px var(--sans); letter-spacing: -.02em;
-    color: hsl(var(--foreground)); margin: 0 0 14px;
+    font: 600 14px var(--sans); letter-spacing: -.005em;
+    margin: 40px 0 13px;
   }
-  h2:not(:first-child) { margin-top: 44px; }
-
-  .hint { color: hsl(var(--muted-foreground)); font-size: 14px; margin: -8px 0 18px; max-width: 68ch; line-height: 1.5; }
-
-  /* ---------- metrics ---------- */
-
-  /* Hairlines inside the one card, rather than a card per metric: the strip
-     already sits in a frame and cards inside cards read as clutter. */
-  /* Each figure is its own card, so a part-filled last row simply ends rather
-     than leaving ruled empty cells. The wrapper stops being a card so there are
-     no boxes inside boxes. */
-  .frame:has(> .frame-in > .metrics) {
-    background: none; border: 0; box-shadow: none;
+  .view > h2:first-child { margin-top: 0; }
+  h2 .n {
+    font-weight: 400; color: hsl(var(--muted-foreground));
+    font-variant-numeric: tabular-nums; margin-left: 6px;
   }
-  .metrics {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
-    gap: 12px;
-  }
-  .metric {
-    padding: 16px 18px;
-    background: hsl(var(--card));
+
+  /* ---------- panels ---------- */
+  /* One hairline surface holds lists. Forms sit on the page itself, so the view
+     is not a stack of identical boxes. */
+
+  .panel {
     border: 1px solid hsl(var(--border));
     border-radius: var(--radius);
+    background: hsl(var(--card));
+    overflow: hidden;
   }
-  .metric .k { font-size: 12px; color: hsl(var(--muted-foreground)); letter-spacing: .01em; }
-  .metric .v {
-    font: 600 28px var(--sans); margin-top: 5px; letter-spacing: -.03em;
-    font-variant-numeric: tabular-nums; line-height: 1.15;
+
+  /* ---------- figures ---------- */
+  /* Hairline-separated cells in one surface, rather than a card per number. */
+
+  /* Separators are drawn by each cell and clipped at the edges, so a part-filled
+     last row simply ends instead of leaving ruled empty boxes. */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+    overflow: hidden;
   }
-  .metric .v small {
-    font-size: 15px; font-weight: 500; color: hsl(var(--muted-foreground));
+  .stat {
+    padding: 13px 16px 15px;
+    box-shadow: 1px 0 0 hsl(var(--border)), 0 1px 0 hsl(var(--border));
+  }
+  .stat .k { font-size: 12px; color: hsl(var(--muted-foreground)); }
+  .stat .v {
+    font: 600 21px var(--sans); margin-top: 3px; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap;
+  }
+  .stat .v small {
+    font-size: 14px; font-weight: 500; color: hsl(var(--muted-foreground));
     letter-spacing: -.01em;
   }
-  .metric.warn .v { color: hsl(var(--warning)); }
-  .metric.bad  .v { color: hsl(var(--destructive)); }
+  .stat.warn .v { color: hsl(var(--warning)); }
+  .stat.bad  .v { color: hsl(var(--destructive)); }
 
   /* ---------- charts ---------- */
 
-  .charts { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .charts { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
 
   .chart-head {
     display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-    padding: 13px 16px 10px; border-bottom: 1px solid hsl(var(--border));
+    padding: 12px 15px 10px;
   }
-  .chart-head .title {
-    font: 600 14px var(--sans); color: hsl(var(--foreground)); margin-right: auto;
-  }
+  .chart-head .title { font: 500 13px var(--sans); margin-right: auto; }
   .chart-head .key {
     display: flex; align-items: center; gap: 6px;
     font: 400 12px var(--sans); color: hsl(var(--muted-foreground));
+    font-variant-numeric: tabular-nums;
   }
-  .chart-head .key i { width: 9px; height: 9px; border-radius: 2px; }
+  .chart-head .key i { width: 8px; height: 8px; border-radius: 2px; }
 
-  .chart svg { display: block; width: 100%; height: 150px; }
+  .chart svg { display: block; width: 100%; height: 132px; }
   .chart-axis {
-    display: flex; justify-content: space-between; padding: 8px 16px 12px;
-    font: 400 12px var(--mono); font-variant-numeric: tabular-nums;
+    display: flex; justify-content: space-between; padding: 9px 15px 12px;
+    font: 400 11.5px var(--mono); font-variant-numeric: tabular-nums;
     color: hsl(var(--muted-foreground));
   }
 
@@ -301,95 +308,81 @@
 
   table { width: 100%; border-collapse: collapse; }
   thead th {
-    text-align: left; padding: 11px 16px; white-space: nowrap;
+    text-align: left; padding: 9px 15px; white-space: nowrap;
     font: 500 12px var(--sans); color: hsl(var(--muted-foreground));
-    background: hsl(var(--elevated)); border-bottom: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
   }
   tbody td {
-    padding: 13px 16px; vertical-align: middle;
-    border-bottom: 1px solid hsl(var(--border) / .7);
+    padding: 11px 15px; vertical-align: middle;
+    border-bottom: 1px solid hsl(var(--border) / .65);
   }
   tbody tr:last-child td { border-bottom: 0; }
-  tbody tr:hover { background: hsl(var(--muted) / .5); }
-  td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+  tbody tr { transition: background .1s var(--ease); }
+  tbody tr:hover { background: hsl(var(--muted) / .45); }
+  td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12.5px; }
   td.dim { color: hsl(var(--muted-foreground)); }
   .right { text-align: right; }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 
-  .name { font-weight: 600; letter-spacing: -.01em; }
+  .name { font-weight: 500; }
   .sub {
     color: hsl(var(--muted-foreground));
-    font: 400 12px var(--mono); word-break: break-all;
+    font: 400 11.5px var(--mono); word-break: break-all; margin-top: 2px;
   }
 
   /* ---------- chips ---------- */
 
   .chip {
-    display: inline-flex; align-items: center; padding: 2px 9px;
-    font: 500 12px var(--sans); border-radius: 999px;
-    border: 1px solid hsl(var(--border));
+    display: inline-flex; align-items: center; padding: 1px 8px;
+    font: 500 12px var(--sans); border-radius: 5px;
     color: hsl(var(--muted-foreground)); background: hsl(var(--muted));
   }
-  .chip.owner {
-    color: hsl(var(--warning-strong)); border-color: hsl(var(--warning) / .35);
-    background: hsl(var(--warning-soft));
-  }
-  .chip.operator {
-    color: hsl(var(--primary-strong)); border-color: hsl(var(--primary) / .35);
-    background: hsl(var(--primary-soft));
-  }
-  .chip.guest {
-    color: hsl(var(--destructive-strong)); border-color: hsl(var(--destructive) / .35);
-    background: hsl(var(--destructive-soft));
-  }
-  .chip.orphan {
-    color: hsl(var(--warning-strong)); border-color: hsl(var(--warning) / .35);
-    background: hsl(var(--warning-soft));
-  }
-  .chip.live {
-    color: hsl(var(--success-strong)); border-color: hsl(var(--success) / .35);
-    background: hsl(var(--success-soft));
-  }
+  .chip.role { text-transform: capitalize; }
+  .chip.owner    { color: hsl(var(--warning-strong));     background: hsl(var(--warning-soft)); }
+  .chip.operator { color: hsl(var(--primary-strong));     background: hsl(var(--primary-soft)); }
+  .chip.guest    { color: hsl(var(--destructive-strong)); background: hsl(var(--destructive-soft)); }
+  .chip.orphan   { color: hsl(var(--warning-strong));     background: hsl(var(--warning-soft)); }
+  .chip.live     { color: hsl(var(--success-strong));     background: hsl(var(--success-soft)); }
 
   /* ---------- controls ---------- */
 
   button {
     background: hsl(var(--card)); color: hsl(var(--foreground));
     border: 1px solid hsl(var(--input)); border-radius: var(--radius-sm);
-    padding: 6px 12px; cursor: pointer;
-    font: 500 13px var(--sans);
-    transition: background .12s, border-color .12s, color .12s;
+    padding: 5px 11px; cursor: pointer;
+    font: 500 12.5px var(--sans);
+    transition: background .11s var(--ease), border-color .11s var(--ease), color .11s var(--ease);
   }
   button:hover { background: hsl(var(--muted)); }
-  button.warn { color: hsl(var(--warning)); border-color: hsl(var(--warning) / .4); }
-  button.warn:hover { background: hsl(var(--warning-soft)); }
-  button.bad { color: hsl(var(--destructive-strong)); border-color: hsl(var(--destructive) / .4); }
-  button.bad:hover { background: hsl(var(--destructive-soft)); }
-  button:disabled { opacity: .5; cursor: not-allowed; }
-  button:disabled:hover { background: hsl(var(--card)); }
+  button:active { transform: translateY(.5px); }
+  button.warn { color: hsl(var(--warning-strong)); }
+  button.warn:hover { background: hsl(var(--warning-soft)); border-color: hsl(var(--warning) / .45); }
+  button.bad { color: hsl(var(--destructive-strong)); }
+  button.bad:hover { background: hsl(var(--destructive-soft)); border-color: hsl(var(--destructive) / .45); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:disabled:hover { background: hsl(var(--card)); border-color: hsl(var(--input)); }
 
   button.go {
     background: hsl(var(--primary)); border-color: hsl(var(--primary));
     color: hsl(var(--primary-foreground));
-    padding: 9px 18px; font-size: 14px;
+    padding: 8px 16px; font-size: 13px;
   }
-  button.go:hover { background: hsl(var(--primary) / .9); }
-  button.go:disabled { opacity: .5; }
+  button.go:hover { background: hsl(var(--primary) / .88); border-color: hsl(var(--primary) / .88); }
   button.go:disabled:hover { background: hsl(var(--primary)); }
 
   button.danger {
     background: hsl(var(--destructive)); border-color: hsl(var(--destructive));
-    color: #fff; padding: 9px 18px; font-size: 14px;
+    color: #fff; padding: 8px 16px; font-size: 13px;
   }
-  button.danger:hover { background: hsl(var(--destructive) / .9); }
+  button.danger:hover { background: hsl(var(--destructive) / .88); }
 
   .seg {
     display: inline-flex; padding: 2px; gap: 2px;
     background: hsl(var(--muted)); border-radius: var(--radius-sm);
   }
   .seg button {
-    border: 0; background: transparent; padding: 4px 10px;
-    border-radius: calc(var(--radius-sm) - 2px);
+    border: 0; background: transparent; padding: 3px 9px;
+    border-radius: 4px;
     font-size: 12px; color: hsl(var(--muted-foreground));
   }
   .seg button:hover { color: hsl(var(--foreground)); background: transparent; }
@@ -401,126 +394,129 @@
   input, select, textarea {
     background: hsl(var(--background)); border: 1px solid hsl(var(--input));
     color: hsl(var(--foreground));
-    border-radius: var(--radius-sm); padding: 8px 11px; width: 100%;
-    font: 400 14px var(--sans);
-    transition: border-color .12s, box-shadow .12s;
+    border-radius: var(--radius-sm); padding: 7px 10px; width: 100%;
+    font: 400 13.5px var(--sans);
+    transition: border-color .11s var(--ease), box-shadow .11s var(--ease);
   }
   input:focus, select:focus, textarea:focus {
     outline: 0; border-color: hsl(var(--ring));
-    box-shadow: 0 0 0 3px hsl(var(--ring) / .18);
+    box-shadow: 0 0 0 3px hsl(var(--ring) / .15);
   }
-  input.m, textarea.m { font-family: var(--mono); font-size: 13px; }
-  input::placeholder, textarea::placeholder { color: hsl(var(--muted-foreground)); }
-  textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
+  input.m, textarea.m { font-family: var(--mono); font-size: 12.5px; }
+  input::placeholder, textarea::placeholder { color: hsl(var(--muted-foreground) / .8); }
+  textarea { resize: vertical; min-height: 62px; line-height: 1.5; }
 
   label {
-    display: block; margin-bottom: 6px;
-    font: 500 13px var(--sans); color: hsl(var(--foreground));
+    display: block; margin-bottom: 5px;
+    font: 400 12px var(--sans); color: hsl(var(--muted-foreground));
   }
 
-  .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .fields {
+    display: grid; gap: 14px; max-width: 760px;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
   .fields .full { grid-column: 1 / -1; }
 
-  .pad { padding: clamp(16px, 2.2vw, 20px); }
+  .pad { padding: 15px; }
+
+  /* Settings is a form, so its panels share the form's measure rather than
+     running the full width of the page. */
+  #v-settings .panel { max-width: 760px; }
 
   /* ---------- rich text ---------- */
 
   .rt-bar {
-    display: flex; gap: 5px; flex-wrap: wrap; align-items: center;
-    padding: 7px 8px; background: hsl(var(--elevated));
+    display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+    padding: 6px 7px; background: hsl(var(--elevated));
     border: 1px solid hsl(var(--input)); border-bottom: 0;
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   }
-  .rt-bar button { padding: 3px 9px; min-width: 30px; }
+  .rt-bar + textarea { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+  .rt-bar button { padding: 2px 8px; min-width: 28px; }
   .rt-bar .sw {
-    width: 22px; height: 22px; border: 1px solid hsl(var(--border));
-    border-radius: var(--radius-sm); cursor: pointer; padding: 0;
+    width: 20px; height: 20px; border: 1px solid hsl(var(--border));
+    border-radius: 4px; cursor: pointer; padding: 0; min-width: 0;
   }
   .rt-bar .sw:hover { border-color: hsl(var(--ring)); }
-  .rt-bar .gap { width: 1px; height: 18px; background: hsl(var(--border)); margin: 0 3px; }
+  .rt-bar .gap { width: 1px; height: 16px; background: hsl(var(--border)); margin: 0 3px; }
 
   .rt-preview {
-    margin-top: 10px; padding: 12px 14px; min-height: 46px;
-    border: 1px dashed hsl(var(--input)); border-radius: var(--radius-sm);
+    margin-top: 8px; padding: 10px 12px; min-height: 42px;
+    border: 1px solid hsl(var(--border)); border-radius: var(--radius-sm);
     background: hsl(var(--elevated));
-    font-size: 16px; line-height: 1.45; word-break: break-word;
-  }
-  .rt-preview:empty::before {
-    content: 'Nothing to preview yet';
-    color: hsl(var(--muted-foreground)); font: 400 13px var(--sans);
+    font-size: 15px; line-height: 1.45; word-break: break-word;
   }
 
   /* ---------- rows ---------- */
 
-  .rows {
-    display: grid; border: 1px solid hsl(var(--border));
-    border-radius: var(--radius); overflow: hidden; background: hsl(var(--card));
-  }
+  .rows { display: grid; }
   .rows .row + .row { border-top: 1px solid hsl(var(--border)); }
   .row {
     display: flex; align-items: center; gap: 16px;
-    padding: 13px clamp(14px, 2vw, 18px);
+    padding: 11px 15px;
+    font: 500 13.5px var(--sans);
+    transition: background .1s var(--ease);
   }
   .row .t { flex: 1; min-width: 0; }
-  .row .t b { display: block; font: 500 14px var(--sans); }
-  .row .t span { font-size: 12px; color: hsl(var(--muted-foreground)); }
-  label.row { margin: 0; cursor: pointer; }
-  label.row:hover { background: hsl(var(--muted) / .5); }
+  label.row { margin: 0; cursor: pointer; color: hsl(var(--foreground)); }
+  label.row:hover { background: hsl(var(--muted) / .45); }
 
   .switch {
-    width: 40px; height: 22px; border-radius: 999px;
+    width: 36px; height: 20px; border-radius: 999px;
     background: hsl(var(--input)); border: 0;
-    position: relative; flex-shrink: 0; transition: background .15s;
+    position: relative; flex-shrink: 0;
+    transition: background .16s var(--ease);
   }
   .switch::after {
     content: ''; position: absolute; top: 2px; left: 2px;
-    width: 18px; height: 18px; border-radius: 999px;
-    background: #fff; box-shadow: var(--shadow); transition: left .15s;
+    width: 16px; height: 16px; border-radius: 999px;
+    background: #fff; box-shadow: var(--shadow);
+    transition: left .16s var(--ease);
   }
   .switch.on { background: hsl(var(--primary)); }
-  .switch.on::after { left: 20px; }
+  .switch.on::after { left: 18px; }
 
   /* ---------- action bar ---------- */
 
   .bar {
-    position: sticky; bottom: 0; z-index: 10; margin-top: 26px;
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 14px 0 10px; border-top: 1px solid hsl(var(--border));
+    margin-top: 28px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 0; border-top: 1px solid hsl(var(--border));
     background: hsl(var(--background));
   }
-  .bar.flat { position: static; border-top: 0; padding: 16px 0 0; margin-top: 4px; }
-  .bar .note { font-size: 13px; color: hsl(var(--muted-foreground)); }
-  .bar .note.dirty { color: hsl(var(--warning)); font-weight: 500; }
+  /* Sticky only while there is something to save, so it never sits over the
+     fields it belongs to. */
+  body.dirty .bar:not(.flat) { position: sticky; bottom: 0; z-index: 10; }
+  .bar.flat { border-top: 0; padding: 14px 0 0; margin-top: 0; max-width: 760px; }
+  .bar .note { font-size: 12.5px; color: hsl(var(--muted-foreground)); }
+  .bar .note.dirty { color: hsl(var(--warning-strong)); font-weight: 500; }
 
   /* ---------- log ---------- */
 
   .log {
-    font: 13px/1.7 var(--mono);
-    max-height: min(62vh, 640px); overflow-y: auto;
+    font: 12.5px/1.65 var(--mono);
+    max-height: min(64vh, 660px); overflow-y: auto;
   }
   .log .r {
-    display: flex; gap: 14px; padding: 4px 15px;
-    border-bottom: 1px solid hsl(var(--border) / .6);
+    display: flex; gap: 13px; padding: 3px 15px;
   }
-  .log .r:hover { background: hsl(var(--muted) / .5); }
+  .log .r:hover { background: hsl(var(--muted) / .45); }
   .log .ts { color: hsl(var(--muted-foreground)); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-  .log .lv { width: 52px; flex-shrink: 0; font-weight: 600; font-size: 12px; }
-  .log .msg { color: hsl(var(--foreground)); word-break: break-word; }
+  .log .lv { width: 48px; flex-shrink: 0; font-weight: 600; font-size: 11.5px; }
+  .log .msg { word-break: break-word; }
   .lv.INFO  { color: hsl(var(--info)); }
-  .lv.WARN  { color: hsl(var(--warning)); }
+  .lv.WARN  { color: hsl(var(--warning-strong)); }
   .lv.ERROR { color: hsl(var(--destructive-strong)); }
-  .lv.JOIN  { color: hsl(var(--success)); }
+  .lv.JOIN  { color: hsl(var(--success-strong)); }
   .lv.LEAVE { color: hsl(var(--violet)); }
 
-  .filters { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
-  .filters input { width: min(280px, 100%); }
+  .filters { display: flex; gap: 10px; margin-bottom: 13px; align-items: center; flex-wrap: wrap; }
+  .filters input { width: min(260px, 100%); }
 
-  .empty { padding: 40px 18px; text-align: center; }
-  .empty b {
-    display: block; color: hsl(var(--foreground)); margin-bottom: 4px;
-    font: 500 14px var(--sans);
+  .empty {
+    padding: 34px 16px; text-align: center;
+    font-size: 13px; color: hsl(var(--muted-foreground));
   }
-  .empty span { color: hsl(var(--muted-foreground)); font-size: 13px; }
 
   /* ================= responsive ================= */
 
@@ -533,12 +529,12 @@
       overflow-x: auto; scrollbar-width: none;
     }
     nav::-webkit-scrollbar { display: none; }
-    .brand { padding: 12px 16px; flex-shrink: 0; }
-    .brand span { display: none; }
+    .brand { padding: 13px 16px; flex-shrink: 0; }
+    .brand i { display: none; }
     .menu { flex-direction: row; padding: 8px; overflow: visible; }
-    nav a { white-space: nowrap; padding: 8px 12px; }
+    nav a { white-space: nowrap; }
     .navfoot { display: none; }
-    header { top: 55px; }
+    header { top: 53px; }
   }
 
   @media (max-width: 640px) {
@@ -547,6 +543,7 @@
       display: grid; grid-template-columns: auto 1fr; align-items: center;
     }
     header h1 { grid-column: 2; }
+    header .st { display: none; }
     .readout {
       grid-column: 1 / -1; margin-left: 0; justify-content: space-between; width: 100%;
       padding-top: 10px; border-top: 1px solid hsl(var(--border));
@@ -554,24 +551,27 @@
     .readout div { text-align: left; }
     .readout div:last-child { text-align: right; }
 
-    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .stats { grid-template-columns: repeat(2, 1fr); }
     .charts { grid-template-columns: 1fr; }
 
     /* A seven-column table at 375px is unreadable, so each row becomes a record. */
     .stack thead { display: none; }
-    .stack tr { border-bottom: 1px solid hsl(var(--border)); padding: 8px 0; }
+    .stack tr { border-bottom: 1px solid hsl(var(--border)); padding: 7px 0; }
     .stack tr:last-child { border-bottom: 0; }
     /* One rule owns display here. A separate, more specific `display: block`
        silently beat the grid and ran each label into its value. */
     .stack tbody tr td {
-      border: 0; padding: 5px 15px; text-align: left; width: 100%;
-      display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+      border: 0; padding: 4px 15px; text-align: left; width: 100%;
+      display: grid; grid-template-columns: 88px 1fr; gap: 12px;
       align-items: center; justify-items: start;
     }
     .stack td::before {
       content: attr(data-label);
-      font: 500 12px var(--sans); color: hsl(var(--muted-foreground));
+      font: 400 12px var(--sans); color: hsl(var(--muted-foreground));
     }
+    /* A cell holding a name and its barcode is two grid items, so without this
+       the second one falls back into the label column. */
+    .stack td > .name, .stack td > .sub { grid-column: 2; }
     .stack .acts { justify-content: flex-start; }
 
     .row { flex-wrap: wrap; }
@@ -579,7 +579,7 @@
     .bar { flex-direction: column; align-items: stretch; }
     .bar button { width: 100%; }
     .bar .note { text-align: center; }
-    .log .r { flex-wrap: wrap; gap: 6px 12px; }
+    .log .r { flex-wrap: wrap; gap: 5px 12px; }
     .log .msg { flex: 1 1 100%; }
   }
 
@@ -595,7 +595,20 @@
   body[data-role="viewer"] button.danger,
   body[data-role="viewer"] .bar { display: none; }
 
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, .view.on { transition: none !important; animation: none !important; }
+  }
+
+  /* ---------- section head that carries an action ---------- */
+
+  .sec {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin: 40px 0 13px;
+  }
+  .view > .sec:first-child { margin-top: 0; }
+  .sec h2 { margin: 0; }
+  .sec .aside { display: flex; align-items: center; gap: 10px; }
+  .sec .note { font-size: 12.5px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -603,19 +616,16 @@
 <div class="app">
 
   <nav>
-    <div class="brand">
-      <b>Fusion</b>
-      <span>Dedicated Relay</span>
-    </div>
+    <div class="brand">Fusion<i>Dedicated</i></div>
 
     <div class="menu">
-      <a data-tab="overview" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h4l3 7 4-16 3 9h4"/></svg>Overview</a>
-      <a data-tab="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/></svg>Players <i class="c" id="nPlayers">0</i></a>
-      <a data-tab="world"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg>World <i class="c" id="nWorld">0</i></a>
-      <a data-tab="moderation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.4-3 7.9-7 9-4-1.1-7-4.6-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Moderation <i class="c" id="nBans">0</i></a>
-      <a data-tab="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>Insights</a>
-      <a data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>Settings</a>
-      <a data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h16M4 18h11"/></svg>Log</a>
+      <a data-tab="overview" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h4l3 7 4-16 3 9h4"/></svg>Overview</a>
+      <a data-tab="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/></svg>Players <i class="c" id="nPlayers">0</i></a>
+      <a data-tab="world"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18"/></svg>World <i class="c" id="nWorld">0</i></a>
+      <a data-tab="moderation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.4-3 7.9-7 9-4-1.1-7-4.6-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Moderation <i class="c" id="nBans">0</i></a>
+      <a data-tab="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>Insights</a>
+      <a data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>Settings</a>
+      <a data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h16M4 18h11"/></svg>Log</a>
     </div>
 
     <div class="navfoot">
@@ -627,336 +637,269 @@
 
   <main>
     <header>
-      <div class="status"><i class="led" id="led"></i><b id="statusText">linking</b></div>
+      <i class="led" id="led"></i>
       <h1 id="hName">Fusion Dedicated</h1>
+      <span class="st" id="statusText">Connecting</span>
       <div class="readout">
         <div><div class="k">Code</div><div class="v" id="hCode">-</div></div>
-        <div><div class="k">Crew</div><div class="v" id="hPlayers">-</div></div>
+        <div><div class="k">Players</div><div class="v" id="hPlayers">-</div></div>
         <div><div class="k">Uptime</div><div class="v" id="hUptime">-</div></div>
       </div>
     </header>
 
     <!-- ========== OVERVIEW ========== -->
     <section class="view on" id="v-overview">
-      <h2>Telemetry</h2>
-      <div class="frame lit"><div class="frame-in"><div class="metrics" id="metrics"></div></div></div>
+      <div class="stats" id="metrics"></div>
 
-      <h2>Crew aboard</h2>
-      <div class="frame"><div class="frame-in" id="overviewPlayers"></div></div>
+      <h2>Players</h2>
+      <div class="panel" id="overviewPlayers"></div>
 
       <h2>Activity</h2>
-      <div class="frame"><div class="frame-in"><div class="log" id="miniLog" style="max-height:300px"></div></div></div>
+      <div class="panel"><div class="log" id="miniLog" style="max-height:290px"></div></div>
     </section>
 
+    <!-- ========== PLAYERS ========== -->
     <section class="view" id="v-players">
-      <h2>Connected players</h2>
-      <p class="hint">
-        Rank changes apply immediately, nobody has to reconnect. A rank is stored
-        against the SteamID, so it still holds next time they join. Purge deletes
-        everything a player has spawned without removing the player.
-      </p>
-      <div class="frame"><div class="frame-in" id="players"></div></div>
+      <div class="panel" id="players"></div>
     </section>
 
+    <!-- ========== WORLD ========== -->
     <section class="view" id="v-world">
-      <h2>Current level</h2>
-      <div class="frame lit"><div class="frame-in pad" id="currentLevel"></div></div>
+      <h2>Level</h2>
+      <div class="panel"><div class="pad" id="currentLevel"></div></div>
 
-      <h2>Map list</h2>
-      <p class="hint">
-        Loading a map sends everyone to it and clears the world, since entities belong
-        to the level they spawned in. For a modded map, give its mod.io id, a player
-        who does not have it asks the server which mod to fetch, and downloads it.
-      </p>
-      <div class="frame"><div class="frame-in" id="levels"></div></div>
+      <h2>Maps</h2>
+      <div class="panel" id="levels"></div>
 
-      <h2>Add a map</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div class="full">
-            <label>Vanilla level</label>
-            <select id="mVanilla" onchange="pickVanilla()">
-              <option value="">- pick to fill the fields below -</option>
-            </select>
-          </div>
-          <div class="full"><label>Title</label><input id="mTitle" placeholder="Museum Basement"></div>
-          <div class="full"><label>Barcode</label><input id="mBarcode" class="m" placeholder="Author.Pallet.Level.Name"></div>
-          <div><label>mod.io id</label><input id="mModId" class="m" type="number" placeholder="-1 for vanilla"></div>
-          <div><label>Modfile id</label><input id="mFileId" class="m" type="number" placeholder="optional"></div>
+      <h2>Add Map</h2>
+      <div class="fields">
+        <div class="full">
+          <label>Preset</label>
+          <select id="mVanilla" onchange="pickVanilla()">
+            <option value="">Choose a level</option>
+          </select>
         </div>
-        <div class="bar flat">
-          <button class="go" onclick="addLevel()">Save to list</button>
-          <button onclick="addLevel(true)">Save and load now</button>
-        </div>
-      </div></div>
+        <div class="full"><label>Title</label><input id="mTitle" placeholder="Museum Basement"></div>
+        <div class="full"><label>Barcode</label><input id="mBarcode" class="m" placeholder="Author.Pallet.Level.Name"></div>
+        <div><label>mod.io ID</label><input id="mModId" class="m" type="number" placeholder="-1 for vanilla"></div>
+        <div><label>File ID</label><input id="mFileId" class="m" type="number" placeholder="optional"></div>
+      </div>
+      <div class="bar flat">
+        <button class="go" onclick="addLevel()">Save</button>
+        <button onclick="addLevel(true)">Save and load</button>
+      </div>
 
-      <h2>Mod catalogue <span class="chip" id="mcCount">0</span></h2>
-      <p class="hint">
-        The server owns no mods, so it cannot look a modded item up itself. When a
-        player asks where one came from, the server forwards the question to whoever
-        spawned it and remembers the answer, after which it can serve that mod to
-        anyone, including people who join long after the original owner left.
-      </p>
-      <div class="frame"><div class="frame-in" id="modCatalog"></div></div>
+      <div class="sec"><h2>Mods<span class="n" id="mcCount">0</span></h2></div>
+      <div class="panel" id="modCatalog"></div>
 
-      <h2>Server picture</h2>
-      <p class="hint">
-        The browser draws a server's picture from the level's mod.io thumbnail, so
-        setting a mod.io id on the current map is what gives this server a custom
-        image. There is no way to point it at an arbitrary URL, the id is the hook.
-      </p>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div><label>Thumbnail mod.io id</label><input id="mThumb" class="m" type="number"></div>
-          <div style="display:flex;align-items:flex-end">
-            <button class="go" onclick="setThumb()">Apply to current map</button>
-          </div>
+      <h2>Thumbnail</h2>
+      <div class="fields">
+        <div><label>mod.io ID</label><input id="mThumb" class="m" type="number"></div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="go" onclick="setThumb()">Apply</button>
         </div>
-      </div></div>
-      <h2>World control</h2>
-      <p class="hint">
-        The server owns nothing and simulates nothing, it only remembers what exists
-        so late joiners can be caught up. An entity whose owner left has no machine
-        applying physics to it and hangs in place until it is culled.
-      </p>
-      <div class="frame"><div class="frame-in pad">
-        <div class="bar flat" style="margin:0;padding:0">
-          <button class="danger" onclick="clearWorld()">Clear every entity</button>
+      </div>
+
+      <div class="sec">
+        <h2>Entities</h2>
+        <div class="aside">
           <span class="note" id="worldNote"></span>
+          <button class="bad" onclick="clearWorld()">Clear all</button>
         </div>
-      </div></div>
-
-      <h2>Tracked entities</h2>
-      <div class="frame"><div class="frame-in" id="entities"></div></div>
+      </div>
+      <div class="panel" id="entities"></div>
     </section>
 
+    <!-- ========== MODERATION ========== -->
     <section class="view" id="v-moderation">
-      <h2>Saved ranks</h2>
-      <p class="hint">
-        Anyone not listed joins as Default. Guest sits below Default, for holding
-        someone back from features you have opened up to everyone.
-      </p>
-      <div class="frame"><div class="frame-in" id="ranks"></div></div>
+      <h2>Ranks</h2>
+      <div class="panel" id="ranks"></div>
 
-      <h2>Assign by SteamID</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div><label>SteamID64</label><input id="rId" class="m" placeholder="76561198000000000"></div>
-          <div><label>Name</label><input id="rName" placeholder="optional, for your reference"></div>
-          <div>
-            <label>Rank</label>
-            <select id="rLevel">
-              <option value="-1">Guest</option>
-              <option value="0">Default</option>
-              <option value="1" selected>Operator</option>
-              <option value="2">Owner</option>
-            </select>
-          </div>
+      <h2>Assign Rank</h2>
+      <div class="fields">
+        <div><label>SteamID</label><input id="rId" class="m" placeholder="76561198000000000"></div>
+        <div><label>Name</label><input id="rName" placeholder="optional"></div>
+        <div>
+          <label>Rank</label>
+          <select id="rLevel">
+            <option value="-1">Guest</option>
+            <option value="0">Default</option>
+            <option value="1" selected>Operator</option>
+            <option value="2">Owner</option>
+          </select>
         </div>
-        <div class="bar flat"><button class="go" onclick="addRank()">Assign rank</button></div>
-      </div></div>
-      <h2>Ban list</h2>
-      <p class="hint">
-        A banned SteamID is refused during the handshake, before it is ever given a
-        player slot. The reason recorded here is what they are shown.
-      </p>
-      <div class="frame"><div class="frame-in" id="bans"></div></div>
+      </div>
+      <div class="bar flat"><button class="go" onclick="addRank()">Assign</button></div>
 
-      <h2>Ban by SteamID</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div><label>SteamID64</label><input id="bId" class="m" placeholder="76561198000000000"></div>
-          <div><label>Name</label><input id="bName" placeholder="optional"></div>
-          <div class="full"><label>Reason</label><input id="bReason" placeholder="Banned from Server"></div>
-        </div>
-        <div class="bar flat"><button class="go" onclick="addBan()">Add ban</button></div>
-      </div></div>
+      <h2>Bans</h2>
+      <div class="panel" id="bans"></div>
+
+      <h2>Add Ban</h2>
+      <div class="fields">
+        <div><label>SteamID</label><input id="bId" class="m" placeholder="76561198000000000"></div>
+        <div><label>Name</label><input id="bName" placeholder="optional"></div>
+        <div class="full"><label>Reason</label><input id="bReason" placeholder="Banned from Server"></div>
+      </div>
+      <div class="bar flat"><button class="go" onclick="addBan()">Ban</button></div>
     </section>
 
+    <!-- ========== INSIGHTS ========== -->
     <section class="view" id="v-insights">
-      <h2>Session analytics</h2>
-      <p class="hint">
-        Sampled every five seconds and held in memory, so the graphs reset when the
-        server restarts.
-      </p>
-      <div class="filters">
+      <div class="sec">
+        <h2>Traffic</h2>
         <div class="seg" id="rangeSeg"></div>
       </div>
       <div class="charts">
-        <div class="frame"><div class="frame-in"><div class="chart" id="cPlayers"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cEntities"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cPackets"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cBandwidth"></div></div></div>
-      </div>
-      <h2>Process</h2>
-      <div class="filters"><div class="seg" id="rangeSegRes"></div></div>
-      <div class="frame lit"><div class="frame-in"><div class="metrics" id="resMetrics"></div></div></div>
-
-      <div class="charts" style="margin-top:16px">
-        <div class="frame"><div class="frame-in"><div class="chart" id="cCpu"></div></div></div>
-        <div class="frame"><div class="frame-in"><div class="chart" id="cMemory"></div></div></div>
+        <div class="panel"><div class="chart" id="cPlayers"></div></div>
+        <div class="panel"><div class="chart" id="cEntities"></div></div>
+        <div class="panel"><div class="chart" id="cPackets"></div></div>
+        <div class="panel"><div class="chart" id="cBandwidth"></div></div>
       </div>
 
-      <h2>Host machine</h2>
-      <div class="frame"><div class="frame-in"><div class="metrics" id="hostMetrics"></div></div></div>
+      <div class="sec">
+        <h2>Process</h2>
+        <div class="seg" id="rangeSegRes"></div>
+      </div>
+      <div class="stats" id="resMetrics"></div>
+      <div class="charts" style="margin-top:12px">
+        <div class="panel"><div class="chart" id="cCpu"></div></div>
+        <div class="panel"><div class="chart" id="cMemory"></div></div>
+      </div>
+
+      <h2>Host</h2>
+      <div class="stats" id="hostMetrics"></div>
     </section>
 
+    <!-- ========== SETTINGS ========== -->
     <section class="view" id="v-settings">
-      <h2>Server control</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div class="full">
-            <label>Restart notice</label>
-            <input id="fRestartMsg" value="Server is restarting, please wait a few minutes.">
-          </div>
-        </div>
-        <div class="bar flat">
-          <button class="danger" onclick="restartServer()">Restart server</button>
-          <span class="note">Everyone is disconnected with the notice above, then the process relaunches.</span>
-        </div>
-      </div></div>
-
       <h2>Identity</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div class="full">
-            <label>Server name</label>
-            <div class="rt-bar" id="rtName"></div>
-            <textarea id="fName" class="m" rows="2" data-s></textarea>
-            <div class="rt-preview" id="pvName"></div>
-          </div>
-          <div class="full">
-            <label>Description</label>
-            <div class="rt-bar" id="rtDesc"></div>
-            <textarea id="fDesc" class="m" rows="3" data-s></textarea>
-            <div class="rt-preview" id="pvDesc"></div>
-          </div>
-          <div><label>Player slots</label><input id="fMax" type="number" min="1" max="255" data-s></div>
-          <div>
-            <label>Visibility</label>
-            <select id="fPriv" data-s>
-              <option value="0">Public</option>
-              <option value="1">Private</option>
-              <option value="2">Friends only</option>
-              <option value="3">Locked</option>
-            </select>
-          </div>
+      <div class="fields">
+        <div class="full">
+          <label>Name</label>
+          <div class="rt-bar" id="rtName"></div>
+          <textarea id="fName" class="m" rows="2" data-s></textarea>
+          <div class="rt-preview" id="pvName"></div>
         </div>
-      </div></div>
+        <div class="full">
+          <label>Description</label>
+          <div class="rt-bar" id="rtDesc"></div>
+          <textarea id="fDesc" class="m" rows="3" data-s></textarea>
+          <div class="rt-preview" id="pvDesc"></div>
+        </div>
+        <div><label>Slots</label><input id="fMax" type="number" min="1" max="255" data-s></div>
+        <div>
+          <label>Visibility</label>
+          <select id="fPriv" data-s>
+            <option value="0">Public</option>
+            <option value="1">Private</option>
+            <option value="2">Friends only</option>
+            <option value="3">Locked</option>
+          </select>
+        </div>
+      </div>
 
-      <h2>Crash protection</h2>
-      <p class="hint">
-        A spawn flood costs this server almost nothing, it never simulates anything -
-        but every client has to build each prop, which is what drops a whole lobby at
-        once. These limits are sized for what clients survive. Early strikes only
-        delete the offending props; a kick comes after repeated attempts.
-      </p>
-      <div class="frame"><div class="frame-in">
+      <h2>Gameplay</h2>
+      <div class="panel"><div class="rows" id="toggles"></div></div>
+      <div class="fields" style="margin-top:14px">
+        <div>
+          <label>Slow motion</label>
+          <select id="fSlowMo" data-s>
+            <option value="0">Disabled</option>
+            <option value="1">Low gravity</option>
+            <option value="2">Host only</option>
+            <option value="3">Everyone</option>
+            <option value="4">Client side</option>
+          </select>
+        </div>
+        <div><label>Knockout (s)</label><input id="fKnockLen" type="number" min="0" max="600" data-s></div>
+        <div><label>Avatar height (m)</label><input id="fHeight" type="number" min="0.1" max="100" step="0.1" data-s></div>
+      </div>
+
+      <h2>Permissions</h2>
+      <div class="panel"><div class="rows" id="gates"></div></div>
+
+      <h2>Spam Guard</h2>
+      <div class="panel">
         <div class="rows">
           <label class="row" onclick="flip('antiSpam')">
-            <div class="t"><b>Spam guard</b><span>watch for spawn floods and act on them</span></div>
+            <div class="t">Enabled</div>
             <i class="switch" id="sw-antiSpam"></i>
           </label>
         </div>
-        <div class="pad">
-          <div class="fields">
-            <div><label>Spawns allowed</label><input id="fBurst" type="number" min="1" max="1000" data-s></div>
-            <div><label>Within seconds</label><input id="fWindow" type="number" min="1" max="120" data-s></div>
-            <div><label>Max entities per player</label><input id="fPerPlayer" type="number" min="1" max="20000" data-s></div>
-            <div><label>Strikes before kick</label><input id="fStrikes" type="number" min="1" max="20" data-s></div>
-            <div class="full">
-              <label>Exempt from limits</label>
-              <select id="fExempt" data-s>
-                <option value="-1">Guest and above</option>
-                <option value="0">Default and above</option>
-                <option value="1">Operator and above</option>
-                <option value="2">Owner only</option>
-              </select>
-            </div>
-          </div>
+      </div>
+      <div class="fields" style="margin-top:14px">
+        <div><label>Spawns</label><input id="fBurst" type="number" min="1" max="1000" data-s></div>
+        <div><label>Window (s)</label><input id="fWindow" type="number" min="1" max="120" data-s></div>
+        <div><label>Per player</label><input id="fPerPlayer" type="number" min="1" max="20000" data-s></div>
+        <div><label>Strikes</label><input id="fStrikes" type="number" min="1" max="20" data-s></div>
+        <div class="full">
+          <label>Exempt</label>
+          <select id="fExempt" data-s>
+            <option value="-1">Guest and above</option>
+            <option value="0">Default and above</option>
+            <option value="1">Operator and above</option>
+            <option value="2">Owner only</option>
+          </select>
         </div>
-      </div></div>
-
-      <h2>Gameplay</h2>
-      <div class="frame"><div class="frame-in"><div class="rows" id="toggles"></div></div></div>
-
-      <div class="frame" style="margin-top:16px"><div class="frame-in pad">
-        <div class="fields">
-          <div>
-            <label>Slow motion</label>
-            <select id="fSlowMo" data-s>
-              <option value="0">Disabled</option>
-              <option value="1">Low gravity</option>
-              <option value="2">Host only</option>
-              <option value="3">Everyone</option>
-              <option value="4">Client side</option>
-            </select>
-          </div>
-          <div><label>Knockout length (s)</label><input id="fKnockLen" type="number" min="0" max="600" data-s></div>
-          <div><label>Max avatar height (m)</label><input id="fHeight" type="number" min="0.1" max="100" step="0.1" data-s></div>
-        </div>
-      </div></div>
-
-      <h2>Permission gates</h2>
-      <p class="hint">
-        The minimum rank each action needs. Clients hide the buttons they think you
-        may not press, but the server checks again before acting, so these are
-        enforced, not cosmetic.
-      </p>
-      <div class="frame"><div class="frame-in"><div class="rows" id="gates"></div></div></div>
+      </div>
 
       <h2>Limits</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div><label>Max tracked entities</label><input id="fMaxEnt" type="number" min="1" max="100000" data-s></div>
-          <div><label>Orphan timeout (s)</label><input id="fOrphan" type="number" min="5" max="86400" data-s></div>
-        </div>
-        <div class="rows" style="margin-top:16px">
+      <div class="fields">
+        <div><label>Max entities</label><input id="fMaxEnt" type="number" min="1" max="100000" data-s></div>
+        <div><label>Orphan timeout (s)</label><input id="fOrphan" type="number" min="5" max="86400" data-s></div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        <div class="rows">
           <label class="row" onclick="flip('cullOrphans')">
-            <div class="t"><b>Cull orphans</b><span>remove entities nobody is simulating</span></div>
+            <div class="t">Cull orphans</div>
             <i class="switch" id="sw-cullOrphans"></i>
           </label>
         </div>
-      </div></div>
+      </div>
 
       <div class="bar">
         <button class="go" id="saveBtn" onclick="saveSettings()">Apply</button>
         <button onclick="revert()">Revert</button>
-        <span class="note" id="saveNote">No pending changes</span>
+        <span class="note" id="saveNote">No changes</span>
       </div>
 
-      <h2>Panel accounts</h2>
-      <p class="hint">Everyone who can open this panel. The account in the server
-        settings is always an owner and is not listed here, so a forgotten
-        password never locks you out.</p>
-      <div class="frame"><div class="frame-in" id="accounts"></div></div>
+      <h2>Accounts</h2>
+      <div class="panel" id="accounts"></div>
 
-      <h2>Add an account</h2>
-      <div class="frame"><div class="frame-in pad">
-        <div class="fields">
-          <div><label>Name</label><input id="acName" placeholder="badger"></div>
-          <div><label>Password</label><input id="acPass" type="password" placeholder="at least 8 characters"></div>
-          <div>
-            <label>Role</label>
-            <select id="acRole">
-              <option value="moderator">Moderator, deals with people and the world</option>
-              <option value="viewer">Viewer, sees everything and changes nothing</option>
-              <option value="owner">Owner, everything including settings</option>
-            </select>
-          </div>
+      <h2>Add Account</h2>
+      <div class="fields">
+        <div><label>Name</label><input id="acName" placeholder="badger"></div>
+        <div><label>Password</label><input id="acPass" type="password" placeholder="at least 8 characters"></div>
+        <div>
+          <label>Role</label>
+          <select id="acRole">
+            <option value="moderator">Moderator</option>
+            <option value="viewer">Viewer</option>
+            <option value="owner">Owner</option>
+          </select>
         </div>
-        <div class="bar flat"><button class="go" onclick="addAccount()">Add account</button></div>
-      </div></div>
+      </div>
+      <div class="bar flat"><button class="go" onclick="addAccount()">Add</button></div>
 
+      <h2>Restart</h2>
+      <div class="fields">
+        <div class="full">
+          <label>Notice</label>
+          <input id="fRestartMsg" value="Server is restarting, please wait a few minutes.">
+        </div>
+      </div>
+      <div class="bar flat">
+        <button class="danger" onclick="restartServer()">Restart server</button>
+      </div>
     </section>
 
+    <!-- ========== LOG ========== -->
     <section class="view" id="v-log">
-      <h2>Server log</h2>
       <div class="filters">
-        <input id="logFilter" placeholder="Filter messages…" oninput="render()">
+        <input id="logFilter" placeholder="Filter" oninput="render()">
         <div class="seg" id="logLevels"></div>
       </div>
-      <div class="frame"><div class="frame-in"><div class="log" id="log"></div></div></div>
+      <div class="panel"><div class="log" id="log"></div></div>
     </section>
 
   </main>
@@ -983,22 +926,22 @@ const LEVEL_CLASS = { '-1': 'guest', '0': '', '1': 'operator', '2': 'owner' };
 const LEVEL_SHORT = { '-1': 'GST', '0': 'DEF', '1': 'OP', '2': 'OWN' };
 
 const TOGGLES = [
-  ['nameTags',           'Name tags',           'floating names above players'],
-  ['voiceChat',          'Voice chat',          'relay player voice'],
-  ['mortality',          'Mortality',           'players can die'],
-  ['knockout',           'Knockout',            'ragdoll and black out instead of dying'],
-  ['friendlyFire',       'Friendly fire',       'players can damage each other'],
-  ['playerConstraining', 'Player constraining', 'players can constrain each other'],
+  ['nameTags',           'Name tags'],
+  ['voiceChat',          'Voice chat'],
+  ['mortality',          'Mortality'],
+  ['knockout',           'Knockout'],
+  ['friendlyFire',       'Friendly fire'],
+  ['playerConstraining', 'Player constraining'],
 ];
 
 const GATES = [
-  ['devTools',      'Dev tools',      'spawn gun, noclip and the dev menu'],
-  ['constrainer',   'Constrainer',    'the constrainer tool'],
-  ['nimbus',        'Nimbus gun',     'flight and noclip'],
-  ['customAvatars', 'Custom avatars', 'modded avatars'],
-  ['kicking',       'Kicking',        'remove a player from the server'],
-  ['banning',       'Banning',        'block a player from rejoining'],
-  ['teleportation', 'Teleportation',  'teleport to or summon a player'],
+  ['devTools',      'Dev tools'],
+  ['constrainer',   'Constrainer'],
+  ['nimbus',        'Nimbus gun'],
+  ['customAvatars', 'Custom avatars'],
+  ['kicking',       'Kicking'],
+  ['banning',       'Banning'],
+  ['teleportation', 'Teleportation'],
 ];
 
 const VANILLA = [
@@ -1049,7 +992,7 @@ function duration(s) {
 }
 
 const levelChip = l => '<span class="chip ' + (LEVEL_CLASS[l] || '') + '">' + (LEVELS[l] || '?') + '</span>';
-const empty = (t, n) => '<div class="empty"><b>' + t + '</b><span>' + n + '</span></div>';
+const empty = t => '<div class="empty">' + t + '</div>';
 
 /* ---------- Unity rich text ---------- */
 
@@ -1084,11 +1027,12 @@ function unityToHtml(raw) {
 }
 
 /* Chart colours come from the stylesheet so each theme gets a readable set. */
-function series(n) {
-  const v = getComputedStyle(document.documentElement)
-    .getPropertyValue('--series-' + n).trim();
+function cssColor(name) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v ? 'hsl(' + v + ')' : '#888';
 }
+
+const series = n => cssColor('--series-' + n);
 
 const SWATCHES = ['#0284c7', '#15803d', '#b45309', '#b91c1c', '#7c3aed', '#0f172a', '#ffffff'];
 
@@ -1155,7 +1099,7 @@ function drawChart(el, title, series, format) {
 
   if (points < 2) {
     el.innerHTML = '<div class="chart-head"><span class="title">' + title + '</span></div>' +
-      empty('Not enough data yet', 'Samples are taken every five seconds.');
+      empty('No data yet');
     return;
   }
 
@@ -1193,13 +1137,13 @@ function drawChart(el, title, series, format) {
   for (let g = 1; g < 4; g++) {
     const gy = (H / 4) * g;
     grid += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy +
-      '" stroke="#16202b" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+      '" stroke="' + cssColor('--grid') + '" stroke-width="1" vector-effect="non-scaling-stroke"/>';
   }
 
   const legend = series.map(s =>
     '<span class="key"><i style="background:' + s.color + '"></i>' +
     '<span style="color:' + s.color + '">' + format(s.data[s.data.length - 1]) + '</span>' +
-    '<span style="color:var(--faint)">' + s.name + '</span></span>').join('');
+    '<span>' + s.name + '</span></span>').join('');
 
   el.innerHTML =
     '<div class="chart-head"><span class="title">' + title + '</span>' + legend + '</div>' +
@@ -1251,11 +1195,11 @@ async function poll() {
   try {
     state = await (await fetch('/api/state')).json();
     $('led').classList.remove('off');
-    $('statusText').textContent = state.server.published ? 'online' : 'unlisted';
+    $('statusText').textContent = state.server.published ? 'Online' : 'Unlisted';
     render();
   } catch {
     $('led').classList.add('off');
-    $('statusText').textContent = 'no link';
+    $('statusText').textContent = 'Offline';
   }
 }
 
@@ -1304,15 +1248,15 @@ function renderOverview(d) {
   const guard = d.guard || {};
 
   $('metrics').innerHTML = [
-    ['Crew',        d.players.length + '<small>/' + d.server.maxPlayers + '</small>', ''],
+    ['Players',     d.players.length + '<small>/' + d.server.maxPlayers + '</small>', ''],
     ['Entities',    num(d.entities.total),
       d.entities.total > d.limits.maxEntities * 0.8 ? 'bad'
         : d.entities.total > d.limits.maxEntities * 0.5 ? 'warn' : ''],
     ['Orphaned',    num(d.entities.orphaned), d.entities.orphaned > 200 ? 'warn' : ''],
     ['Packets in',  num(d.traffic.packetsIn), ''],
     ['Packets out', num(d.traffic.packetsOut), ''],
-    ['Transferred', bytes(d.traffic.bytesIn + d.traffic.bytesOut), ''],
-  ].map(p => '<div class="metric ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
+    ['Traffic',     bytes(d.traffic.bytesIn + d.traffic.bytesOut), ''],
+  ].map(p => '<div class="stat ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
     '<div class="v">' + p[1] + '</div></div>').join('');
 
   $('overviewPlayers').innerHTML = playerTable(d, false);
@@ -1321,12 +1265,12 @@ function renderOverview(d) {
 
 function playerTable(d, actions) {
   if (!d.players.length) {
-    return empty('No crew aboard', 'The server is published and waiting for players.');
+    return empty('No players connected');
   }
 
   return '<table class="stack"><thead><tr>' +
     '<th>ID</th><th>Player</th><th>Rank</th><th>Avatar</th>' +
-    '<th class="right">Owns</th><th class="right">Online</th><th class="right">Traffic</th>' +
+    '<th class="right">Owned</th><th class="right">Online</th><th class="right">Traffic</th>' +
     (actions ? '<th class="right">Actions</th>' : '') +
     '</tr></thead><tbody>' +
     d.players.map(p => '<tr>' +
@@ -1336,7 +1280,7 @@ function playerTable(d, actions) {
       '<td data-label="Rank">' + (actions ? rankPicker(p) : levelChip(p.permission)) + '</td>' +
       '<td class="dim" data-label="Avatar" style="font-size:12px">' +
         esc(p.avatar.split('.').pop() || '-') + '</td>' +
-      '<td class="m right dim" data-label="Owns">' + p.entities + '</td>' +
+      '<td class="m right dim" data-label="Owned">' + p.entities + '</td>' +
       '<td class="m right dim" data-label="Online">' + duration(p.onlineSeconds) + '</td>' +
       '<td class="m right dim" data-label="Traffic">' + bytes(p.bytesIn + p.bytesOut) + '</td>' +
       (actions ? '<td class="right" data-label="Actions"><div class="acts">' +
@@ -1358,22 +1302,22 @@ function rankPicker(p) {
 
 function renderMap(d) {
   $('currentLevel').innerHTML =
-    '<div class="name" style="font-size:16px">' + esc(stripForTitle(d.server.level)) + '</div>' +
-    '<div class="sub" style="margin-top:5px">' + esc(d.server.levelBarcode) + '</div>' +
-    '<div style="margin-top:12px">' +
+    '<div class="name" style="font-size:15px">' + esc(stripForTitle(d.server.level)) + '</div>' +
+    '<div class="sub">' + esc(d.server.levelBarcode) + '</div>' +
+    '<div style="margin-top:10px">' +
       (d.server.levelModId > 0
         ? '<span class="chip operator">mod.io ' + d.server.levelModId + '</span>'
-        : '<span class="chip">vanilla · no download needed</span>') +
+        : '<span class="chip">Vanilla</span>') +
     '</div>';
 
   if (!$('mVanilla').dataset.filled) {
-    $('mVanilla').innerHTML = '<option value="">- pick to fill the fields below -</option>' +
+    $('mVanilla').innerHTML = '<option value="">Choose a level</option>' +
       VANILLA.map(v => '<option value="' + v[1] + '">' + v[0] + '</option>').join('');
     $('mVanilla').dataset.filled = '1';
   }
 
   $('levels').innerHTML = !d.levels.length
-    ? empty('No saved maps', 'Add one below, or pick a vanilla level to fill the form.')
+    ? empty('No maps')
     : '<table class="stack"><thead><tr>' +
       '<th>Map</th><th>Source</th><th>Status</th><th class="right">Actions</th>' +
       '</tr></thead><tbody>' +
@@ -1396,7 +1340,7 @@ function renderMap(d) {
   $('mcCount').textContent = cat.length;
 
   $('modCatalog').innerHTML = !cat.length
-    ? empty('Nothing learned yet', 'Barcodes are picked up as players use modded items.')
+    ? empty('No mods learned')
     : '<table class="stack"><thead><tr>' +
       '<th>Barcode</th><th>mod.io</th><th>Learned</th>' +
       '</tr></thead><tbody>' +
@@ -1453,8 +1397,7 @@ async function loadLevel(barcode) {
   const entry = (state.levels || []).find(l => l.barcode === barcode);
   if (!entry) return;
 
-  if (!confirm('Load ' + (entry.title || barcode) + '?\n\n' +
-    'Everyone is sent to this level and the world is cleared.')) return;
+  if (!confirm('Load ' + (entry.title || barcode) + '?\n\nEveryone is moved and the world is cleared.')) return;
 
   await fetch('/api/level?' + new URLSearchParams({
     barcode,
@@ -1545,7 +1488,7 @@ function renderResources(d) {
     ['Packets/s out', Math.round(r.packetsOutPerSecond || 0), ''],
     ['Rate in', bytes(r.bytesInPerSecond || 0) + '/s', ''],
     ['Rate out', bytes(r.bytesOutPerSecond || 0) + '/s', ''],
-  ].map(p => '<div class="metric ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
+  ].map(p => '<div class="stat ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
     '<div class="v">' + p[1] + '</div></div>').join('');
 
   const usedRam = (h.memoryTotalBytes || 0) - (h.memoryAvailableBytes || 0);
@@ -1559,7 +1502,7 @@ function renderResources(d) {
       ramPct > 90 ? 'bad' : ramPct > 75 ? 'warn' : ''],
     ['RAM total', h.memoryTotalBytes ? bytes(h.memoryTotalBytes) : 'n/a', ''],
     ['Runtime', '<span style="font-size:14px">.NET ' + esc(h.framework || '?') + '</span>', ''],
-  ].map(p => '<div class="metric ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
+  ].map(p => '<div class="stat ' + p[2] + '"><div class="k">' + p[0] + '</div>' +
     '<div class="v">' + p[1] + '</div></div>').join('');
 
   drawChart($('cCpu'), 'CPU',
@@ -1573,7 +1516,7 @@ function renderResources(d) {
 
 function renderRanks(d) {
   $('ranks').innerHTML = !d.roster.length
-    ? empty('No saved ranks', 'Everyone joins as Default.')
+    ? empty('No ranks')
     : '<table class="stack"><thead><tr>' +
       '<th>Name</th><th>SteamID</th><th>Rank</th><th>Status</th><th class="right">Actions</th>' +
       '</tr></thead><tbody>' +
@@ -1581,9 +1524,9 @@ function renderRanks(d) {
         '<td class="name" data-label="Name">' + esc(r.username || '(unknown)') + '</td>' +
         '<td class="m dim" data-label="SteamID" style="font-size:12px">' + esc(r.platformId) + '</td>' +
         '<td data-label="Rank">' + levelChip(r.level) + '</td>' +
-        '<td data-label="Status" style="font-size:12px">' + (r.online
-          ? '<span style="color:var(--green)">connected</span>'
-          : '<span style="color:var(--faint)">offline</span>') + '</td>' +
+        '<td data-label="Status">' + (r.online
+          ? '<span class="chip live">Online</span>'
+          : '<span class="chip">Offline</span>') + '</td>' +
         '<td class="right" data-label="Actions"><div class="acts">' +
           '<button onclick="setRankById(\'' + r.platformId + '\', ' + Math.min(r.level + 1, 2) +
             ', \'' + esc(r.username) + '\')"' + (r.level >= 2 ? ' disabled' : '') + '>Promote</button>' +
@@ -1596,7 +1539,7 @@ function renderRanks(d) {
 
 function renderBans(d) {
   $('bans').innerHTML = !d.bans.length
-    ? empty('Nobody is banned', 'Bans added here survive a restart.')
+    ? empty('No bans')
     : '<table class="stack"><thead><tr>' +
       '<th>Name</th><th>SteamID</th><th>Reason</th><th>Added</th><th class="right">Actions</th>' +
       '</tr></thead><tbody>' +
@@ -1614,7 +1557,7 @@ function renderWorld(d) {
   $('worldNote').textContent = d.entities.total + ' tracked, ' + d.entities.orphaned + ' orphaned';
 
   $('entities').innerHTML = !d.entities.recent.length
-    ? empty('The world is empty', 'Nothing has been spawned yet.')
+    ? empty('No entities')
     : '<table class="stack"><thead><tr>' +
       '<th>ID</th><th>Item</th><th>Owner</th><th class="right">Position</th>' +
       '</tr></thead><tbody>' +
@@ -1644,8 +1587,7 @@ function renderAccounts(list) {
   if (!el) return;
 
   if (!list || !list.length) {
-    el.innerHTML = '<div class="empty"><b>No other accounts</b>' +
-      '<span>Only the account in the server settings can open this panel.</span></div>';
+    el.innerHTML = empty('No accounts');
     return;
   }
 
@@ -1654,7 +1596,7 @@ function renderAccounts(list) {
     list.map(a =>
       '<tr>' +
       '<td data-label="Name"><div class="name">' + esc(a.name) + '</div></td>' +
-      '<td data-label="Role"><span class="chip ' + roleClass(a.role) + '">' +
+      '<td data-label="Role"><span class="chip role ' + roleClass(a.role) + '">' +
         esc(a.role) + '</span></td>' +
       '<td class="dim" data-label="Added">' + esc(a.createdAt || '') + '</td>' +
       '<td class="right" data-label="Actions"><div class="acts">' +
@@ -1679,7 +1621,7 @@ async function addAccount() {
   const role = $('acRole').value;
 
   if (!name || pass.length < 8) {
-    alert('An account needs a name and a password of at least eight characters.');
+    alert('A name and a password of at least eight characters are required.');
     return;
   }
 
@@ -1694,7 +1636,7 @@ async function addAccount() {
 }
 
 async function removeAccount(name) {
-  if (!confirm('Remove ' + name + '? They lose access to this panel at once.')) return;
+  if (!confirm('Remove ' + name + '?')) return;
 
   const r = await fetch('/api/accounts?action=remove&name=' + encodeURIComponent(name));
   if (r.ok) renderAccounts(await r.json());
@@ -1706,11 +1648,11 @@ function renderSettings(d) {
   if (!$('toggles').children.length) {
     $('toggles').innerHTML = TOGGLES.map(t =>
       '<label class="row" onclick="flip(\'' + t[0] + '\')">' +
-      '<div class="t"><b>' + t[1] + '</b><span>' + t[2] + '</span></div>' +
+      '<div class="t">' + t[1] + '</div>' +
       '<i class="switch" id="sw-' + t[0] + '"></i></label>').join('');
 
     $('gates').innerHTML = GATES.map(g =>
-      '<div class="row"><div class="t"><b>' + g[1] + '</b><span>' + g[2] + '</span></div>' +
+      '<div class="row"><div class="t">' + g[1] + '</div>' +
       '<div class="seg" id="gate-' + g[0] + '">' +
       [-1, 0, 1, 2].map(l =>
         '<button onclick="setGate(\'' + g[0] + '\', ' + l + ')">' + LEVEL_SHORT[l] + '</button>').join('') +
@@ -1725,8 +1667,9 @@ function renderSettings(d) {
     [...$('gate-' + g[0]).children].forEach((b, i) => b.classList.toggle('on', draft[g[0]] === i - 1));
   });
 
-  $('saveNote').textContent = dirty ? 'Pending changes' : 'No pending changes';
+  $('saveNote').textContent = dirty ? 'Unsaved changes' : 'No changes';
   $('saveNote').classList.toggle('dirty', dirty);
+  document.body.classList.toggle('dirty', dirty);
 }
 
 /** Pulls the live config into the editable draft, discarding local edits. */
@@ -1765,8 +1708,9 @@ function revert() {
 
 function markDirty() {
   dirty = true;
-  $('saveNote').textContent = 'Pending changes';
+  $('saveNote').textContent = 'Unsaved changes';
   $('saveNote').classList.add('dirty');
+  document.body.classList.add('dirty');
 }
 
 function flip(key) { draft[key] = !draft[key]; markDirty(); renderSettings(state); }
@@ -1810,23 +1754,21 @@ async function saveSettings() {
 /* ---------- actions ---------- */
 
 async function kick(id, name) {
-  const reason = prompt('Kick ' + name + '?\n\nReason shown to them:', 'Kicked by server operator');
+  const reason = prompt('Kick ' + name + '?\n\nReason:', 'Kicked by server operator');
   if (reason === null) return;
   await fetch('/api/kick?id=' + id + '&reason=' + encodeURIComponent(reason));
   poll();
 }
 
 async function ban(id, name) {
-  const reason = prompt(
-    'Ban ' + name + '?\n\nThey will be refused on every future join.\nReason shown to them:',
-    'Banned from Server');
+  const reason = prompt('Ban ' + name + '?\n\nReason:', 'Banned from Server');
   if (reason === null) return;
   await fetch('/api/ban?id=' + id + '&reason=' + encodeURIComponent(reason));
   poll();
 }
 
 async function purge(id, name) {
-  if (!confirm('Delete everything ' + name + ' has spawned?\n\nThey stay connected.')) return;
+  if (!confirm('Delete everything ' + name + ' has spawned?')) return;
   const r = await (await fetch('/api/purge?id=' + id)).json();
   alert('Removed ' + (r.removed || 0) + ' entities.');
   poll();
@@ -1869,7 +1811,7 @@ async function addBan() {
 }
 
 async function clearWorld() {
-  if (!confirm('Delete every entity in the world?\n\nThis cannot be undone.')) return;
+  if (!confirm('Delete every entity in the world?')) return;
   const r = await (await fetch('/api/clear')).json();
   alert('Removed ' + (r.removed || 0) + ' entities.');
   poll();
@@ -1878,11 +1820,11 @@ async function clearWorld() {
 async function restartServer() {
   const message = $('fRestartMsg').value.trim() || 'Server is restarting, please wait a few minutes.';
 
-  if (!confirm('Restart the server?\n\nEveryone is disconnected with:\n"' + message + '"')) return;
+  if (!confirm('Restart the server?\n\nEveryone is disconnected.')) return;
 
   await fetch('/api/restart?reason=' + encodeURIComponent(message));
 
-  $('statusText').textContent = 'restarting';
+  $('statusText').textContent = 'Restarting';
   $('led').classList.add('off');
 }
 
@@ -1912,7 +1854,7 @@ function renderLog(d) {
     (logLevel === 'ALL' || l.level === logLevel) &&
     (!needle || l.message.toLowerCase().includes(needle)));
 
-  $('log').innerHTML = rows.length ? logRows(rows) : empty('Nothing matches', 'Try a different filter.');
+  $('log').innerHTML = rows.length ? logRows(rows) : empty('No matches');
 }
 
 /* ---------- boot ---------- */
