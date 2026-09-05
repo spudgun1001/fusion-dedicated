@@ -232,6 +232,14 @@ public sealed class ServerConfig
     public int InheritedTimeoutSeconds { get; set; } = 900;
 
     /// <summary>
+    /// Seconds before a prop whose owner is still connected is removed, counted from
+    /// the last time it moved. Zero leaves them alone, which is how it behaved before.
+    /// Dropped magazines are the reason this exists; a build that nobody touches is
+    /// the reason it is off unless asked for.
+    /// </summary>
+    public int IdleTimeoutSeconds { get; set; } = 0;
+
+    /// <summary>
     /// When the world is at <see cref="MaxEntities"/>, drop this many of the oldest
     /// abandoned props to make room rather than refusing the spawn. Refusing looks
     /// like a broken server to the player pressing the trigger.

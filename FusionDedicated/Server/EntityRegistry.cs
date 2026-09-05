@@ -283,11 +283,16 @@ public sealed class EntityRegistry
     }
 
     /// <summary>
-    /// Removes props nobody is using: true orphans, and inherited props that have not
-    /// moved for a while. Inherited ones matter because they are never ownerless, so
-    /// orphan culling alone lets the world grow until it hits the cap.
+    /// Removes props nobody is using: true orphans, inherited props that have not
+    /// moved for a while, and, when an idle timeout is given, props whose owner is
+    /// still connected but has not touched them since. Inherited ones matter because
+    /// they are never ownerless, so orphan culling alone lets the world grow until it
+    /// hits the cap. The idle clock matters because a magazine dropped by somebody
+    /// still playing is neither orphaned nor inherited, so nothing else removes it.
     /// </summary>
-    public List<ushort> CullStale(TimeSpan orphanTimeout, TimeSpan inheritedTimeout)
+    /// <param name="idleTimeout">Zero to leave a connected player's props alone.</param>
+    public List<ushort> CullStale(
+        TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default)
     {
         var removed = new List<ushort>();
         var now = DateTime.UtcNow;
@@ -296,9 +301,24 @@ public sealed class EntityRegistry
         {
             foreach (var entity in _entities.Values.ToList())
             {
-                bool stale = entity.IsOrphaned
-                    ? now - entity.LastUpdate > orphanTimeout
-                    : entity.Inherited && now - entity.LastUpdate > inheritedTimeout;
+                bool stale;
+
+                if (entity.IsOrphaned)
+                {
+                    stale = now - entity.LastUpdate > orphanTimeout;
+                }
+                else if (entity.Inherited)
+                {
+                    stale = now - entity.LastUpdate > inheritedTimeout;
+                }
+                else
+                {
+                    // A discovered entity may be part of the level rather than a
+                    // spawn, and despawning one of those desynchronises everybody.
+                    stale = idleTimeout > TimeSpan.Zero
+                        && !entity.Discovered
+                        && now - entity.LastUpdate > idleTimeout;
+                }
 
                 if (stale)
                 {

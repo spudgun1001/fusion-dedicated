@@ -1524,7 +1524,8 @@ public sealed class FusionServer : IDisposable
 
         var removed = Entities.CullStale(
             TimeSpan.FromSeconds(Config.OrphanTimeoutSeconds),
-            TimeSpan.FromSeconds(Config.InheritedTimeoutSeconds));
+            TimeSpan.FromSeconds(Config.InheritedTimeoutSeconds),
+            TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)));
 
         if (removed.Count > 0)
         {

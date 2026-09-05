@@ -337,6 +337,7 @@ public sealed class Dashboard
             {
                 maxEntities = _config.MaxEntities,
                 cullOrphans = _config.CullOrphanedEntities,
+                idleTimeoutSeconds = _config.IdleTimeoutSeconds,
                 orphanTimeoutSeconds = _config.OrphanTimeoutSeconds,
             },
             traffic = new
@@ -769,6 +770,7 @@ public sealed class Dashboard
 
         ReadBool(query, "cullOrphans", v => _config.CullOrphanedEntities = v);
 
+
         // Crash protection
         ReadBool(query, "antiSpam", v => _config.AntiSpamEnabled = v);
         ReadLevel(query, "antiSpamExemptLevel", v => _config.AntiSpamExemptLevel = v);
@@ -791,6 +793,12 @@ public sealed class Dashboard
         if (int.TryParse(query["spamStrikes"], out var strikes) && strikes is >= 1 and <= 20)
         {
             _config.SpamStrikesBeforeKick = strikes;
+        }
+
+        // Zero is the off switch, so the floor is zero rather than a usable timeout.
+        if (int.TryParse(query["idleTimeoutSeconds"], out var idle) && idle is >= 0 and <= 86400)
+        {
+            _config.IdleTimeoutSeconds = idle;
         }
 
         if (int.TryParse(query["orphanTimeoutSeconds"], out var orphan) && orphan is >= 5 and <= 86400)
