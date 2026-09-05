@@ -1349,11 +1349,26 @@ public sealed class FusionServer : IDisposable
     /// Pushes the current settings to everyone connected. Without this a change made
     /// in the panel would only reach players who join afterwards.
     /// </summary>
+    /// <summary>Last mortality warning said, so it is not repeated every tick.</summary>
+    private string? _mortalityWarning;
+
     public void PushSettings()
     {
         Players.MaxPlayers = Config.MaxPlayers;
 
         RebuildBlocklist();
+
+        string? unkillable = MortalityCheck.WhyUnkillable(Config.Mortality, Config.Knockout);
+
+        if (unkillable != _mortalityWarning)
+        {
+            _mortalityWarning = unkillable;
+
+            if (unkillable != null)
+            {
+                Log("WARN", unkillable);
+            }
+        }
 
         Broadcast(ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
     }
