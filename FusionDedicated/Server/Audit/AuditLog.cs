@@ -32,6 +32,11 @@ public sealed class AuditEntry
 
     [JsonPropertyName("reason")]
     public string Reason { get; set; } = "";
+
+    /// <summary>The panel account that did it. Empty for the console and RCON,
+    /// where the channel already says everything there is to know.</summary>
+    [JsonPropertyName("actor")]
+    public string Actor { get; set; } = "";
 }
 
 /// <summary>
@@ -53,7 +58,8 @@ public sealed class AuditLog
         _path = Path.Combine(directory, FileName);
     }
 
-    public void Record(AuditChannel channel, string action, string target, ulong targetId, string reason)
+    public void Record(AuditChannel channel, string action, string target, ulong targetId,
+        string reason, string actor = "")
     {
         var entry = new AuditEntry
         {
@@ -62,6 +68,7 @@ public sealed class AuditLog
             Target = target,
             TargetId = targetId,
             Reason = reason,
+            Actor = actor,
         };
 
         try

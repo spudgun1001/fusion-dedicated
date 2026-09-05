@@ -1207,9 +1207,10 @@ public sealed class FusionServer : IDisposable
         => Ban(platformId, username, reason, null, AuditChannel.Panel);
 
     public void Ban(ulong platformId, string username, string reason,
-        TimeSpan? duration, AuditChannel channel)
+        TimeSpan? duration, AuditChannel channel, string actor = "")
     {
-        AuditTrail?.Record(channel, duration is null ? "ban" : "tempban", username, platformId, reason);
+        AuditTrail?.Record(channel, duration is null ? "ban" : "tempban", username, platformId,
+            reason, actor);
         BanInternal(platformId, username, reason, duration);
     }
 

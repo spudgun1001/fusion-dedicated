@@ -17,6 +17,22 @@ public sealed class Dashboard
     private readonly LobbyPublisher _lobby;
     private readonly HttpListener _listener = new();
 
+    /// <summary>Accounts allowed into the panel, beyond the one in its settings.</summary>
+    public PanelUsers Users { get; } = new(Path.Combine(
+        AppContext.BaseDirectory, "panel-users.json"));
+
+    /// <summary>Who is making the request being handled, for the audit trail.</summary>
+    private string _acting = "panel";
+
+    private PanelRole _actingRole = PanelRole.Owner;
+
+    private string ActorFor(HttpListenerContext context)
+    {
+        var parsed = DashboardAuth.TryParseBasic(context.Request.Headers["Authorization"]);
+
+        return parsed?.User is { Length: > 0 } name ? name : _config.DashboardUser;
+    }
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -47,6 +63,13 @@ public sealed class Dashboard
         {
             _server.Log("ERROR", $"Control panel not started: {refusal}");
             return;
+        }
+
+        Users.Load();
+
+        if (Users.Count > 0)
+        {
+            _server.Log("INFO", $"Panel accounts: {Users.Count} besides {_config.DashboardUser}");
         }
 
         _listener.Prefixes.Add(Prefix);
@@ -88,10 +111,13 @@ public sealed class Dashboard
 
     private void Handle(HttpListenerContext context)
     {
-        if (!DashboardAuth.IsAuthorized(
-                context.Request.Headers["Authorization"],
-                _config.DashboardUser,
-                _config.DashboardPassword))
+        var role = PanelSignIn.Resolve(
+            context.Request.Headers["Authorization"],
+            _config.DashboardUser,
+            _config.DashboardPassword,
+            Users);
+
+        if (role is null)
         {
             context.Response.StatusCode = 401;
             context.Response.AddHeader("WWW-Authenticate", "Basic realm=\"Fusion Dedicated\"");
@@ -101,6 +127,18 @@ public sealed class Dashboard
 
         string path = context.Request.Url?.AbsolutePath ?? "/";
         var query = context.Request.QueryString;
+
+        // Checked here rather than in each handler, so a new endpoint that
+        // nobody placed in the table is refused instead of quietly open.
+        if (!PanelPermissions.Allows(role.Value, path))
+        {
+            context.Response.StatusCode = 403;
+            Write(context, "text/plain", "Your account is not allowed to do that.");
+            return;
+        }
+
+        _acting = ActorFor(context);
+        _actingRole = role.Value;
 
         switch (path)
         {
@@ -170,6 +208,10 @@ public sealed class Dashboard
                 HandleRestart(context, query);
                 return;
 
+            case "/api/accounts":
+                HandleAccounts(context, query);
+                return;
+
             case "/api/history":
                 ServeJson(context, BuildHistory(query));
                 return;
@@ -197,7 +239,24 @@ public sealed class Dashboard
             return;
         }
 
-        Write(context, "text/html; charset=utf-8", File.ReadAllText(file));
+        string page = File.ReadAllText(file);
+        string tag = PageCache.ETagFor(page);
+
+        context.Response.Headers["ETag"] = tag;
+
+        // no-cache asks the browser to check rather than trust an age, so a
+        // release is picked up without anyone being told to hard refresh, and an
+        // unchanged panel still costs only the check.
+        context.Response.Headers["Cache-Control"] = "no-cache";
+
+        if (PageCache.IsFresh(context.Request.Headers["If-None-Match"], tag))
+        {
+            context.Response.StatusCode = 304;
+            context.Response.Close();
+            return;
+        }
+
+        Write(context, "text/html; charset=utf-8", page);
     }
 
     private object BuildState()
@@ -312,6 +371,12 @@ public sealed class Dashboard
                 }).ToArray(),
 
             muted = _server.Mutes.Muted.Select(id => id.ToString()).ToArray(),
+
+            you = new
+            {
+                name = _acting,
+                role = _actingRole.ToString().ToLowerInvariant(),
+            },
 
             whitelist = new
             {
@@ -756,6 +821,62 @@ public sealed class Dashboard
     }
 
     // ---- plumbing ----
+
+    /// <summary>
+    /// Lists, adds and removes panel accounts. Never returns a hash or a salt:
+    /// the panel has no reason to see them and neither has anyone reading over
+    /// a shoulder.
+    /// </summary>
+    private void HandleAccounts(HttpListenerContext context, NameValueCollection query)
+    {
+        string action = query["action"] ?? "list";
+        string name = (query["name"] ?? "").Trim();
+
+        switch (action)
+        {
+            case "add":
+            {
+                string password = query["password"] ?? "";
+
+                if (name.Length == 0 || password.Length < 8)
+                {
+                    context.Response.StatusCode = 400;
+                    Write(context, "text/plain",
+                        "An account needs a name and a password of at least eight characters.");
+                    return;
+                }
+
+                if (string.Equals(name, _config.DashboardUser, StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.StatusCode = 400;
+                    Write(context, "text/plain",
+                        "That name belongs to the panel's own account. Change it in the server settings instead.");
+                    return;
+                }
+
+                Users.Set(name, password, PanelPermissions.ParseRole(query["role"]));
+                Users.Save();
+                _server.Log("INFO", $"Panel account {name} set by {_acting}");
+                break;
+            }
+
+            case "remove":
+            {
+                if (Users.Remove(name))
+                {
+                    Users.Save();
+                    _server.Log("INFO", $"Panel account {name} removed by {_acting}");
+                }
+
+                break;
+            }
+        }
+
+        ServeJson(context, Users.Accounts
+            .Select(a => new { name = a.Key, role = a.Value.Role, createdAt = a.Value.CreatedAt })
+            .OrderBy(a => a.name)
+            .ToArray());
+    }
 
     private static void ServeJson(HttpListenerContext context, object payload)
     {

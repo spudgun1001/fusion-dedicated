@@ -583,6 +583,18 @@
     .log .msg { flex: 1 1 100%; }
   }
 
+  /* ---------- what the signed-in account may reach ---------- */
+  /* The server refuses these anyway. Hiding them keeps a viewer from pressing
+     things that would only tell them no. No attribute means an older server
+     that does not report a role, so everything stays visible. */
+  body:not([data-role="owner"]) nav a[data-tab="settings"] { display: none; }
+
+  body[data-role="viewer"] .acts,
+  body[data-role="viewer"] .seg,
+  body[data-role="viewer"] button.go,
+  body[data-role="viewer"] button.danger,
+  body[data-role="viewer"] .bar { display: none; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -912,6 +924,30 @@
         <button onclick="revert()">Revert</button>
         <span class="note" id="saveNote">No pending changes</span>
       </div>
+
+      <h2>Panel accounts</h2>
+      <p class="hint">Everyone who can open this panel. The account in the server
+        settings is always an owner and is not listed here, so a forgotten
+        password never locks you out.</p>
+      <div class="frame"><div class="frame-in" id="accounts"></div></div>
+
+      <h2>Add an account</h2>
+      <div class="frame"><div class="frame-in pad">
+        <div class="fields">
+          <div><label>Name</label><input id="acName" placeholder="badger"></div>
+          <div><label>Password</label><input id="acPass" type="password" placeholder="at least 8 characters"></div>
+          <div>
+            <label>Role</label>
+            <select id="acRole">
+              <option value="moderator">Moderator, deals with people and the world</option>
+              <option value="viewer">Viewer, sees everything and changes nothing</option>
+              <option value="owner">Owner, everything including settings</option>
+            </select>
+          </div>
+        </div>
+        <div class="bar flat"><button class="go" onclick="addAccount()">Add account</button></div>
+      </div></div>
+
     </section>
 
     <section class="view" id="v-log">
@@ -1255,7 +1291,9 @@ function render() {
   if (tab === 'world') { renderMap(d); renderWorld(d); }
   if (tab === 'moderation') { renderRanks(d); renderBans(d); }
   if (tab === 'insights') { renderAnalytics(); renderResources(d); }
-  if (tab === 'settings') renderSettings(d);
+  applyRole(d.you);
+
+  if (tab === 'settings') { renderSettings(d); loadAccounts(); }
   if (tab === 'log') renderLog(d);
 }
 
@@ -1591,6 +1629,75 @@ function renderWorld(d) {
 }
 
 /* ---------- settings ---------- */
+
+/* ---------- panel accounts ---------- */
+
+/* A viewer sees the server without the controls that would only refuse them.
+   The stylesheet does the hiding, so a redraw cannot undo it. */
+function applyRole(you) {
+  if (you && you.role) document.body.dataset.role = you.role;
+}
+
+function renderAccounts(list) {
+  const el = $('accounts');
+  if (!el) return;
+
+  if (!list || !list.length) {
+    el.innerHTML = '<div class="empty"><b>No other accounts</b>' +
+      '<span>Only the account in the server settings can open this panel.</span></div>';
+    return;
+  }
+
+  el.innerHTML = '<table><thead><tr><th>Name</th><th>Role</th><th>Added</th>' +
+    '<th class="right">Actions</th></tr></thead><tbody>' +
+    list.map(a =>
+      '<tr>' +
+      '<td data-label="Name"><div class="name">' + esc(a.name) + '</div></td>' +
+      '<td data-label="Role"><span class="chip ' + roleClass(a.role) + '">' +
+        esc(a.role) + '</span></td>' +
+      '<td class="dim" data-label="Added">' + esc(a.createdAt || '') + '</td>' +
+      '<td class="right" data-label="Actions"><div class="acts">' +
+        '<button class="bad" onclick="removeAccount(\'' + esc(a.name) + '\')">Remove</button>' +
+      '</div></td></tr>').join('') + '</tbody></table>';
+}
+
+function roleClass(role) {
+  if (role === 'owner') return 'owner';
+  if (role === 'moderator') return 'operator';
+  return '';
+}
+
+async function loadAccounts() {
+  try { renderAccounts(await (await fetch('/api/accounts')).json()); }
+  catch { /* not an owner, or the panel is unreachable */ }
+}
+
+async function addAccount() {
+  const name = $('acName').value.trim();
+  const pass = $('acPass').value;
+  const role = $('acRole').value;
+
+  if (!name || pass.length < 8) {
+    alert('An account needs a name and a password of at least eight characters.');
+    return;
+  }
+
+  const r = await fetch('/api/accounts?action=add&name=' + encodeURIComponent(name) +
+    '&password=' + encodeURIComponent(pass) + '&role=' + role);
+
+  if (!r.ok) { alert(await r.text()); return; }
+
+  $('acName').value = '';
+  $('acPass').value = '';
+  renderAccounts(await r.json());
+}
+
+async function removeAccount(name) {
+  if (!confirm('Remove ' + name + '? They lose access to this panel at once.')) return;
+
+  const r = await fetch('/api/accounts?action=remove&name=' + encodeURIComponent(name));
+  if (r.ok) renderAccounts(await r.json());
+}
 
 function renderSettings(d) {
   if (!draft) { revert(); return; }
