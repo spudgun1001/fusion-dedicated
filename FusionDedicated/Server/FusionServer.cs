@@ -661,6 +661,15 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        var toolVerdict = ToolGate.Check(request.Value.Barcode, sender.Permission, ToolGatesFromConfig());
+
+        if (toolVerdict.Blocked)
+        {
+            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+                        $"denied: {toolVerdict.Reason}");
+            return;
+        }
+
         if (!_rateLimiter.Allow(sender.SmallId, DateTime.UtcNow))
         {
             Log("WARN", $"Spawn by {sender.DisplayName} denied: over the per-second rate cap");
@@ -1296,6 +1305,42 @@ public sealed class FusionServer : IDisposable
         Broadcast(ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
     }
 
+    private ToolGates ToolGatesFromConfig()
+        => new(Config.DevTools, Config.Constrainer, Config.Nimbus);
+
+    /// <summary>
+    /// Whether a player may take a tool that already exists. Taking it away is the
+    /// only answer that holds, because refusing ownership stops the tool syncing but
+    /// the client holding it still runs it, which is how a nimbus gun keeps flying.
+    ///
+    /// Only entities the server saw spawned have a barcode, so a tool placed in the
+    /// level itself is not something this can recognise.
+    /// </summary>
+    private bool MayHold(ConnectedPlayer sender, ushort entityId)
+    {
+        var entity = Entities.Get(entityId);
+
+        if (entity == null || string.IsNullOrEmpty(entity.Barcode))
+        {
+            return true;
+        }
+
+        var verdict = ToolGate.Check(entity.Barcode, sender.Permission, ToolGatesFromConfig());
+
+        if (!verdict.Blocked)
+        {
+            return true;
+        }
+
+        Log("WARN", $"{sender.DisplayName} took '{entity.ShortName}' without the rank for it " +
+                    $"({verdict.Reason}), removing it");
+
+        Entities.Remove(entityId);
+        DespawnOnClients(new[] { entityId });
+
+        return false;
+    }
+
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = TryReadOwnership(message);
@@ -1306,6 +1351,11 @@ public sealed class FusionServer : IDisposable
         }
 
         var (requestedOwner, entityId) = request.Value;
+
+        if (!MayHold(sender, entityId))
+        {
+            return;
+        }
 
         Entities.SetOwner(entityId, requestedOwner);
 

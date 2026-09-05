@@ -183,6 +183,7 @@ public sealed class ServerConfig
 
     public PermissionLevel DevTools { get; set; } = PermissionLevel.Default;
     public PermissionLevel Constrainer { get; set; } = PermissionLevel.Default;
+    public PermissionLevel Nimbus { get; set; } = PermissionLevel.Default;
     public PermissionLevel CustomAvatars { get; set; } = PermissionLevel.Default;
     public PermissionLevel Kicking { get; set; } = PermissionLevel.Operator;
     public PermissionLevel Banning { get; set; } = PermissionLevel.Operator;

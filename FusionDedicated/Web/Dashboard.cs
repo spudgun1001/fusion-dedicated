@@ -326,6 +326,7 @@ public sealed class Dashboard
             {
                 devTools = (int)_config.DevTools,
                 constrainer = (int)_config.Constrainer,
+                nimbus = (int)_config.Nimbus,
                 customAvatars = (int)_config.CustomAvatars,
                 kicking = (int)_config.Kicking,
                 banning = (int)_config.Banning,
@@ -752,6 +753,7 @@ public sealed class Dashboard
         // Permission gates
         ReadLevel(query, "devTools", v => _config.DevTools = v);
         ReadLevel(query, "constrainer", v => _config.Constrainer = v);
+        ReadLevel(query, "nimbus", v => _config.Nimbus = v);
         ReadLevel(query, "customAvatars", v => _config.CustomAvatars = v);
         ReadLevel(query, "kicking", v => _config.Kicking = v);
         ReadLevel(query, "banning", v => _config.Banning = v);
