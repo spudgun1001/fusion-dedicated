@@ -750,7 +750,7 @@ public sealed class FusionServer : IDisposable
 
         Broadcast(FusionProtocol.BuildSpawnResponse(sender.SmallId, sender.SmallId, entityId,
             request.Value.Barcode, request.Value.Position, request.Value.Rotation,
-            request.Value.TrackerId), reliable: true);
+            request.Value.TrackerId, request.Value.SpawnEffect), reliable: true);
 
         Log("INFO", $"Spawn: id={entityId} '{request.Value.Barcode}' by {sender.DisplayName}");
     }

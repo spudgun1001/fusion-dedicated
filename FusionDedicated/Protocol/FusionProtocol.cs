@@ -410,7 +410,7 @@ public static class FusionProtocol
     public const int RotationBytes = 7;
 
     public readonly record struct SpawnRequestInfo(
-        string Barcode, Vec3 Position, byte[] Rotation, uint TrackerId);
+        string Barcode, Vec3 Position, byte[] Rotation, uint TrackerId, bool SpawnEffect);
 
     /// <summary>
     /// Reads a SpawnRequest. The rotation is kept as its wire bytes so the response
@@ -437,8 +437,22 @@ public static class FusionProtocol
 
             var position = new Vec3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
             byte[] rotation = reader.ReadRaw(RotationBytes).ToArray();
+            uint trackerId = reader.ReadUInt32();
 
-            return new SpawnRequestInfo(barcode, position, rotation, reader.ReadUInt32());
+            // Live clients ask for no effect, which is what makes a reload quiet.
+            // Read separately so a client that stops here still gets its spawn.
+            bool spawnEffect = false;
+
+            try
+            {
+                spawnEffect = reader.ReadBool();
+            }
+            catch
+            {
+                // Nothing after the tracker id, so take the quiet default.
+            }
+
+            return new SpawnRequestInfo(barcode, position, rotation, trackerId, spawnEffect);
         }
         catch
         {

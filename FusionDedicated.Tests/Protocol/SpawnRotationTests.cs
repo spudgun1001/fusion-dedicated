@@ -98,6 +98,78 @@ public class SpawnRotationTests
         Assert.Equal(IdentityBytes(), RotationOfResponse(response));
     }
 
+    /// <summary>Reads the spawn effect flag, which sits after the tracker id.</summary>
+    private static bool SpawnEffectOfResponse(byte[] response)
+    {
+        var reader = new FusionNetReader(response);
+
+        reader.ReadByte();          // tag
+        reader.ReadByte();          // relay type
+        reader.ReadByte();          // channel
+        reader.ReadNullableByte();  // sender
+        reader.ReadInt32();         // payload length
+
+        reader.ReadByte();          // owner
+        reader.ReadUInt16();        // entity id
+        reader.ReadString();        // barcode
+        reader.ReadSingle();
+        reader.ReadSingle();
+        reader.ReadSingle();
+        reader.ReadRaw(7);          // rotation
+        reader.ReadUInt32();        // tracker id
+
+        return reader.ReadBool();
+    }
+
+    [Fact]
+    public void A_request_says_whether_it_wants_the_spawn_effect()
+    {
+        var quiet = FusionProtocol.BuildSpawnRequest(1, "Test.Barcode", Vec3.Zero, 7);
+        var loud = FusionProtocol.BuildSpawnRequest(1, "Test.Barcode", Vec3.Zero, 7, spawnEffect: true);
+
+        Assert.False(FusionProtocol.TryReadSpawnRequest(quiet)!.Value.SpawnEffect);
+        Assert.True(FusionProtocol.TryReadSpawnRequest(loud)!.Value.SpawnEffect);
+    }
+
+    [Fact]
+    public void A_quiet_spawn_stays_quiet_through_the_response()
+    {
+        // A magazine spawned on reload asks for no effect, and used to get one
+        // because the server answered with its own default instead.
+        var request = FusionProtocol.BuildSpawnRequest(1, "Test.Magazine", Vec3.Zero, 7);
+        var parsed = FusionProtocol.TryReadSpawnRequest(request)!.Value;
+
+        var response = FusionProtocol.BuildSpawnResponse(
+            1, 1, 256, parsed.Barcode, parsed.Position, parsed.Rotation,
+            parsed.TrackerId, parsed.SpawnEffect);
+
+        Assert.False(SpawnEffectOfResponse(response));
+    }
+
+    [Fact]
+    public void A_spawn_that_asked_for_the_effect_keeps_it()
+    {
+        var request = FusionProtocol.BuildSpawnRequest(
+            1, "Test.Barcode", Vec3.Zero, 7, spawnEffect: true);
+        var parsed = FusionProtocol.TryReadSpawnRequest(request)!.Value;
+
+        var response = FusionProtocol.BuildSpawnResponse(
+            1, 1, 256, parsed.Barcode, parsed.Position, parsed.Rotation,
+            parsed.TrackerId, parsed.SpawnEffect);
+
+        Assert.True(SpawnEffectOfResponse(response));
+    }
+
+    [Fact]
+    public void A_request_that_stops_after_the_tracker_id_reads_as_a_quiet_spawn()
+    {
+        var request = FusionProtocol.BuildSpawnRequest(1, "Test.Barcode", Vec3.Zero, 7);
+        var parsed = FusionProtocol.TryReadSpawnRequest(request[..(request.Length - 2)]);
+
+        Assert.NotNull(parsed);
+        Assert.False(parsed!.Value.SpawnEffect);
+    }
+
     [Fact]
     public void A_truncated_request_reads_as_nothing_rather_than_throwing()
     {
