@@ -644,7 +644,7 @@ public sealed class FusionServer : IDisposable
 
     private void HandleSpawnRequest(ConnectedPlayer sender, byte[] message)
     {
-        var request = TryReadSpawnRequest(message);
+        var request = FusionProtocol.TryReadSpawnRequest(message);
 
         if (request == null)
         {
@@ -737,10 +737,10 @@ public sealed class FusionServer : IDisposable
         ushort entityId = Entities.AllocateId();
 
         Entities.Register(entityId, request.Value.Barcode, sender.SmallId,
-            request.Value.X, request.Value.Y, request.Value.Z);
+            request.Value.Position.X, request.Value.Position.Y, request.Value.Position.Z);
 
         Broadcast(FusionProtocol.BuildSpawnResponse(sender.SmallId, sender.SmallId, entityId,
-            request.Value.Barcode, new Vec3(request.Value.X, request.Value.Y, request.Value.Z),
+            request.Value.Barcode, request.Value.Position, request.Value.Rotation,
             request.Value.TrackerId), reliable: true);
 
         Log("INFO", $"Spawn: id={entityId} '{request.Value.Barcode}' by {sender.DisplayName}");
@@ -1536,39 +1536,6 @@ public sealed class FusionServer : IDisposable
     }
 
     // ---- small readers ----
-
-    private static (string Barcode, float X, float Y, float Z, uint TrackerId)? TryReadSpawnRequest(byte[] message)
-    {
-        try
-        {
-            var reader = new FusionNetReader(message);
-
-            reader.ReadByte(); // tag
-            byte relayType = reader.ReadByte();
-            reader.ReadByte(); // channel
-
-            if (relayType != 0)
-            {
-                reader.ReadNullableByte();
-            }
-
-            reader.ReadInt32(); // payload length
-
-            string barcode = reader.ReadString() ?? "";
-
-            float x = reader.ReadSingle();
-            float y = reader.ReadSingle();
-            float z = reader.ReadSingle();
-
-            reader.ReadRaw(7); // compressed rotation
-
-            return (barcode, x, y, z, reader.ReadUInt32());
-        }
-        catch
-        {
-            return null;
-        }
-    }
 
     private static (byte Owner, ushort EntityId)? TryReadOwnership(byte[] message)
     {

@@ -380,7 +380,7 @@ public static class FusionProtocol
     /// <param name="source">EntitySource. Captured traffic from a working client uses 1
     /// (Scene). The 3 previously guessed here produced no response at all.</param>
     public static byte[] BuildSpawnRequest(byte senderSmallId, string barcode, Vec3 position,
-        uint trackerId, bool spawnEffect = false, byte source = 1)
+        uint trackerId, bool spawnEffect = false, byte source = 1, Quat rotation = default)
     {
         var payload = new FusionNetWriter(128);
 
@@ -389,7 +389,7 @@ public static class FusionProtocol
         payload.Write(position.X);
         payload.Write(position.Y);
         payload.Write(position.Z);
-        WriteSerializedQuaternion(payload, Quat.Identity);
+        WriteSerializedQuaternion(payload, rotation);
 
         payload.WriteUInt32(trackerId);
         payload.Write(spawnEffect);
@@ -406,14 +406,59 @@ public static class FusionProtocol
         return message.ToArray();
     }
 
+    /// <summary>A SerializedQuaternion on the wire: three shorts and a byte.</summary>
+    public const int RotationBytes = 7;
+
+    public readonly record struct SpawnRequestInfo(
+        string Barcode, Vec3 Position, byte[] Rotation, uint TrackerId);
+
+    /// <summary>
+    /// Reads a SpawnRequest. The rotation is kept as its wire bytes so the response
+    /// can repeat it exactly.
+    /// </summary>
+    public static SpawnRequestInfo? TryReadSpawnRequest(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            reader.ReadByte(); // tag
+            byte relayType = reader.ReadByte();
+            reader.ReadByte(); // channel
+
+            if (relayType != RelayTypeNone)
+            {
+                reader.ReadNullableByte();
+            }
+
+            reader.ReadInt32(); // payload length
+
+            string barcode = reader.ReadString() ?? "";
+
+            var position = new Vec3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+            byte[] rotation = reader.ReadRaw(RotationBytes).ToArray();
+
+            return new SpawnRequestInfo(barcode, position, rotation, reader.ReadUInt32());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public sealed record SpawnResponseInfo(byte OwnerId, ushort EntityId, string? Barcode, uint TrackerId);
 
     /// <summary>
     /// Writes a SpawnResponse exactly as LabFusion's SpawnResponseData would. Used to
     /// round-trip the layout offline; the host is the only real source of these.
     /// </summary>
+    /// <param name="rotation">The seven rotation bytes from the request, passed
+    /// straight through. Decoding and re-encoding them would round the value, and
+    /// anything other than seven bytes would shift every field after it, so a
+    /// wrong length is replaced with an upright rotation rather than written.</param>
     public static byte[] BuildSpawnResponse(byte senderSmallId, byte ownerId, ushort entityId,
-        string barcode, Vec3 position, uint trackerId, bool spawnEffect = true, byte source = 3)
+        string barcode, Vec3 position, byte[]? rotation, uint trackerId,
+        bool spawnEffect = true, byte source = 3)
     {
         var payload = new FusionNetWriter(160);
 
@@ -425,7 +470,15 @@ public static class FusionProtocol
         payload.Write(position.X);
         payload.Write(position.Y);
         payload.Write(position.Z);
-        WriteSerializedQuaternion(payload, Quat.Identity);
+
+        if (rotation is { Length: RotationBytes })
+        {
+            payload.WriteRaw(rotation);
+        }
+        else
+        {
+            WriteSerializedQuaternion(payload, Quat.Identity);
+        }
         payload.WriteUInt32(trackerId);
         payload.Write(spawnEffect);
         payload.Write(source);
