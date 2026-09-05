@@ -45,6 +45,26 @@ public class ToolGateTests
     }
 
     [Theory]
+    [InlineData("SpudGun.AUG.Spawnable.AdvancedUtilityGun")]
+    [InlineData("someone.pallet.spawnable.advanced_utility_gun")]
+    [InlineData("Author.Pallet.Spawnable.UtilityGun")]
+    public void The_advanced_utility_gun_counts_as_a_dev_tool(string barcode)
+    {
+        // It is a spawn gun with more buttons, and the base game calls its own spawn
+        // gun a utility gun, so it belongs on the same setting.
+        Assert.Equal(ToolFamily.DevTools, ToolGate.Family(barcode));
+    }
+
+    [Fact]
+    public void A_guest_is_refused_the_advanced_utility_gun_when_dev_tools_are_restricted()
+    {
+        Assert.True(ToolGate.Check(
+            "SpudGun.AUG.Spawnable.AdvancedUtilityGun",
+            PermissionLevel.Default,
+            Gates(devTools: PermissionLevel.Operator)).Blocked);
+    }
+
+    [Theory]
     [InlineData("SLZ.BONELAB.Content.Spawnable.Crate")]
     [InlineData("")]
     [InlineData("SLZ.BONELAB.Content.Avatar.Ford")]
