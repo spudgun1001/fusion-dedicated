@@ -22,6 +22,7 @@ public class BuiltInSafetyTests
     {
         Assert.NotEmpty(BuiltInSafety.Barcodes);
         Assert.NotEmpty(BuiltInSafety.Keywords);
+        Assert.Contains("explosion", BuiltInSafety.Keywords);
     }
 
     [Theory]
@@ -90,5 +91,43 @@ public class BuiltInSafetyTests
 
         Assert.True(verdict.Blocked);
         Assert.Equal("blocklist", verdict.Layer);
+    }
+}
+
+/// <summary>
+/// Explosives are grief rather than content on a public server, so the built-in
+/// list catches them by name once extended protection is on.
+/// </summary>
+public class ExplosionKeywordTests
+{
+    private static BlocklistEvaluator Extended()
+        => new(new HashSet<string>(StringComparer.Ordinal), extendedProtection: true);
+
+    [Theory]
+    [InlineData("BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionGasGrenade")]
+    [InlineData("Mod.Spawnable.BIG_EXPLOSION_BARREL")]
+    public void An_explosive_is_refused_whatever_the_rank(string barcode)
+    {
+        var verdict = Extended().Check(barcode, PermissionLevel.Owner);
+
+        Assert.True(verdict.Blocked);
+        Assert.Equal("built-in", verdict.Layer);
+    }
+
+    [Fact]
+    public void Ordinary_props_are_left_alone()
+    {
+        Assert.False(Extended()
+            .Check("SLZ.BONELAB.Content.Spawnable.Crate", PermissionLevel.Guest).Blocked);
+    }
+
+    [Fact]
+    public void It_does_nothing_until_extended_protection_is_on()
+    {
+        var off = new BlocklistEvaluator(new HashSet<string>(StringComparer.Ordinal));
+
+        Assert.False(off.Check(
+            "BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionGasGrenade",
+            PermissionLevel.Default).Blocked);
     }
 }

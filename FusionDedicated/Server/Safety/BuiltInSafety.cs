@@ -48,6 +48,7 @@ public static class BuiltInSafety
         "icbm",
         "blackhole",
         "singularity",
+        "explosion",
     };
 
     /// <summary>Used when blocklist.json is absent, so the guards still have limits.</summary>
