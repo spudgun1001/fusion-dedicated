@@ -121,7 +121,48 @@ public static class ToolGate
 public static class SpawnAuthority
 {
     public static BlockVerdict Check(PermissionLevel rank, PermissionLevel required)
-        => rank.IsAtLeast(required)
-            ? BlockVerdict.Allowed
-            : new BlockVerdict(true, "rank", $"spawning needs {required.ToFusionString()}");
+        => Check(rank, required, "", Array.Empty<string>());
+
+    /// <summary>
+    /// A gun asking for a magazine comes down the same path as a spawn menu, so
+    /// refusing it by rank would stop people reloading. Anything named in
+    /// <paramref name="exempt"/> passes whatever the spawner's rank, matched either
+    /// as a whole barcode or as a word inside one.
+    /// </summary>
+    public static BlockVerdict Check(
+        PermissionLevel rank, PermissionLevel required,
+        string barcode, IEnumerable<string> exempt)
+    {
+        if (rank.IsAtLeast(required))
+        {
+            return BlockVerdict.Allowed;
+        }
+
+        if (IsExempt(barcode, exempt))
+        {
+            return BlockVerdict.Allowed;
+        }
+
+        return new BlockVerdict(true, "rank", $"spawning needs {required.ToFusionString()}");
+    }
+
+    public static bool IsExempt(string barcode, IEnumerable<string> exempt)
+    {
+        if (string.IsNullOrWhiteSpace(barcode))
+        {
+            return false;
+        }
+
+        foreach (string entry in exempt)
+        {
+            // A blank line in the config would otherwise exempt everything.
+            if (!string.IsNullOrWhiteSpace(entry)
+                && barcode.Contains(entry.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

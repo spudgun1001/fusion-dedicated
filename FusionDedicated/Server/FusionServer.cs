@@ -652,7 +652,8 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        var rankVerdict = SpawnAuthority.Check(sender.Permission, Config.Spawning);
+        var rankVerdict = SpawnAuthority.Check(
+            sender.Permission, Config.Spawning, request.Value.Barcode, Config.SpawningExempt);
 
         if (rankVerdict.Blocked)
         {

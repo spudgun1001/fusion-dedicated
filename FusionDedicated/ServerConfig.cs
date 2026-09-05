@@ -187,6 +187,17 @@ public sealed class ServerConfig
 
     /// <summary>The minimum rank to spawn anything, whatever spawned it.</summary>
     public PermissionLevel Spawning { get; set; } = PermissionLevel.Default;
+
+    /// <summary>
+    /// Words or whole barcodes that ignore <see cref="Spawning"/>. A gun asking for
+    /// a magazine spawns it the same way a menu would, so without these, raising the
+    /// spawn rank would stop people reloading. Base game barcodes carry no readable
+    /// name, so those have to be named in full.
+    /// </summary>
+    public static readonly string[] DefaultSpawningExempt =
+        { "magazine", "ammo", "cartridge" };
+
+    public List<string> SpawningExempt { get; set; } = new(DefaultSpawningExempt);
     public PermissionLevel CustomAvatars { get; set; } = PermissionLevel.Default;
     public PermissionLevel Kicking { get; set; } = PermissionLevel.Operator;
     public PermissionLevel Banning { get; set; } = PermissionLevel.Operator;
