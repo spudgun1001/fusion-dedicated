@@ -395,6 +395,34 @@ public static class ServerProtocol
         return message.ToArray();
     }
 
+    /// <summary>
+    /// Moves one player to a position. A real host reads the rig position itself and
+    /// sends this; a dedicated server has no rig, so it uses the last pelvis position
+    /// the player reported.
+    ///
+    /// Addressed to clients rather than to a target, because the server hands it
+    /// straight to the one connection that needs it. It is stamped with the player
+    /// who asked, since a client ignores a message from a sender it cannot resolve.
+    /// </summary>
+    public static byte[] WritePlayerTeleport(byte senderSmallId, Vec3 position)
+    {
+        var payload = new FusionNetWriter(16);
+
+        payload.Write(position.X);
+        payload.Write(position.Y);
+        payload.Write(position.Z);
+
+        var message = new FusionNetWriter(32);
+
+        message.Write(GateProtocol.TagPlayerRepTeleport);
+        message.Write((byte)2); // ToClients
+        message.Write((byte)0); // Reliable
+        message.WriteNullable(senderSmallId);
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
     public enum PermissionCommand : byte
     {
         Unknown = 0,

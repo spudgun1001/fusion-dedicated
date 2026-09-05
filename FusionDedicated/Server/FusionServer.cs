@@ -463,6 +463,10 @@ public sealed class FusionServer : IDisposable
                 HandlePermissionCommand(sender, message);
                 return;
 
+            case FusionProtocol.TagPlayerPoseUpdate when sender != null:
+                TrackPlayerPose(sender, message);
+                break;
+
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
                 TrackEntityPose(sender, message);
                 break;
@@ -943,9 +947,28 @@ public sealed class FusionServer : IDisposable
                     return;
                 }
 
-                // Teleporting needs a rig position, which only a simulating client
-                // knows. Pass it along and let the players work it out between them.
-                Relay(sender, message);
+                if (!sender.HasPosition || !target.HasPosition)
+                {
+                    Log("WARN", $"{sender.DisplayName} tried to teleport {target.DisplayName} " +
+                                "but one of them has not reported a position yet");
+                    return;
+                }
+
+                // Relay drops anything addressed to the server, so passing the request
+                // on did nothing at all. The server has to send the teleport itself.
+                var plan = TeleportPlanner.For(command,
+                    sender.SmallId, sender.LastPosition,
+                    target.SmallId, target.LastPosition);
+
+                if (plan is not { } move || Players.Get(move.MoveSmallId) is not { } moved)
+                {
+                    return;
+                }
+
+                SendTo(moved.Connection,
+                    ServerProtocol.WritePlayerTeleport(sender.SmallId, move.To), reliable: true);
+
+                Log("INFO", $"{sender.DisplayName} teleported {moved.DisplayName}");
                 return;
         }
     }
@@ -1385,6 +1408,23 @@ public sealed class FusionServer : IDisposable
         response.WriteBlock(payload.ToArray());
 
         Broadcast(response.ToArray(), reliable: true);
+    }
+
+    /// <summary>
+    /// Remembers where a player is standing. Nothing else needs it, but teleporting
+    /// does, and the pose is only ever passing through on its way to other clients.
+    /// </summary>
+    private static void TrackPlayerPose(ConnectedPlayer sender, byte[] message)
+    {
+        var pose = FusionProtocol.TryReadPlayerPoseUpdate(message);
+
+        if (pose == null)
+        {
+            return;
+        }
+
+        sender.LastPosition = pose.Value.Pose.PelvisPosition;
+        sender.HasPosition = true;
     }
 
     private void TrackEntityPose(ConnectedPlayer sender, byte[] message)

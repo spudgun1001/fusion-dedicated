@@ -1,3 +1,4 @@
+using BonelabServerBrowser.Fusion;
 using Steamworks;
 
 namespace FusionDedicated.Server;
@@ -31,6 +32,15 @@ public sealed class ConnectedPlayer
     public System.Version Version { get; set; } = new(0, 0, 0);
     public DateTime JoinedAt { get; } = DateTime.UtcNow;
     public DateTime LastSeen { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Last pelvis position this player reported. A dedicated server has no rig of
+    /// its own, so this is the only place it can learn where anybody is standing,
+    /// which teleporting needs.
+    /// </summary>
+    public Vec3 LastPosition { get; set; } = Vec3.Zero;
+
+    public bool HasPosition { get; set; }
 
     public long BytesIn { get; set; }
     public long BytesOut { get; set; }
