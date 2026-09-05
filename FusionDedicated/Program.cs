@@ -257,7 +257,8 @@ public static class Program
 
         StdinCommands.Start(commands, Console.WriteLine, quit.Token);
 
-        using var rcon = new RconServer(commands, config.RconPassword, config.RconPort, server.Log);
+        using var rcon = new RconServer(commands, config.RconPassword, config.RconPort,
+        (level, message) => server.Log(level, message));
 
         rcon.Start();
 

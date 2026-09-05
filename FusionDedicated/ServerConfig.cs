@@ -226,6 +226,9 @@ public sealed class ServerConfig
     /// A dedicated server simulates nothing, so entities whose owner left have no one
     /// applying gravity to them, they hang in place. Culling keeps the world tidy.
     /// </summary>
+    /// <summary>Records every hit landed, for the panel's combat log.</summary>
+    public bool LogCombat { get; set; } = true;
+
     public bool CullOrphanedEntities { get; set; } = true;
 
     public int OrphanTimeoutSeconds { get; set; } = 120;

@@ -502,8 +502,10 @@
   }
   .log .r:hover { background: hsl(var(--muted) / .45); }
   .log .ts { color: hsl(var(--muted-foreground)); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-  .log .lv { width: 48px; flex-shrink: 0; font-weight: 600; font-size: 11.5px; }
+  .log .lv { width: 56px; flex-shrink: 0; font-weight: 600; font-size: 11.5px; }
   .log .msg { word-break: break-word; }
+  .lv.SPAWN  { color: hsl(var(--primary-strong)); }
+  .lv.DAMAGE { color: hsl(var(--warning-strong)); }
   .lv.INFO  { color: hsl(var(--info)); }
   .lv.WARN  { color: hsl(var(--warning-strong)); }
   .lv.ERROR { color: hsl(var(--destructive-strong)); }
@@ -1841,7 +1843,7 @@ const logRows = entries => entries.map(l =>
 
 function renderLog(d) {
   if (!$('logLevels').children.length) {
-    $('logLevels').innerHTML = ['ALL', 'JOIN', 'LEAVE', 'INFO', 'WARN', 'ERROR']
+    $('logLevels').innerHTML = ['ALL', 'SPAWN', 'DAMAGE', 'JOIN', 'LEAVE', 'INFO', 'WARN', 'ERROR']
       .map(l => '<button data-lv="' + l + '" class="' + (l === 'ALL' ? 'on' : '') + '">' + l + '</button>')
       .join('');
 

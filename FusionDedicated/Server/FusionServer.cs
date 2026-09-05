@@ -173,7 +173,11 @@ public sealed class FusionServer : IDisposable
         }
     }
 
-    public void Log(string level, string message)
+    /// <param name="console">
+    /// False for lines that arrive too often to read, such as every hit landed.
+    /// They still reach the panel and the log file.
+    /// </param>
+    public void Log(string level, string message, bool console = true)
     {
         var entry = new ServerLogEntry(DateTime.UtcNow, level, message);
 
@@ -187,6 +191,11 @@ public sealed class FusionServer : IDisposable
             }
 
             WriteToFile(entry);
+        }
+
+        if (!console)
+        {
+            return;
         }
 
         var colour = level switch
@@ -480,6 +489,14 @@ public sealed class FusionServer : IDisposable
                 break;
 
             case GateProtocol.TagPlayerRepDamage when sender != null:
+                if (!PassesGates(sender, tag, message))
+                {
+                    return;
+                }
+
+                RecordHit(sender, message);
+                break;
+
             case GateProtocol.TagPlayerRepTeleport when sender != null:
             case GateProtocol.TagPlayerRepAvatar when sender != null:
             case GateProtocol.TagSlowMoButton when sender != null:
@@ -759,7 +776,7 @@ public sealed class FusionServer : IDisposable
 
         // Source and effect are logged because they are what tells a reload apart
         // from a spawn menu, which a barcode alone does not.
-        Log("INFO", $"Spawn: id={entityId} '{request.Value.Barcode}' by {sender.DisplayName} " +
+        Log("SPAWN", $"id={entityId} '{request.Value.Barcode}' by {sender.DisplayName} " +
                     $"(source={request.Value.Source}, effect={request.Value.SpawnEffect})");
     }
 
@@ -1425,6 +1442,24 @@ public sealed class FusionServer : IDisposable
 
         sender.LastPosition = pose.Value.Pose.PelvisPosition;
         sender.HasPosition = true;
+    }
+
+    /// <summary>
+    /// Notes a hit for the panel. Kept off the console because a firefight would
+    /// scroll everything else away.
+    /// </summary>
+    private void RecordHit(ConnectedPlayer sender, byte[] message)
+    {
+        if (!Config.LogCombat || GateProtocol.TryReadDamage(message) is not { } damage
+            || !CombatLog.IsWorthLogging(damage))
+        {
+            return;
+        }
+
+        var (_, _, target) = ServerProtocol.ReadRoute(message);
+        string? name = target.HasValue ? Players.Get(target.Value)?.DisplayName : null;
+
+        Log(CombatLog.Level, CombatLog.Describe(sender.DisplayName, name, damage), console: false);
     }
 
     private void TrackEntityPose(ConnectedPlayer sender, byte[] message)
