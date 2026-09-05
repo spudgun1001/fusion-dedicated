@@ -413,6 +413,7 @@ public sealed class Dashboard
             {
                 total = _server.Entities.Count,
                 orphaned = _server.Entities.OrphanCount,
+                discovered = _server.Entities.DiscoveredCount,
                 recent = _server.Entities.Entities
                     .OrderByDescending(e => e.LastUpdate)
                     .Take(60)

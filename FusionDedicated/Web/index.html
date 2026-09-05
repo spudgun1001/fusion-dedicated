@@ -1558,7 +1558,8 @@ function renderBans(d) {
 }
 
 function renderWorld(d) {
-  $('worldNote').textContent = d.entities.total + ' tracked, ' + d.entities.orphaned + ' orphaned';
+  $('worldNote').textContent = d.entities.total + ' tracked, ' + d.entities.orphaned +
+    ' orphaned, ' + (d.entities.discovered || 0) + ' from the level';
 
   $('entities').innerHTML = !d.entities.recent.length
     ? empty('No entities')
@@ -1818,8 +1819,28 @@ async function addBan() {
 
 async function clearWorld() {
   if (!confirm('Delete every entity in the world?')) return;
-  const r = await (await fetch('/api/clear')).json();
-  alert('Removed ' + (r.removed || 0) + ' entities.');
+
+  const first = await (await fetch('/api/clear')).json();
+  await poll();
+
+  // Anything the server learned from a pose rather than a spawn is held back,
+  // because it may belong to the level. NPCs arrive that way, so say what was
+  // left rather than reporting a clear world that still has things in it.
+  const held = (state && state.entities && state.entities.discovered) || 0;
+
+  if (!held) {
+    alert('Removed ' + (first.removed || 0) + ' entities.');
+    return;
+  }
+
+  if (!confirm('Removed ' + (first.removed || 0) + ' entities.\n\n' +
+      held + ' more came from the level rather than a spawn, NPCs among them.\n\n' +
+      'Remove those too, or cancel to keep them. Anything belonging to the map ' +
+      'will not come back until the level reloads.')) return;
+
+  const second = await (await fetch('/api/clear?includeDiscovered=1')).json();
+
+  alert('Removed ' + (second.removed || 0) + ' more.');
   poll();
 }
 
