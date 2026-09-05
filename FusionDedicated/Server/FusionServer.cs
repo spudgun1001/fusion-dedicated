@@ -752,7 +752,10 @@ public sealed class FusionServer : IDisposable
             request.Value.Barcode, request.Value.Position, request.Value.Rotation,
             request.Value.TrackerId, request.Value.SpawnEffect), reliable: true);
 
-        Log("INFO", $"Spawn: id={entityId} '{request.Value.Barcode}' by {sender.DisplayName}");
+        // Source and effect are logged because they are what tells a reload apart
+        // from a spawn menu, which a barcode alone does not.
+        Log("INFO", $"Spawn: id={entityId} '{request.Value.Barcode}' by {sender.DisplayName} " +
+                    $"(source={request.Value.Source}, effect={request.Value.SpawnEffect})");
     }
 
     /// <summary>

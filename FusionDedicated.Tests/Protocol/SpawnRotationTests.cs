@@ -171,6 +171,17 @@ public class SpawnRotationTests
     }
 
     [Fact]
+    public void A_request_carries_the_source_that_asked_for_it()
+    {
+        // The source is what tells a reload apart from a spawn menu, which the
+        // barcode alone does not.
+        var request = FusionProtocol.BuildSpawnRequest(
+            1, "Test.Barcode", Vec3.Zero, 7, source: 4);
+
+        Assert.Equal(4, FusionProtocol.TryReadSpawnRequest(request)!.Value.Source);
+    }
+
+    [Fact]
     public void A_truncated_request_reads_as_nothing_rather_than_throwing()
     {
         var request = FusionProtocol.BuildSpawnRequest(
