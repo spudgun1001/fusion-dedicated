@@ -111,3 +111,17 @@ public static class ToolGate
                 $"{family} needs {required.ToFusionString()}");
     }
 }
+
+/// <summary>
+/// Who may spawn anything at all. The tool gate only knows dev tools and the
+/// blocklist only knows barcodes it was told about, so a spawn menu mod could
+/// otherwise hand a weapon to anybody. Every spawn path has to ask the server for
+/// an entity id, so this covers the ones nobody has thought of yet.
+/// </summary>
+public static class SpawnAuthority
+{
+    public static BlockVerdict Check(PermissionLevel rank, PermissionLevel required)
+        => rank.IsAtLeast(required)
+            ? BlockVerdict.Allowed
+            : new BlockVerdict(true, "rank", $"spawning needs {required.ToFusionString()}");
+}
