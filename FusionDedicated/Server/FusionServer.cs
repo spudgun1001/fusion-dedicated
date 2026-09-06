@@ -520,16 +520,72 @@ public sealed class FusionServer : IDisposable
                 break;
 
             case GateProtocol.TagPlayerRepDamage when sender != null:
+            {
                 if (!PassesGates(sender, tag, message))
+                {
+                    return;
+                }
+
+                var pluginDamage = Plugins?.Damage.Raise(new Plugins.DamageEvent(
+                    sender.PlatformId, sender.DisplayName, 0,
+                    GateProtocol.TryReadDamage(message) ?? 0f));
+
+                if (pluginDamage is { Allowed: false })
                 {
                     return;
                 }
 
                 RecordHit(sender, message);
                 break;
+            }
+
+            case GateProtocol.TagPlayerRepAvatar when sender != null:
+            {
+                if (!PassesGates(sender, tag, message))
+                {
+                    return;
+                }
+
+                string worn = GateProtocol.TryReadAvatarBarcode(message) ?? "";
+
+                var pluginAvatar = Plugins?.Avatar.Raise(new Plugins.AvatarEvent(
+                    sender.PlatformId, sender.DisplayName, sender.Permission, worn));
+
+                if (pluginAvatar is { Allowed: false })
+                {
+                    Log("WARN", $"{sender.DisplayName} tried to wear '{worn}', refused by a " +
+                                $"plugin: {pluginAvatar.Reason}");
+                    return;
+                }
+
+                // The panel and the lobby info read this, and it was only ever set
+                // during the handshake, so everybody kept the avatar they arrived in.
+                if (worn.Length > 0)
+                {
+                    sender.AvatarBarcode = worn;
+                }
+
+                break;
+            }
 
             case GateProtocol.TagPlayerRepTeleport when sender != null:
-            case GateProtocol.TagPlayerRepAvatar when sender != null:
+            {
+                if (!PassesGates(sender, tag, message))
+                {
+                    return;
+                }
+
+                var pluginTeleport = Plugins?.Teleport.Raise(new Plugins.TeleportEvent(
+                    sender.PlatformId, sender.DisplayName, sender.Permission));
+
+                if (pluginTeleport is { Allowed: false })
+                {
+                    return;
+                }
+
+                break;
+            }
+
             case GateProtocol.TagSlowMoButton when sender != null:
                 if (!PassesGates(sender, tag, message))
                 {
@@ -870,10 +926,7 @@ public sealed class FusionServer : IDisposable
                     return false;
                 }
 
-                var pluginDamage = Plugins?.Damage.Raise(new Plugins.DamageEvent(
-                    sender.PlatformId, sender.DisplayName, 0, damage ?? 0f));
-
-                return pluginDamage is not { Allowed: false };
+                return true;
 
             case GateProtocol.TagPlayerRepTeleport:
                 if (!sender.Permission.IsAtLeast(Config.Teleportation))
@@ -884,10 +937,7 @@ public sealed class FusionServer : IDisposable
                     return false;
                 }
 
-                var pluginTeleport = Plugins?.Teleport.Raise(new Plugins.TeleportEvent(
-                    sender.PlatformId, sender.DisplayName, sender.Permission));
-
-                return pluginTeleport is not { Allowed: false };
+                return true;
 
             case GateProtocol.TagPlayerRepAvatar:
                 string? barcode = GateProtocol.TryReadAvatarBarcode(message);
@@ -902,16 +952,6 @@ public sealed class FusionServer : IDisposable
                                     $"the {verdict.Layer} blocklist: {verdict.Reason}");
                         return false;
                     }
-                }
-
-                var pluginAvatar = Plugins?.Avatar.Raise(new Plugins.AvatarEvent(
-                    sender.PlatformId, sender.DisplayName, sender.Permission, barcode ?? ""));
-
-                if (pluginAvatar is { Allowed: false })
-                {
-                    Log("WARN", $"{sender.DisplayName} tried to wear '{barcode}', refused by a " +
-                                $"plugin: {pluginAvatar.Reason}");
-                    return false;
                 }
 
                 return true;
