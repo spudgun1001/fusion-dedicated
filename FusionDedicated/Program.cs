@@ -240,9 +240,12 @@ public static class Program
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));
 
+        var pluginModules = new PluginModules(pluginHealth,
+            (level, message) => server.Log(level, message));
+
         var plugins = new PluginHost(
             Path.Combine(AppContext.BaseDirectory, "plugins"),
-            pluginEvents, pluginHealth, pluginPanel, pluginActions,
+            pluginEvents, pluginHealth, pluginPanel, pluginModules, pluginActions,
             (level, message) => server.Log(level, message));
 
         var commands = new CommandProcessor(new ServerCommandTarget(server, plugins));
@@ -301,6 +304,7 @@ public static class Program
             // walk over empty channels, and the panel shows no plugin tabs.
             server.Plugins = pluginEvents;
             dashboard.PluginPanel = pluginPanel;
+            server.PluginModules = pluginModules;
 
             int loadedPlugins = plugins.LoadAll();
 

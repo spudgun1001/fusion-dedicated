@@ -78,6 +78,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Plugin events, when a host is running. Null means no plugins.</summary>
     public Plugins.PluginEvents? Plugins { get; set; }
 
+    /// <summary>Module tags plugins have claimed, when a host is running.</summary>
+    public Plugins.PluginModules? PluginModules { get; set; }
+
     /// <summary>When set, bans.json is authoritative over the config ban list.</summary>
     public Bans.BanStore? BanList { get; set; }
 
@@ -1524,6 +1527,31 @@ public sealed class FusionServer : IDisposable
         if (handler == null)
         {
             return;
+        }
+
+        // A plugin sees the message first, and Forward is how it hands control
+        // back, so a plugin that only watches constraints does not stop them.
+        if (PluginModules is { } modules && modules.Claims(handler.Value))
+        {
+            var action = modules.Dispatch(new FusionDedicated.Plugins.ModuleRequest(
+                sender.PlatformId, sender.DisplayName, sender.Permission, handler.Value,
+                ModuleProtocol.TryReadHandlerPayload(message) ?? Array.Empty<byte>()));
+
+            switch (action.Kind)
+            {
+                case FusionDedicated.Plugins.ModuleActionKind.Drop:
+                    return;
+
+                case FusionDedicated.Plugins.ModuleActionKind.Rewrite:
+                    Broadcast(ModuleProtocol.WriteModuleToClients(
+                        handler.Value, sender.SmallId, action.Payload), reliable: true);
+                    return;
+
+                case FusionDedicated.Plugins.ModuleActionKind.Reply:
+                    SendTo(sender.Connection, ModuleProtocol.WriteModuleToClients(
+                        handler.Value, sender.SmallId, action.Payload), reliable: true);
+                    return;
+            }
         }
 
         if (handler != ModuleProtocol.ConstraintCreateTag)

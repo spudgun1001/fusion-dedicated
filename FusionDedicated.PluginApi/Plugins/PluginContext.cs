@@ -8,12 +8,14 @@ public sealed class PluginContext
     private readonly Action<string, string> _log;
 
     public PluginContext(string name, PluginEvents events, PluginStore store,
-        PluginPanel panel, IPluginActions actions, Action<string, string> log)
+        PluginPanel panel, PluginModules modules, IPluginActions actions,
+        Action<string, string> log)
     {
         Name = name;
         Events = events;
         Store = store;
         Panel = panel;
+        Modules = modules;
         Actions = actions;
         _log = log;
     }
@@ -26,6 +28,9 @@ public sealed class PluginContext
 
     /// <summary>The page this plugin offers in the web panel, if it wants one.</summary>
     public PluginPanel Panel { get; }
+
+    /// <summary>Module message tags this plugin has claimed, if any.</summary>
+    public PluginModules Modules { get; }
 
     public IPluginActions Actions { get; }
 

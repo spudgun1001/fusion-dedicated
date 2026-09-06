@@ -35,6 +35,7 @@ public sealed class PluginHost
     private readonly PluginEvents _events;
     private readonly PluginHealth _health;
     private readonly PluginPanel _panel;
+    private readonly PluginModules _modules;
     private readonly IPluginActions _actions;
     private readonly Action<string, string> _log;
 
@@ -42,12 +43,14 @@ public sealed class PluginHost
     private readonly object _lock = new();
 
     public PluginHost(string directory, PluginEvents events, PluginHealth health,
-        PluginPanel panel, IPluginActions actions, Action<string, string> log)
+        PluginPanel panel, PluginModules modules, IPluginActions actions,
+        Action<string, string> log)
     {
         _directory = directory;
         _events = events;
         _health = health;
         _panel = panel;
+        _modules = modules;
         _actions = actions;
         _log = log;
     }
@@ -170,7 +173,7 @@ public sealed class PluginHost
         store.Load();
 
         var pluginContext = new PluginContext(
-            manifest.Name, _events, store, _panel, _actions, _log);
+            manifest.Name, _events, store, _panel, _modules, _actions, _log);
 
         try
         {
@@ -182,6 +185,7 @@ public sealed class PluginHost
             // that failed to start would still be answering events.
             _events.RemoveAll(manifest.Name);
             _panel.RemoveAll(manifest.Name);
+            _modules.RemoveAll(manifest.Name);
             _log("ERROR", $"Plugin '{manifest.Name}' threw while starting and was not loaded: {e.Message}");
             context?.Unload();
             return false;
@@ -232,6 +236,7 @@ public sealed class PluginHost
 
         _events.RemoveAll(plugin.Name);
         _panel.RemoveAll(plugin.Name);
+        _modules.RemoveAll(plugin.Name);
         _health.Forget(plugin.Name);
         plugin.Store.Save();
         plugin.Context?.Unload();

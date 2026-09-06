@@ -11,11 +11,13 @@ public class PluginHostTests : IDisposable
     private readonly List<string> _log = new();
     private readonly PluginHealth _health = new();
     private readonly PluginPanel _panel;
+    private readonly PluginModules _modules;
 
     public PluginHostTests()
     {
         Directory.CreateDirectory(_dir);
         _panel = new PluginPanel(_health, (_, _) => { });
+        _modules = new PluginModules(_health, (_, _) => { });
     }
 
     public void Dispose()
@@ -58,7 +60,7 @@ public class PluginHostTests : IDisposable
     }
 
     private PluginHost Host(PluginEvents events)
-        => new(_dir, events, _health, _panel, new NoActions(),
+        => new(_dir, events, _health, _panel, _modules, new NoActions(),
             (level, message) => _log.Add(level + " " + message));
 
     private PluginEvents Events() => new(_health, (_, _) => { });
@@ -72,6 +74,28 @@ public class PluginHostTests : IDisposable
         }
 
         public void Shutdown() { }
+    }
+
+    private sealed class BridgePlugin : IFusionPlugin
+    {
+        public void Start(PluginContext context)
+            => context.Modules.Handle(context.Name, 4242, _ => ModuleAction.Drop);
+
+        public void Shutdown() { }
+    }
+
+    [Fact]
+    public void A_plugins_module_claim_goes_when_it_is_unloaded()
+    {
+        var host = Host(Events());
+
+        host.LoadFromInstance("labrp", new BridgePlugin());
+
+        Assert.True(_modules.Claims(4242));
+
+        host.Unload("labrp");
+
+        Assert.False(_modules.Claims(4242));
     }
 
     [Fact]
