@@ -1496,6 +1496,9 @@ public sealed class FusionServer : IDisposable
 
     // ---- relaying ----
 
+    /// <summary>Server-addressed tags already reported, so each is said once.</summary>
+    private readonly HashSet<byte> _unhandledTags = new();
+
     private void Relay(ConnectedPlayer sender, byte[] message)
     {
         var (relayType, channel, target) = ServerProtocol.ReadRoute(message);
@@ -1507,6 +1510,16 @@ public sealed class FusionServer : IDisposable
         {
             case 0: // None, meant for the server alone
             case 1: // ToServer
+                // Nothing forwards a message addressed to the server, so anything
+                // reaching here is a request nobody implemented, and it fails in
+                // silence. Teleporting was lost this way for months. Once per tag,
+                // because a client that keeps asking would fill the log.
+                if (_unhandledTags.Add(message[0]))
+                {
+                    Log("WARN", $"Message tag {message[0]} is addressed to the server " +
+                                "and nothing here answers it, so it was dropped");
+                }
+
                 return;
 
             case 2: // ToClients, everyone, sender included
