@@ -217,6 +217,12 @@ public sealed class ServerConfig
     /// <summary>Records every hit landed, for the panel's combat log.</summary>
     public bool LogCombat { get; set; } = true;
 
+    /// <summary>
+    /// Whether plugins in plugins/ are loaded. Off unless asked for, because a
+    /// plugin is arbitrary code running inside the server.
+    /// </summary>
+    public bool PluginsEnabled { get; set; }
+
     public bool CullOrphanedEntities { get; set; } = true;
 
     public int OrphanTimeoutSeconds { get; set; } = 120;

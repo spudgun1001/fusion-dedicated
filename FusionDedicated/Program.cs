@@ -292,13 +292,22 @@ public static class Program
             pluginEvents, pluginHealth, pluginActions,
             (level, message) => server.Log(level, message));
 
-        server.Plugins = pluginEvents;
-
-        int loadedPlugins = plugins.LoadAll();
-
-        if (loadedPlugins > 0)
+        if (config.PluginsEnabled)
         {
-            server.Log("INFO", $"{loadedPlugins} plugins loaded");
+            // Left null while off, so every raise is a null check rather than a
+            // walk over empty channels.
+            server.Plugins = pluginEvents;
+
+            int loadedPlugins = plugins.LoadAll();
+
+            if (loadedPlugins > 0)
+            {
+                server.Log("INFO", $"{loadedPlugins} plugins loaded");
+            }
+        }
+        else
+        {
+            server.Log("INFO", "Plugins are off; set PluginsEnabled to load them");
         }
 
         rcon.Start();
