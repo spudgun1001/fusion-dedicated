@@ -30,6 +30,12 @@ public static class PanelPermissions
         ["/api/settings"] = PanelRole.Owner,
         ["/api/restart"] = PanelRole.Owner,
         ["/api/accounts"] = PanelRole.Owner,
+
+        // Anybody who can see the panel can see which plugins exist, but reading a
+        // page or pressing one of its buttons is moderation.
+        ["/api/plugins"] = PanelRole.Viewer,
+        ["/api/plugins/page"] = PanelRole.Moderator,
+        ["/api/plugins/action"] = PanelRole.Moderator,
     };
 
     public static bool Allows(PanelRole role, string path)

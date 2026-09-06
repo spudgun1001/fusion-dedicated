@@ -298,8 +298,9 @@ public static class Program
         if (config.PluginsEnabled)
         {
             // Left null while off, so every raise is a null check rather than a
-            // walk over empty channels.
+            // walk over empty channels, and the panel shows no plugin tabs.
             server.Plugins = pluginEvents;
+            dashboard.PluginPanel = pluginPanel;
 
             int loadedPlugins = plugins.LoadAll();
 

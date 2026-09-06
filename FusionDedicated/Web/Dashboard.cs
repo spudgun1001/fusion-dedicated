@@ -26,6 +26,9 @@ public sealed class Dashboard
 
     private PanelRole _actingRole = PanelRole.Owner;
 
+    /// <summary>Pages offered by plugins, when a host is running.</summary>
+    public Plugins.PluginPanel? PluginPanel { get; set; }
+
     private string ActorFor(HttpListenerContext context)
     {
         var parsed = DashboardAuth.TryParseBasic(context.Request.Headers["Authorization"]);
@@ -211,6 +214,50 @@ public sealed class Dashboard
             case "/api/restart":
                 HandleRestart(context, query);
                 return;
+
+            case "/api/plugins":
+                ServeJson(context, new
+                {
+                    ok = true,
+                    plugins = PluginPanel?.Pages ?? (IReadOnlyList<string>)Array.Empty<string>(),
+                });
+                return;
+
+            case "/api/plugins/page":
+            {
+                var page = PluginPanel?.Build(query["plugin"] ?? "");
+
+                if (page == null)
+                {
+                    ServeJson(context, new { ok = false, error = "no such page" });
+                    return;
+                }
+
+                // A page may ask for more than the endpoint's own floor.
+                if (_actingRole < page.Required)
+                {
+                    context.Response.StatusCode = 403;
+                    ServeJson(context, new { ok = false, error = "not allowed" });
+                    return;
+                }
+
+                ServeJson(context, page);
+                return;
+            }
+
+            case "/api/plugins/action":
+            {
+                var values = query.AllKeys
+                    .Where(k => k != null && k != "plugin" && k != "action")
+                    .ToDictionary(k => k!, k => query[k] ?? "");
+
+                var result = PluginPanel?.Invoke(
+                        query["plugin"] ?? "", query["action"] ?? "", values)
+                    ?? Plugins.PanelActionResult.Failed("plugins are off");
+
+                ServeJson(context, new { ok = result.Handled, error = result.Error });
+                return;
+            }
 
             case "/api/accounts":
                 HandleAccounts(context, query);
