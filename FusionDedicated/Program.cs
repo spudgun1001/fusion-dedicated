@@ -235,7 +235,9 @@ public static class Program
             },
             (id, reason) => server.Ban(id, "", reason),
             (id, level) => server.SetPermission(id, "", level),
-            id => server.DespawnEntity(id));
+            id => server.DespawnEntity(id),
+            (id, tag, payload) => server.SendModuleTo(id, tag, payload),
+            (tag, payload) => server.BroadcastModule(tag, payload));
 
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));

@@ -25,6 +25,8 @@ public class PluginContextTests : IDisposable
         public void Ban(ulong platformId, string reason) => Done.Add($"ban {platformId} {reason}");
         public void SetRank(ulong platformId, PermissionLevel level) => Done.Add($"rank {platformId} {level}");
         public void Despawn(ushort entityId) => Done.Add($"despawn {entityId}");
+        public void SendModule(ulong platformId, long tag, byte[] payload) => Done.Add($"send {platformId}");
+        public void BroadcastModule(long tag, byte[] payload) => Done.Add($"broadcast {tag}");
     }
 
     private PluginContext Context(IPluginActions? actions = null)

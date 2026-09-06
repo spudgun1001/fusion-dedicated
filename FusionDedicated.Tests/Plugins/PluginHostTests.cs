@@ -31,6 +31,8 @@ public class PluginHostTests : IDisposable
         public void Ban(ulong platformId, string reason) { }
         public void SetRank(ulong platformId, PermissionLevel level) { }
         public void Despawn(ushort entityId) { }
+        public void SendModule(ulong platformId, long tag, byte[] payload) { }
+        public void BroadcastModule(long tag, byte[] payload) { }
     }
 
     private sealed class Spy : IFusionPlugin

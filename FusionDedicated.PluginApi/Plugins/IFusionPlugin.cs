@@ -24,4 +24,13 @@ public interface IPluginActions
     void SetRank(ulong platformId, PermissionLevel level);
 
     void Despawn(ushort entityId);
+
+    /// <summary>
+    /// Sends a module message to one player, stamped as coming from the server.
+    /// Hosting a mod means sending messages nobody asked for, on other tags.
+    /// </summary>
+    void SendModule(ulong platformId, long handlerTag, byte[] payload);
+
+    /// <summary>Sends a module message to everybody, stamped as from the server.</summary>
+    void BroadcastModule(long handlerTag, byte[] payload);
 }

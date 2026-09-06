@@ -18,7 +18,9 @@ public class PluginActionsTests
             (id, reason) => made.Add($"kick {id} {reason}"),
             (id, reason) => made.Add($"ban {id} {reason}"),
             (id, level) => made.Add($"rank {id} {level}"),
-            id => made.Add($"despawn {id}"));
+            id => made.Add($"despawn {id}"),
+            (id, tag, payload) => made.Add($"send {id}"),
+            (tag, payload) => made.Add($"broadcast {tag}"));
 
         actions.Kick(1, "afk");
         actions.Ban(2, "nuke");

@@ -1229,6 +1229,27 @@ public sealed class FusionServer : IDisposable
     /// Used when the spam guard trips, so the flood is cleaned up rather than left
     /// hanging in everyone's world.
     /// </summary>
+    /// <summary>
+    /// Sends a module message to one player, stamped as coming from the server.
+    /// Some mods refuse anything whose sender is not the server, so the small id
+    /// is not the plugin's to choose.
+    /// </summary>
+    public void SendModuleTo(ulong platformId, long handlerTag, byte[] payload)
+    {
+        if (Players.GetByPlatformId(platformId) is not { } target)
+        {
+            return;
+        }
+
+        SendTo(target.Connection, ModuleProtocol.WriteModuleToClients(
+            handlerTag, PlayerRegistry.ServerSmallId, payload), reliable: true);
+    }
+
+    /// <summary>Sends a module message to everybody, stamped as from the server.</summary>
+    public void BroadcastModule(long handlerTag, byte[] payload)
+        => Broadcast(ModuleProtocol.WriteModuleToClients(
+            handlerTag, PlayerRegistry.ServerSmallId, payload), reliable: true);
+
     /// <summary>Removes one entity and tells the clients. For plugins.</summary>
     public bool DespawnEntity(ushort entityId)
     {
