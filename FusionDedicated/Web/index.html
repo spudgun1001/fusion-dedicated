@@ -1604,6 +1604,7 @@ function renderWorld(d) {
             ? '<span class="chip kept">kept</span>' +
               '<button onclick="persist(' + e.id + ', 0)">Drop</button>'
             : '<button onclick="persist(' + e.id + ', 1)">Keep</button>') +
+          '<button class="bad" onclick="despawn(' + e.id + ')">Remove</button>' +
         '</div></td>' +
         '</tr>').join('') + '</tbody></table>';
 }
@@ -1837,6 +1838,14 @@ async function noteBan(platformId) {
   if (note === null) return;
 
   await fetch('/api/bannote?platformId=' + platformId + '&note=' + encodeURIComponent(note));
+  poll();
+}
+
+async function despawn(id) {
+  const r = await (await fetch('/api/despawn?id=' + id)).json();
+
+  if (!r.ok) { alert(r.error || 'That did not work.'); }
+
   poll();
 }
 

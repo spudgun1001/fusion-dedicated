@@ -27,6 +27,7 @@ public static class PanelPermissions
         ["/api/levels"] = PanelRole.Moderator,
         ["/api/clear"] = PanelRole.Moderator,
         ["/api/persist"] = PanelRole.Moderator,
+        ["/api/despawn"] = PanelRole.Moderator,
         ["/api/gather"] = PanelRole.Moderator,
 
         ["/api/settings"] = PanelRole.Owner,

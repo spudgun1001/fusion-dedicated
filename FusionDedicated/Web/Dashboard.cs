@@ -199,6 +199,10 @@ public sealed class Dashboard
                 HandleGather(context, query);
                 return;
 
+            case "/api/despawn":
+                HandleDespawn(context, query);
+                return;
+
             case "/api/persist":
                 HandlePersist(context, query);
                 return;
@@ -834,6 +838,46 @@ public sealed class Dashboard
             skipped = result.Skipped,
             name = target.DisplayName,
         });
+    }
+
+    /// <summary>
+    /// Removes one entity from the world.
+    ///
+    /// A prop marked to come back is forgotten first. Without that it would
+    /// vanish and then reappear the next time somebody joined, which looks like
+    /// the button not working.
+    /// </summary>
+    private void HandleDespawn(HttpListenerContext context, System.Collections.Specialized.NameValueCollection query)
+    {
+        if (!ushort.TryParse(query["id"], out ushort id))
+        {
+            ServeJson(context, new { ok = false, error = "Which entity?" });
+            return;
+        }
+
+        if (_server.Entities.Get(id) is not { } entity)
+        {
+            ServeJson(context, new { ok = false, error = "That entity is no longer in the world." });
+            return;
+        }
+
+        string name = entity.ShortName;
+        bool wasPersistent = entity.Persistent;
+
+        if (wasPersistent)
+        {
+            _server.ForgetProp(id);
+        }
+
+        if (!_server.DespawnEntity(id))
+        {
+            ServeJson(context, new { ok = false, error = "That entity is no longer in the world." });
+            return;
+        }
+
+        _server.Log("WARN", $"Panel removed '{name}'");
+
+        ServeJson(context, new { ok = true, name, wasPersistent });
     }
 
     /// <summary>Marks a prop to be put back after a restart, or stops doing so.</summary>
