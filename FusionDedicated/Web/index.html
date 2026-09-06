@@ -1308,6 +1308,7 @@ function playerTable(d, actions) {
       '<td class="m right dim" data-label="Online">' + duration(p.onlineSeconds) + '</td>' +
       '<td class="m right dim" data-label="Traffic">' + bytes(p.bytesIn + p.bytesOut) + '</td>' +
       (actions ? '<td class="right" data-label="Actions"><div class="acts">' +
+        '<button onclick="gather(' + p.smallId + ', \'' + esc(p.name) + '\')">Gather</button>' +
         '<button onclick="purge(' + p.smallId + ', \'' + esc(p.name) + '\')">Purge</button>' +
         '<button class="warn" onclick="kick(' + p.smallId + ', \'' + esc(p.name) + '\')">Kick</button>' +
         '<button class="bad" onclick="ban(' + p.smallId + ', \'' + esc(p.name) + '\')">Ban</button>' +
@@ -1801,6 +1802,22 @@ async function ban(id, name) {
   const reason = prompt('Ban ' + name + '?\n\nReason:', 'Banned from Server');
   if (reason === null) return;
   await fetch('/api/ban?id=' + id + '&reason=' + encodeURIComponent(reason));
+  poll();
+}
+
+async function gather(id, name) {
+  if (!confirm('Bring everyone to ' + name + '?')) return;
+
+  const r = await (await fetch('/api/gather?id=' + id)).json();
+
+  if (!r.ok) {
+    alert(r.error || 'That did not work.');
+    return;
+  }
+
+  alert('Moved ' + r.moved + ' to ' + r.name +
+    (r.skipped ? '. ' + r.skipped + ' had no position yet.' : '.'));
+
   poll();
 }
 

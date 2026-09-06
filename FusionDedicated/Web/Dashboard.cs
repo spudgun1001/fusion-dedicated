@@ -195,6 +195,10 @@ public sealed class Dashboard
                 });
                 return;
 
+            case "/api/gather":
+                HandleGather(context, query);
+                return;
+
             case "/api/persist":
                 HandlePersist(context, query);
                 return;
@@ -793,6 +797,43 @@ public sealed class Dashboard
 
         _config.Save(Program.ConfigPath);
         ServeJson(context, new { ok = true });
+    }
+
+    /// <summary>Brings every other player to one of them.</summary>
+    private void HandleGather(HttpListenerContext context, System.Collections.Specialized.NameValueCollection query)
+    {
+        if (!byte.TryParse(query["id"], out byte smallId))
+        {
+            ServeJson(context, new { ok = false, error = "Which player?" });
+            return;
+        }
+
+        if (_server.Players.Get(smallId) is not { } target)
+        {
+            ServeJson(context, new { ok = false, error = "That player has left." });
+            return;
+        }
+
+        if (!target.HasPosition)
+        {
+            ServeJson(context, new
+            {
+                ok = false,
+                error = $"{target.DisplayName} has not reported a position yet.",
+            });
+
+            return;
+        }
+
+        var result = _server.GatherEveryoneTo(smallId);
+
+        ServeJson(context, new
+        {
+            ok = true,
+            moved = result.Moved,
+            skipped = result.Skipped,
+            name = target.DisplayName,
+        });
     }
 
     /// <summary>Marks a prop to be put back after a restart, or stops doing so.</summary>

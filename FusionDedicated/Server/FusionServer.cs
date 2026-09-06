@@ -1391,6 +1391,51 @@ public sealed class FusionServer : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Brings everybody to one player. For gathering a server up before a round,
+    /// or getting people out of somewhere they have fallen into.
+    ///
+    /// A player who has not reported a position yet is left where they are, since
+    /// there is nothing to send them to and moving them to the origin would drop
+    /// them through the level.
+    /// </summary>
+    /// <returns>How many were moved, and how many were skipped.</returns>
+    public (int Moved, int Skipped) GatherEveryoneTo(byte targetSmallId)
+    {
+        if (Players.Get(targetSmallId) is not { } target || !target.HasPosition)
+        {
+            return (0, 0);
+        }
+
+        int moved = 0;
+        int skipped = 0;
+
+        foreach (var player in Players.Players)
+        {
+            if (player.SmallId == targetSmallId)
+            {
+                continue;
+            }
+
+            if (!player.HasPosition)
+            {
+                skipped++;
+                continue;
+            }
+
+            SendTo(player.Connection,
+                ServerProtocol.WritePlayerTeleport(targetSmallId, target.LastPosition),
+                reliable: true);
+
+            moved++;
+        }
+
+        Log("WARN", $"Everyone was brought to {target.DisplayName}: {moved} moved" +
+                    (skipped > 0 ? $", {skipped} had no position yet" : ""));
+
+        return (moved, skipped);
+    }
+
     /// <summary>Removes one entity and tells the clients. For plugins.</summary>
     public bool DespawnEntity(ushort entityId)
     {
