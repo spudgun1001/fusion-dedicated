@@ -215,6 +215,24 @@ public sealed class Dashboard
                 HandleRestart(context, query);
                 return;
 
+            case "/api/modules":
+            {
+                if (query["enabled"] is { Length: > 0 } wanted)
+                {
+                    _server.ModuleInspector.Enabled = wanted == "1" || wanted == "true";
+                    _config.ModuleInspection = _server.ModuleInspector.Enabled;
+                    _config.Save(Program.ConfigPath);
+                }
+
+                ServeJson(context, new
+                {
+                    ok = true,
+                    enabled = _server.ModuleInspector.Enabled,
+                    seen = _server.ModuleInspector.Recent,
+                });
+                return;
+            }
+
             case "/api/plugins":
                 ServeJson(context, new
                 {

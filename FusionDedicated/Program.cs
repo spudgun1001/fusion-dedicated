@@ -240,6 +240,8 @@ public static class Program
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));
 
+        server.ModuleInspector.Enabled = config.ModuleInspection;
+
         var pluginModules = new PluginModules(pluginHealth,
             (level, message) => server.Log(level, message));
 

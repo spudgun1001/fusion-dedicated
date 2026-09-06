@@ -81,6 +81,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Module tags plugins have claimed, when a host is running.</summary>
     public Plugins.PluginModules? PluginModules { get; set; }
 
+    /// <summary>Records module messages nothing handled, for writing a plugin against.</summary>
+    public Plugins.ModuleInspector ModuleInspector { get; } = new();
+
     /// <summary>When set, bans.json is authoritative over the config ban list.</summary>
     public Bans.BanStore? BanList { get; set; }
 
@@ -1560,6 +1563,11 @@ public sealed class FusionServer : IDisposable
             {
                 Log("INFO", $"Module message {handler.Value} is not handled here");
             }
+
+            // The tag alone names the door. This is what shows what came through
+            // it, which is what writing a plugin to host that mod needs.
+            ModuleInspector.Note(handler.Value, sender.SmallId, sender.DisplayName,
+                ModuleProtocol.TryReadHandlerPayload(message) ?? Array.Empty<byte>());
 
             return;
         }

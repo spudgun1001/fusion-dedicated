@@ -223,6 +223,12 @@ public sealed class ServerConfig
     /// </summary>
     public bool PluginsEnabled { get; set; }
 
+    /// <summary>
+    /// Records module messages nothing handled, so a plugin can be written to host
+    /// a client mod. Off unless asked for: payloads may carry player content.
+    /// </summary>
+    public bool ModuleInspection { get; set; }
+
     public bool CullOrphanedEntities { get; set; } = true;
 
     public int OrphanTimeoutSeconds { get; set; } = 120;

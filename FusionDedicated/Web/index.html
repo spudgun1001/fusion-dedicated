@@ -774,6 +774,15 @@
 
       <h2>Host</h2>
       <div class="stats" id="hostMetrics"></div>
+
+      <div class="sec">
+        <h2>Module Traffic</h2>
+        <div class="aside">
+          <span class="note" id="modulesNote"></span>
+          <button id="modulesToggle" onclick="toggleModules()">Turn on</button>
+        </div>
+      </div>
+      <div class="panel" id="modules"></div>
     </section>
 
     <!-- ========== SETTINGS ========== -->
@@ -1248,7 +1257,7 @@ function render() {
   if (tab === 'players') $('players').innerHTML = playerTable(d, true);
   if (tab === 'world') { renderMap(d); renderWorld(d); }
   if (tab === 'moderation') { renderRanks(d); renderBans(d); }
-  if (tab === 'insights') { renderAnalytics(); renderResources(d); }
+  if (tab === 'insights') { renderAnalytics(); renderResources(d); loadModules(); }
   applyRole(d.you);
 
   if (tab === 'settings') { renderSettings(d); loadAccounts(); }
@@ -1908,6 +1917,47 @@ function renderLog(d) {
     (!needle || l.message.toLowerCase().includes(needle)));
 
   $('log').innerHTML = rows.length ? logRows(rows) : empty('No matches');
+}
+
+/* ---------- module traffic ---------- */
+
+/* Shows module messages nothing handled, so a plugin can be written to host the
+   mod that sent them. The tag is shown in decimal because that is what goes into
+   ModuleProtocol.TagFor. */
+async function loadModules(enabled) {
+  let r;
+
+  try {
+    const q = enabled === undefined ? '' : '?enabled=' + (enabled ? '1' : '0');
+    r = await (await fetch('/api/modules' + q)).json();
+  } catch { return; }
+
+  if (r.ok === false) return;
+
+  $('modulesToggle').textContent = r.enabled ? 'Turn off' : 'Turn on';
+  $('modulesNote').textContent = r.enabled
+    ? r.seen.length + ' seen'
+    : 'off, so nothing is recorded';
+
+  $('modules').innerHTML = !r.seen.length
+    ? empty(r.enabled
+        ? 'Nothing unhandled yet'
+        : 'Turn this on to see messages the server does not handle')
+    : '<table class="stack"><thead><tr>' +
+      '<th>Time</th><th>Tag</th><th>From</th>' +
+      '<th class="right">Bytes</th><th>Payload</th>' +
+      '</tr></thead><tbody>' +
+      r.seen.map(m => '<tr>' +
+        '<td class="m dim" data-label="Time">' + esc(m.at) + '</td>' +
+        '<td data-label="Tag"><div class="sub">' + esc(String(m.handlerTag)) + '</div></td>' +
+        '<td data-label="From">' + esc(m.sender) + '</td>' +
+        '<td class="m right dim" data-label="Bytes">' + m.length + '</td>' +
+        '<td data-label="Payload"><div class="sub">' + esc(m.payload) + '</div></td>' +
+        '</tr>').join('') + '</tbody></table>';
+}
+
+function toggleModules() {
+  loadModules($('modulesToggle').textContent === 'Turn on');
 }
 
 /* ---------- plugin pages ---------- */

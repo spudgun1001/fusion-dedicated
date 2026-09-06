@@ -33,6 +33,7 @@ public static class PanelPermissions
 
         // Anybody who can see the panel can see which plugins exist, but reading a
         // page or pressing one of its buttons is moderation.
+        ["/api/modules"] = PanelRole.Owner,
         ["/api/plugins"] = PanelRole.Viewer,
         ["/api/plugins/page"] = PanelRole.Moderator,
         ["/api/plugins/action"] = PanelRole.Moderator,
