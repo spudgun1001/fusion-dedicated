@@ -673,8 +673,13 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // blocklist.json is reread when saved; server.json is not, so the exemptions
+        // there can be tuned without a restart.
+        var exempt = Config.SpawningExempt
+            .Concat(Blocklist?.Current?.SpawnExempt ?? Enumerable.Empty<string>());
+
         var rankVerdict = SpawnAuthority.Check(
-            sender.Permission, Config.Spawning, request.Value.Barcode, Config.SpawningExempt,
+            sender.Permission, Config.Spawning, request.Value.Barcode, exempt,
             request.Value.Source, Config.SpawningExemptSources);
 
         if (rankVerdict.Blocked)

@@ -28,6 +28,15 @@ public sealed class BlocklistFile
     [JsonPropertyName("whitelist")]
     public List<string> Whitelist { get; set; } = new();
 
+    /// <summary>
+    /// Words or whole barcodes that anyone may spawn whatever the Spawning rank
+    /// says, for the things the game spawns during normal play. It lives here
+    /// rather than in server.json because this file is reread when it is saved,
+    /// and a magazine nobody can spawn is not worth a restart to fix.
+    /// </summary>
+    [JsonPropertyName("spawnExempt")]
+    public List<string> SpawnExempt { get; set; } = new();
+
     /// <summary>Barcodes only Operator and above may spawn.</summary>
     [JsonPropertyName("operatorOnly")]
     public List<string> OperatorOnly { get; set; } = new();

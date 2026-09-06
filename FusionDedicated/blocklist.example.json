@@ -7,6 +7,8 @@
   "keywords": [],
   "_whitelist": "Allowed even when a built-in rule or a rule above would block them. Does not override Fusion's community list.",
   "whitelist": [],
+  "_spawnExempt": "Anyone may spawn these whatever the Spawning rank says, for what the game spawns during normal play. Matched anywhere in a barcode, case-insensitively. Add a gun mod's magazine here when its name is not caught by the defaults.",
+  "spawnExempt": [],
   "_operatorOnly": "Only Operator and above may spawn these.",
   "operatorOnly": [],
   "_extended": "Used when ExtendedProtection is on. Omit a value to take the built-in default.",
