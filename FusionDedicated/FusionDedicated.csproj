@@ -34,4 +34,8 @@
     <None Include="blocklist.example.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\FusionDedicated.PluginApi\FusionDedicated.PluginApi.csproj" />
+  </ItemGroup>
+
 </Project>
