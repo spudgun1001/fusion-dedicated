@@ -30,4 +30,10 @@ public interface ICommandTarget
     int Purge(byte smallId);
 
     void SetLevel(string barcode, string title);
+
+    /// <summary>Loaded plugins, as "name version".</summary>
+    IReadOnlyList<string> ListPlugins();
+
+    /// <summary>Unloads everything and loads it again. Returns how many started.</summary>
+    int ReloadPlugins();
 }

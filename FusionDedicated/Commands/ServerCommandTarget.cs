@@ -6,10 +6,12 @@ namespace FusionDedicated.Commands;
 public sealed class ServerCommandTarget : ICommandTarget
 {
     private readonly FusionServer _server;
+    private readonly Plugins.PluginHost? _plugins;
 
-    public ServerCommandTarget(FusionServer server)
+    public ServerCommandTarget(FusionServer server, Plugins.PluginHost? plugins = null)
     {
         _server = server;
+        _plugins = plugins;
     }
 
     public IReadOnlyList<CommandPlayer> Players => _server.Players.Players
@@ -39,4 +41,10 @@ public sealed class ServerCommandTarget : ICommandTarget
 
     public void SetLevel(string barcode, string title)
         => _server.SetLevel(barcode, title, -1, null);
+
+    public IReadOnlyList<string> ListPlugins()
+        => _plugins?.Loaded.Select(p => $"{p.Name} {p.Manifest.Version}").ToList()
+           ?? (IReadOnlyList<string>)Array.Empty<string>();
+
+    public int ReloadPlugins() => _plugins?.ReloadAll() ?? 0;
 }

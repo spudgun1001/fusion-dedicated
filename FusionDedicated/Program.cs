@@ -221,7 +221,28 @@ public static class Program
 
         server.Log("INFO", $"Ranks: {ranks.Entries.Count} players listed");
 
-        var commands = new CommandProcessor(new ServerCommandTarget(server));
+        var pluginHealth = new PluginHealth();
+        var pluginEvents = new PluginEvents(pluginHealth, (level, message) => server.Log(level, message));
+
+        // Kick takes a small id rather than a SteamID, so the delegate resolves it.
+        var pluginActions = new ServerPluginActions(
+            (id, reason) =>
+            {
+                if (server.Players.GetByPlatformId(id) is { } target)
+                {
+                    server.Kick(target.SmallId, reason);
+                }
+            },
+            (id, reason) => server.Ban(id, "", reason),
+            (id, level) => server.SetPermission(id, "", level),
+            id => server.DespawnEntity(id));
+
+        var plugins = new PluginHost(
+            Path.Combine(AppContext.BaseDirectory, "plugins"),
+            pluginEvents, pluginHealth, pluginActions,
+            (level, message) => server.Log(level, message));
+
+        var commands = new CommandProcessor(new ServerCommandTarget(server, plugins));
 
         // ---- lobby ----
         using var lobby = new LobbyPublisher();
@@ -270,27 +291,6 @@ public static class Program
 
         using var rcon = new RconServer(commands, config.RconPassword, config.RconPort,
         (level, message) => server.Log(level, message));
-
-        var pluginHealth = new PluginHealth();
-        var pluginEvents = new PluginEvents(pluginHealth, (level, message) => server.Log(level, message));
-
-        // Kick takes a small id rather than a SteamID, so the delegate resolves it.
-        var pluginActions = new ServerPluginActions(
-            (id, reason) =>
-            {
-                if (server.Players.GetByPlatformId(id) is { } target)
-                {
-                    server.Kick(target.SmallId, reason);
-                }
-            },
-            (id, reason) => server.Ban(id, "", reason),
-            (id, level) => server.SetPermission(id, "", level),
-            id => server.DespawnEntity(id));
-
-        var plugins = new PluginHost(
-            Path.Combine(AppContext.BaseDirectory, "plugins"),
-            pluginEvents, pluginHealth, pluginActions,
-            (level, message) => server.Log(level, message));
 
         if (config.PluginsEnabled)
         {

@@ -42,6 +42,10 @@ public class FakeTarget : ICommandTarget
     }
 
     public void SetLevel(string barcode, string title) => Levels.Add((barcode, title));
+
+    public IReadOnlyList<string> ListPlugins() => Array.Empty<string>();
+
+    public int ReloadPlugins() => 0;
 }
 
 public class CommandProcessorTests

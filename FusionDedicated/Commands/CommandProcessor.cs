@@ -50,10 +50,29 @@ public sealed class CommandProcessor
             "unban" => Unban(args),
             "purge" => Purge(args),
             "players" => ListPlayers(),
+            "plugins" => Plugins(args),
             "level" => Level(args),
             "help" => Usage,
             _ => $"Unknown command '{parts[0]}'. Type help for the list.",
         };
+    }
+
+    /// <summary>
+    /// Reloading is a command rather than a watch on the directory, because a
+    /// half-copied DLL would be loaded and fail.
+    /// </summary>
+    private string Plugins(string[] args)
+    {
+        if (args.Length > 0 && args[0].Equals("reload", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{_target.ReloadPlugins()} plugins loaded";
+        }
+
+        var loaded = _target.ListPlugins();
+
+        return loaded.Count == 0
+            ? "No plugins are loaded"
+            : string.Join("\n", loaded);
     }
 
     private string Promote(string[] args)
