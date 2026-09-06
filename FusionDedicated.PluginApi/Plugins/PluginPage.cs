@@ -3,7 +3,23 @@ using FusionDedicated.Web;
 
 namespace FusionDedicated.Plugins;
 
-/// <summary>A text input on a plugin page.</summary>
+/// <summary>One choice in a field that offers a list.</summary>
+public sealed class PluginOption
+{
+    public PluginOption(string value, string label)
+    {
+        Value = value;
+        Label = label;
+    }
+
+    [JsonPropertyName("value")]
+    public string Value { get; set; }
+
+    [JsonPropertyName("label")]
+    public string Label { get; set; }
+}
+
+/// <summary>An input on a plugin page. A text box, or a list when it has options.</summary>
 public sealed class PluginField
 {
     public PluginField(string label, string key, string placeholder = "")
@@ -21,6 +37,36 @@ public sealed class PluginField
 
     [JsonPropertyName("placeholder")]
     public string Placeholder { get; set; }
+
+    /// <summary>Choices to pick from. Empty leaves it a text box.</summary>
+    [JsonPropertyName("options")]
+    public List<PluginOption> Options { get; set; } = new();
+
+    /// <summary>
+    /// A list of the players connected right now, so an operator picks a name
+    /// instead of copying a seventeen digit ID out of somewhere else.
+    ///
+    /// Pages are built on each request, so the list is whoever is on the server
+    /// at the moment it is drawn. It is empty when nobody is connected, which is
+    /// why the plugins that use this keep a text box beside it for someone who
+    /// has already left.
+    /// </summary>
+    public static PluginField OfPlayers(
+        string label, string key, IEnumerable<PluginPlayer> players, string blank = "Pick a player")
+    {
+        var field = new PluginField(label, key);
+
+        field.Options.Add(new PluginOption("", blank));
+
+        foreach (var player in players)
+        {
+            field.Options.Add(new PluginOption(
+                player.PlatformId.ToString(),
+                $"{player.Name} ({player.PlatformId})"));
+        }
+
+        return field;
+    }
 }
 
 /// <summary>

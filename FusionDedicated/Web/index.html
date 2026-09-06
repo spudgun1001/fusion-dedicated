@@ -2054,12 +2054,22 @@ function pluginSection(section) {
   if (section.kind === 'table') return pluginTable(section);
 
   return '<h2>' + esc(section.title) + '</h2><div class="fields">' +
-    section.fields.map(f =>
-      '<div class="full"><label>' + esc(f.label) + '</label>' +
-      '<input id="pf-' + esc(f.key) + '" placeholder="' + esc(f.placeholder) + '"></div>').join('') +
+    section.fields.map(pluginField).join('') +
     '</div><div class="bar flat">' +
     section.buttons.map(b => pluginButton(b, section.fields)).join('') +
     '</div>';
+}
+
+/** A field with options is a list to pick from, anything else is a text box. */
+function pluginField(f) {
+  const input = (f.options || []).length
+    ? '<select id="pf-' + esc(f.key) + '">' +
+      f.options.map(o =>
+        '<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>').join('') +
+      '</select>'
+    : '<input id="pf-' + esc(f.key) + '" placeholder="' + esc(f.placeholder) + '">';
+
+  return '<div class="full"><label>' + esc(f.label) + '</label>' + input + '</div>';
 }
 
 function pluginTable(section) {
