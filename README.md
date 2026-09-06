@@ -28,6 +28,7 @@ protection.
 - [Permissions](#permissions)
 - [Spam protection](#spam-protection)
 - [Keeping the world clean](#keeping-the-world-clean)
+- [Plugins](#plugins)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
 - [What is tested](#what-is-tested-and-what-is-not)
@@ -315,6 +316,51 @@ else.
 Raise `InheritedTimeoutSeconds` if your server is for building rather than sandbox
 chaos, but know what the ceiling costs: on a busy public server this went from 3,696
 refused spawns over two days to zero.
+
+---
+
+## Plugins
+
+A plugin is a .NET assembly the server loads at startup. It can refuse a spawn or an
+avatar, answer a client mod on its own message tag, and add its own tab to the
+control panel. It runs inside the server process, so only install one you trust.
+
+Plugins are off until you turn them on. Set **Plugins** to `true` in the server's
+startup variables, or `PluginsEnabled` in `server.json` if you run outside a panel,
+then restart.
+
+Each plugin is a folder holding a `plugin.json` and the assembly it names. Put those
+folders in `plugins/`, next to `fusiondedicated.dll`:
+
+    plugins/
+      police/
+        plugin.json
+        Police.dll
+      avatars/
+        plugin.json
+        AvatarWhitelist.dll
+
+`plugin.json` names the assembly to load:
+
+    {
+      "name": "police",
+      "version": "1.0.0",
+      "apiVersion": 1,
+      "entry": "Police.dll",
+      "description": "A roster who may use restricted avatars and equipment"
+    }
+
+Then either restart, or run `plugins reload` on the console or over RCON. Reloading
+is a command rather than a watch on the folder, because a half-copied DLL would be
+picked up and fail. `plugins` on its own lists what is loaded.
+
+A plugin that throws is logged against its name and disabled after three faults,
+so a bad plugin degrades the feature it owns instead of taking the server with it.
+Anything it stores lives under `plugins/<name>/`, which is worth keeping when you
+update one.
+
+Ready-made plugins and the API to build your own are at
+[fusion-server-mods](https://github.com/spudgun1001/fusion-server-mods).
 
 ---
 
