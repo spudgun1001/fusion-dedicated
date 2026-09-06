@@ -30,6 +30,7 @@ public static class PanelPermissions
 
         ["/api/kick"] = PanelRole.Moderator,
         ["/api/ban"] = PanelRole.Moderator,
+        ["/api/bannote"] = PanelRole.Moderator,
         ["/api/unban"] = PanelRole.Moderator,
         ["/api/mute"] = PanelRole.Moderator,
         ["/api/purge"] = PanelRole.Moderator,

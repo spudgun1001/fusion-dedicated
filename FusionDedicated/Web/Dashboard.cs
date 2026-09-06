@@ -159,6 +159,10 @@ public sealed class Dashboard
                 HandleBan(context, query);
                 return;
 
+            case "/api/bannote":
+                HandleBanNote(context, query);
+                return;
+
             case "/api/unban":
                 HandleUnban(context, query);
                 return;
@@ -396,14 +400,15 @@ public sealed class Dashboard
             // bans.json when it is in use, falling back to the config list so a
             // server upgraded mid-life still shows its old bans.
             bans = (_server.BanList is { } list
-                    ? list.Entries.Select(e => (e.Key, e.Value.Name, e.Value.Reason, e.Value.BannedAt))
-                    : _config.Bans.Select(b => (b.PlatformId, b.Username, b.Reason, b.BannedAt)))
+                    ? list.Entries.Select(e => (e.Key, e.Value.Name, e.Value.Reason, e.Value.BannedAt, e.Value.Note))
+                    : _config.Bans.Select(b => (b.PlatformId, b.Username, b.Reason, b.BannedAt, b.Note)))
                 .OrderByDescending(b => b.Item4)
                 .Select(b => new
                 {
                     platformId = b.Item1.ToString(),
                     username = b.Item2,
                     reason = b.Item3,
+                    note = b.Item5,
                     bannedAt = b.Item4.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                     expiresAt = _server.BanList?.Find(b.Item1)?.ExpiresAt?
                         .ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
@@ -532,17 +537,57 @@ public sealed class Dashboard
     /// Accepts either a connected player's small ID or a raw SteamID, so someone who
     /// already left can still be banned from the bans view.
     /// </summary>
+    /// <summary>
+    /// Writes the admin note on a ban. Separate from banning so it can be added
+    /// later, which is when most of the story is actually known.
+    /// </summary>
+    private void HandleBanNote(HttpListenerContext context, NameValueCollection query)
+    {
+        if (!ulong.TryParse(query["platformId"], out var platformId))
+        {
+            ServeJson(context, new { ok = false, error = "no such ban" });
+            return;
+        }
+
+        string note = query["note"] ?? "";
+        bool written = _server.BanList?.SetNote(platformId, note) ?? false;
+
+        if (!written)
+        {
+            foreach (var entry in _config.Bans.Where(b => b.PlatformId == platformId))
+            {
+                entry.Note = note;
+                written = true;
+            }
+        }
+
+        if (!written)
+        {
+            ServeJson(context, new { ok = false, error = "no such ban" });
+            return;
+        }
+
+        _server.BanList?.Save();
+        _config.Save(Program.ConfigPath);
+
+        _server.Log("INFO", $"Note written on the ban for {platformId} by {_acting}");
+        ServeJson(context, new { ok = true });
+    }
+
     private void HandleBan(HttpListenerContext context, NameValueCollection query)
     {
         string reason = query["reason"] is { Length: > 0 } r ? r : "Banned from Server";
+        string note = query["note"] ?? "";
 
         if (byte.TryParse(query["id"], out var smallId) && _server.Players.Get(smallId) is { } player)
         {
-            _server.Ban(player.PlatformId, player.Username, reason);
+            _server.Ban(player.PlatformId, player.Username, reason,
+                null, Server.Audit.AuditChannel.Panel, _acting, note);
         }
         else if (ulong.TryParse(query["platformId"], out var platformId))
         {
-            _server.Ban(platformId, query["username"] ?? "", reason);
+            _server.Ban(platformId, query["username"] ?? "", reason,
+                null, Server.Audit.AuditChannel.Panel, _acting, note);
         }
         else
         {

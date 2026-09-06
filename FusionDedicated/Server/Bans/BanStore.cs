@@ -15,6 +15,13 @@ public sealed class BanRecord
     [JsonPropertyName("bannedAt")]
     public DateTime BannedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// For the other admins rather than the banned player, who is shown the reason.
+    /// Written after the ban as often as with it.
+    /// </summary>
+    [JsonPropertyName("note")]
+    public string Note { get; set; } = "";
+
     /// <summary>When the ban lifts. Null is permanent, which is the default.</summary>
     [JsonPropertyName("expiresAt")]
     public DateTime? ExpiresAt { get; set; }
@@ -68,17 +75,41 @@ public sealed class BanStore
 
     public bool IsBanned(ulong platformId) => Find(platformId) != null;
 
-    public void Ban(ulong platformId, string name, string reason, TimeSpan? duration = null)
+    public void Ban(ulong platformId, string name, string reason, TimeSpan? duration = null,
+        string note = "")
     {
         lock (_lock)
         {
+            // Somebody banned again is usually somebody already written about, so
+            // the note carries over unless this call brings a new one.
+            if (string.IsNullOrEmpty(note) && _entries.TryGetValue(platformId, out var existing))
+            {
+                note = existing.Note;
+            }
+
             _entries[platformId] = new BanRecord
             {
                 Name = name,
                 Reason = string.IsNullOrWhiteSpace(reason) ? "Banned from Server" : reason,
                 BannedAt = DateTime.UtcNow,
                 ExpiresAt = duration is { } d ? DateTime.UtcNow + d : null,
+                Note = note,
             };
+        }
+    }
+
+    /// <summary>Writes the admin note on a ban. False when nobody is banned by that id.</summary>
+    public bool SetNote(ulong platformId, string note)
+    {
+        lock (_lock)
+        {
+            if (!_entries.TryGetValue(platformId, out var record))
+            {
+                return false;
+            }
+
+            record.Note = note ?? "";
+            return true;
         }
     }
 

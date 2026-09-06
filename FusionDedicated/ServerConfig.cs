@@ -70,6 +70,10 @@ public sealed class BanEntry
     public ulong PlatformId { get; set; }
     public string Username { get; set; } = "";
     public string Reason { get; set; } = "Banned from Server";
+
+    /// <summary>For the other admins. The banned player is shown the reason.</summary>
+    public string Note { get; set; } = "";
+
     public DateTime BannedAt { get; set; } = DateTime.UtcNow;
 }
 

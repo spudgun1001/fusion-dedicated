@@ -741,6 +741,7 @@
         <div><label>SteamID</label><input id="bId" class="m" placeholder="76561198000000000"></div>
         <div><label>Name</label><input id="bName" placeholder="optional"></div>
         <div class="full"><label>Reason</label><input id="bReason" placeholder="Banned from Server"></div>
+        <div class="full"><label>Note</label><input id="bNote" placeholder="only admins see this"></div>
       </div>
       <div class="bar flat"><button class="go" onclick="addBan()">Ban</button></div>
     </section>
@@ -1545,14 +1546,17 @@ function renderBans(d) {
   $('bans').innerHTML = !d.bans.length
     ? empty('No bans')
     : '<table class="stack"><thead><tr>' +
-      '<th>Name</th><th>SteamID</th><th>Reason</th><th>Added</th><th class="right">Actions</th>' +
+      '<th>Name</th><th>SteamID</th><th>Reason</th><th>Note</th><th>Added</th>' +
+      '<th class="right">Actions</th>' +
       '</tr></thead><tbody>' +
       d.bans.map(b => '<tr>' +
         '<td class="name" data-label="Name">' + esc(b.username || '(unknown)') + '</td>' +
         '<td class="m dim" data-label="SteamID" style="font-size:12px">' + esc(b.platformId) + '</td>' +
         '<td class="dim" data-label="Reason">' + esc(b.reason) + '</td>' +
+        '<td data-label="Note">' + (b.note ? esc(b.note) : '<span class="dim">-</span>') + '</td>' +
         '<td class="m dim" data-label="Added" style="font-size:12px">' + esc(b.bannedAt) + '</td>' +
         '<td class="right" data-label="Actions"><div class="acts">' +
+          '<button onclick="noteBan(\'' + b.platformId + '\')">Note</button>' +
           '<button onclick="unban(\'' + b.platformId + '\')">Unban</button>' +
         '</div></td></tr>').join('') + '</tbody></table>';
 }
@@ -1781,6 +1785,18 @@ async function purge(id, name) {
   poll();
 }
 
+async function noteBan(platformId) {
+  const ban = (state.bans || []).find(b => b.platformId === platformId);
+
+  const note = prompt('Note for ' + ((ban && ban.username) || platformId) +
+    '.\nOnly admins see this.', (ban && ban.note) || '');
+
+  if (note === null) return;
+
+  await fetch('/api/bannote?platformId=' + platformId + '&note=' + encodeURIComponent(note));
+  poll();
+}
+
 async function unban(platformId) {
   await fetch('/api/unban?platformId=' + platformId);
   poll();
@@ -1811,9 +1827,10 @@ async function addBan() {
 
   await fetch('/api/ban?platformId=' + id +
     '&username=' + encodeURIComponent($('bName').value.trim()) +
-    '&reason=' + encodeURIComponent($('bReason').value.trim() || 'Banned from Server'));
+    '&reason=' + encodeURIComponent($('bReason').value.trim() || 'Banned from Server') +
+    '&note=' + encodeURIComponent($('bNote').value.trim()));
 
-  $('bId').value = $('bName').value = $('bReason').value = '';
+  $('bId').value = $('bName').value = $('bReason').value = $('bNote').value = '';
   poll();
 }
 
