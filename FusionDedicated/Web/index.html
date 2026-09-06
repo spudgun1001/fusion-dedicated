@@ -169,6 +169,8 @@
   nav a.on { color: hsl(var(--foreground)); background: hsl(var(--muted)); }
   nav a.on svg { color: hsl(var(--primary)); }
 
+  #pluginNav a { text-transform: capitalize; }
+
   nav a .c {
     margin-left: auto;
     font: 500 12px var(--sans); font-variant-numeric: tabular-nums;
@@ -628,6 +630,7 @@
       <a data-tab="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>Insights</a>
       <a data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></svg>Settings</a>
       <a data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h16M4 18h11"/></svg>Log</a>
+      <div id="pluginNav"></div>
     </div>
 
     <div class="navfoot">
@@ -904,6 +907,11 @@
         <div class="seg" id="logLevels"></div>
       </div>
       <div class="panel"><div class="log" id="log"></div></div>
+    </section>
+
+    <!-- ========== PLUGIN PAGES ========== -->
+    <section class="view" id="v-plugin">
+      <div id="pluginPage"></div>
     </section>
 
   </main>
@@ -1245,6 +1253,7 @@ function render() {
 
   if (tab === 'settings') { renderSettings(d); loadAccounts(); }
   if (tab === 'log') renderLog(d);
+  if (tab === 'plugin') renderPluginPage();
 }
 
 const stripForTitle = s => String(s || '').replace(/<[^>]*>/g, '');
@@ -1901,6 +1910,135 @@ function renderLog(d) {
   $('log').innerHTML = rows.length ? logRows(rows) : empty('No matches');
 }
 
+/* ---------- plugin pages ---------- */
+
+let pluginTab = '';
+
+/** Builds one nav tab per plugin that offers a page. */
+async function loadPlugins() {
+  let names = [];
+
+  try {
+    const r = await (await fetch('/api/plugins')).json();
+    names = r.plugins || [];
+  } catch { return; }
+
+  const nav = $('pluginNav');
+
+  if (nav.dataset.names === names.join(',')) return;
+  nav.dataset.names = names.join(',');
+
+  nav.innerHTML = names.map(name =>
+    '<a data-plugin="' + esc(name) + '">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M4 7h16M4 12h16M4 17h10"/></svg>' + esc(name) + '</a>').join('');
+
+  [...nav.children].forEach(a => a.onclick = () => {
+    pluginTab = a.dataset.plugin;
+    tab = 'plugin';
+    document.querySelectorAll('nav a').forEach(x => x.classList.toggle('on', x === a));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-plugin'));
+    window.scrollTo(0, 0);
+    renderPluginPage();
+  });
+}
+
+async function renderPluginPage() {
+  if (!pluginTab) return;
+
+  let page;
+
+  try {
+    page = await (await fetch('/api/plugins/page?plugin=' +
+      encodeURIComponent(pluginTab))).json();
+  } catch { return; }
+
+  if (page.ok === false) {
+    $('pluginPage').innerHTML = empty('That page is not available');
+    return;
+  }
+
+  $('pluginPage').innerHTML = (page.sections || []).map(pluginSection).join('');
+}
+
+function pluginSection(section) {
+  if (section.kind === 'note') {
+    return '<h2>' + esc(section.title) + '</h2>' +
+      '<div class="panel"><div class="pad">' + esc(section.text) + '</div></div>';
+  }
+
+  if (section.kind === 'table') return pluginTable(section);
+
+  return '<h2>' + esc(section.title) + '</h2><div class="fields">' +
+    section.fields.map(f =>
+      '<div class="full"><label>' + esc(f.label) + '</label>' +
+      '<input id="pf-' + esc(f.key) + '" placeholder="' + esc(f.placeholder) + '"></div>').join('') +
+    '</div><div class="bar flat">' +
+    section.buttons.map(b => pluginButton(b, section.fields)).join('') +
+    '</div>';
+}
+
+function pluginTable(section) {
+  if (!section.rows.length) {
+    return '<h2>' + esc(section.title) + '</h2>' +
+      '<div class="panel">' + empty('Nothing here yet') + '</div>';
+  }
+
+  const hasActions = section.rows.some(r => r.actions.length);
+
+  return '<h2>' + esc(section.title) + '</h2><div class="panel">' +
+    '<table class="stack"><thead><tr>' +
+    section.columns.map(c => '<th>' + esc(c) + '</th>').join('') +
+    (hasActions ? '<th class="right">Actions</th>' : '') +
+    '</tr></thead><tbody>' +
+    section.rows.map(row => '<tr>' +
+      row.cells.map((cell, i) => '<td data-label="' +
+        esc(section.columns[i] || '') + '">' + esc(cell) + '</td>').join('') +
+      (hasActions
+        ? '<td class="right" data-label="Actions"><div class="acts">' +
+          row.actions.map(b => pluginButton(b)).join('') + '</div></td>'
+        : '') +
+      '</tr>').join('') +
+    '</tbody></table></div>';
+}
+
+/** A button carries its own arguments, which is how a row's button knows its row. */
+function pluginButton(button, fields) {
+  const spec = JSON.stringify({
+    action: button.action,
+    args: button.arguments || {},
+    fields: (fields || []).map(f => f.key),
+  });
+
+  const style = button.danger ? 'bad' : (fields ? 'go' : '');
+
+  return '<button class="' + style + '"' +
+    ' data-spec="' + esc(spec) + '" onclick="pluginAction(this)">' +
+    esc(button.label) + '</button>';
+}
+
+async function pluginAction(el) {
+  const spec = JSON.parse(el.dataset.spec);
+  const q = new URLSearchParams({ plugin: pluginTab, action: spec.action });
+
+  Object.keys(spec.args).forEach(k => q.set(k, spec.args[k]));
+
+  (spec.fields || []).forEach(key => {
+    const field = $('pf-' + key);
+    if (field) q.set(key, field.value.trim());
+  });
+
+  const r = await (await fetch('/api/plugins/action?' + q)).json();
+
+  if (!r.ok) {
+    alert(r.error || 'That did not work.');
+    return;
+  }
+
+  renderPluginPage();
+}
+
 /* ---------- boot ---------- */
 
 buildRichBar('rtName', 'fName', 'pvName');
@@ -1908,6 +2046,7 @@ buildRichBar('rtDesc', 'fDesc', 'pvDesc');
 
 poll();
 pollHistory();
+loadPlugins();
 
 setInterval(poll, 1000);
 setInterval(() => {
