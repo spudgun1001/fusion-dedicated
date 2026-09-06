@@ -63,6 +63,7 @@ public class PluginHostTests : IDisposable
 
     private PluginHost Host(PluginEvents events)
         => new(_dir, events, _health, _panel, _modules, new NoActions(),
+            () => Array.Empty<PluginPlayer>(),
             (level, message) => _log.Add(level + " " + message));
 
     private PluginEvents Events() => new(_health, (_, _) => { });

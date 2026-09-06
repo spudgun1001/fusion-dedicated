@@ -36,6 +36,7 @@ public class PluginContextTests : IDisposable
             new PluginPanel(new PluginHealth(), (_, _) => { }),
             new PluginModules(new PluginHealth(), (_, _) => { }),
             actions ?? new RecordingActions(),
+            () => Array.Empty<PluginPlayer>(),
             (level, message) => _log.Add(level + " " + message));
 
     [Fact]

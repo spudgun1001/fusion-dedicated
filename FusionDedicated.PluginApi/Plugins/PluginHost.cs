@@ -36,6 +36,7 @@ public sealed class PluginHost
     private readonly PluginHealth _health;
     private readonly PluginPanel _panel;
     private readonly PluginModules _modules;
+    private readonly Func<IReadOnlyList<PluginPlayer>> _players;
     private readonly IPluginActions _actions;
     private readonly Action<string, string> _log;
 
@@ -44,8 +45,9 @@ public sealed class PluginHost
 
     public PluginHost(string directory, PluginEvents events, PluginHealth health,
         PluginPanel panel, PluginModules modules, IPluginActions actions,
-        Action<string, string> log)
+        Func<IReadOnlyList<PluginPlayer>> players, Action<string, string> log)
     {
+        _players = players;
         _directory = directory;
         _events = events;
         _health = health;
@@ -173,7 +175,7 @@ public sealed class PluginHost
         store.Load();
 
         var pluginContext = new PluginContext(
-            manifest.Name, _events, store, _panel, _modules, _actions, _log);
+            manifest.Name, _events, store, _panel, _modules, _actions, _players, _log);
 
         try
         {

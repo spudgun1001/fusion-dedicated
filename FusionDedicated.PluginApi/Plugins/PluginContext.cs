@@ -6,11 +6,13 @@ namespace FusionDedicated.Plugins;
 public sealed class PluginContext
 {
     private readonly Action<string, string> _log;
+    private readonly Func<IReadOnlyList<PluginPlayer>> _players;
 
     public PluginContext(string name, PluginEvents events, PluginStore store,
         PluginPanel panel, PluginModules modules, IPluginActions actions,
-        Action<string, string> log)
+        Func<IReadOnlyList<PluginPlayer>> players, Action<string, string> log)
     {
+        _players = players;
         Name = name;
         Events = events;
         Store = store;
@@ -31,6 +33,9 @@ public sealed class PluginContext
 
     /// <summary>Module message tags this plugin has claimed, if any.</summary>
     public PluginModules Modules { get; }
+
+    /// <summary>Who is connected, read afresh each time it is asked for.</summary>
+    public IReadOnlyList<PluginPlayer> Players => _players();
 
     public IPluginActions Actions { get; }
 

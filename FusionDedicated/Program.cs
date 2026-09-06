@@ -250,6 +250,9 @@ public static class Program
         var plugins = new PluginHost(
             Path.Combine(AppContext.BaseDirectory, "plugins"),
             pluginEvents, pluginHealth, pluginPanel, pluginModules, pluginActions,
+            () => server.Players.Players
+                .Select(p => new PluginPlayer(p.PlatformId, p.SmallId, p.DisplayName, p.Permission))
+                .ToList(),
             (level, message) => server.Log(level, message));
 
         var commands = new CommandProcessor(new ServerCommandTarget(server, plugins));
