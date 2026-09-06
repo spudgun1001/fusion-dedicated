@@ -17,10 +17,17 @@ public static class WorldCatchup
     /// Discovered entities are left out: those were part of the level when it
     /// loaded, so the newcomer's own copy of the scene already has them, and
     /// sending them would make a second one appear.
+    ///
+    /// So are the synthetic ones. The two ends of a constraint are tracked under
+    /// a barcode we invented, and telling a client to spawn it would be naming
+    /// something no pallet has. The constraint itself is put back by its own
+    /// message, not by a spawn.
     /// </summary>
     public static List<TrackedEntity> For(IEnumerable<TrackedEntity> entities)
         => entities
-            .Where(e => !e.Discovered && !string.IsNullOrWhiteSpace(e.Barcode))
+            .Where(e => !e.Discovered
+                && !e.Synthetic
+                && !string.IsNullOrWhiteSpace(e.Barcode))
             .OrderBy(e => e.Id)
             .ToList();
 }

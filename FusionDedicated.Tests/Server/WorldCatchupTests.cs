@@ -95,4 +95,20 @@ public class WorldCatchupTests
 
         Assert.Equal(rotation, WorldCatchup.For(registry.Entities).Single().Rotation);
     }
+
+    [Fact]
+    public void The_ends_of_a_constraint_are_not_replayed_as_spawns()
+    {
+        // They are tracked so they count against the cap, but their barcode is
+        // one the server invented. Telling a client to spawn it would name
+        // something no pallet has, and it would do it twice per constraint.
+        var registry = WithSpawns();
+        registry.Register(20, "fusion.constraint", 1, 0, 0, 0).Synthetic = true;
+        registry.Register(21, "fusion.constraint", 1, 0, 0, 0).Synthetic = true;
+
+        var replay = WorldCatchup.For(registry.Entities);
+
+        Assert.DoesNotContain(replay, e => e.Synthetic);
+        Assert.Equal(2, replay.Count);
+    }
 }

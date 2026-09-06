@@ -1928,8 +1928,8 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        Entities.Register(point1, ConstraintBarcode, sender.SmallId, 0, 0, 0);
-        Entities.Register(point2, ConstraintBarcode, sender.SmallId, 0, 0, 0);
+        Entities.Register(point1, ConstraintBarcode, sender.SmallId, 0, 0, 0).Synthetic = true;
+        Entities.Register(point2, ConstraintBarcode, sender.SmallId, 0, 0, 0).Synthetic = true;
 
         Broadcast(ModuleProtocol.WriteModuleToClients(
             ModuleProtocol.ConstraintCreateTag, sender.SmallId, rewritten), reliable: true);

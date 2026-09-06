@@ -40,6 +40,14 @@ public sealed class TrackedEntity
     public bool Persistent { get; set; }
 
     /// <summary>
+    /// True when this is not a spawnable at all. The ends of a constraint are
+    /// tracked so they count against the cap and can be culled, but their barcode
+    /// is one we made up: asking a client to spawn it would be asking for
+    /// something no pallet has.
+    /// </summary>
+    public bool Synthetic { get; set; }
+
+    /// <summary>
     /// True when the owner left and nobody has taken over. A dedicated server runs no
     /// physics, so an orphan simply hangs wherever it was, it needs adopting or culling.
     /// </summary>
