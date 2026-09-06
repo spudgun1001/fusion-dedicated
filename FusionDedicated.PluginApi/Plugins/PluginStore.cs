@@ -107,8 +107,19 @@ public sealed class PluginStore
     /// is right, but failing silently is not: an operator whose file cannot be
     /// written would otherwise watch a roster save and then vanish on restart.
     /// </summary>
+    public void Save() => TrySave();
+
+    /// <summary>
+    /// Save, and say whether it worked.
+    ///
+    /// Save itself returns void and always will. Changing its return type is a
+    /// binary break: a plugin compiled against the old one asks the runtime for
+    /// a method that no longer exists, and the MissingMethodException that
+    /// follows took a live server down mid-session. Anything new goes beside it
+    /// rather than through it.
+    /// </summary>
     /// <returns>True when the file was written.</returns>
-    public bool Save()
+    public bool TrySave()
     {
         try
         {

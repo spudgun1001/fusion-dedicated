@@ -38,7 +38,7 @@ public class PluginStoreFailureTests : IDisposable
         store.Set("roster", new[] { 1, 2, 3 });
 
         // The whole fault: this used to throw, and it is called from Unload.
-        Assert.False(store.Save());
+        Assert.False(store.TrySave());
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class PluginStoreFailureTests : IDisposable
 
         store.Set("salary", 250);
 
-        Assert.True(store.Save());
+        Assert.True(store.TrySave());
         Assert.True(store.Writable);
         Assert.Empty(lines);
     }
@@ -113,11 +113,11 @@ public class PluginStoreFailureTests : IDisposable
         var store = new PluginStore(path, (level, message) => lines.Add($"{level} {message}"));
 
         store.Set("salary", 100);
-        Assert.False(store.Save());
+        Assert.False(store.TrySave());
 
         Directory.Delete(path);
 
-        Assert.True(store.Save());
+        Assert.True(store.TrySave());
         Assert.Contains(lines, l => l.StartsWith("INFO") && l.Contains("can be written again"));
     }
 
@@ -127,6 +127,19 @@ public class PluginStoreFailureTests : IDisposable
         var store = new PluginStore(Path.Combine(_dir, "nested", "deeper", "data.json"));
         store.Set("x", 1);
 
-        Assert.True(store.Save());
+        Assert.True(store.TrySave());
+    }
+
+    [Fact]
+    public void Save_still_returns_void_so_old_plugins_keep_working()
+    {
+        // A plugin compiled against this API calls Save(). Changing its return
+        // type meant the runtime could no longer find it, and the
+        // MissingMethodException took a live server down mid-session. Anything
+        // new goes beside Save rather than through it.
+        var save = typeof(PluginStore).GetMethod(nameof(PluginStore.Save), Type.EmptyTypes);
+
+        Assert.NotNull(save);
+        Assert.Equal(typeof(void), save!.ReturnType);
     }
 }

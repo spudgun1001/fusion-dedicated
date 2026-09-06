@@ -18,6 +18,9 @@ public sealed class LoadedPlugin
     public required PluginStore Store { get; init; }
 
     public AssemblyLoadContext? Context { get; init; }
+
+    /// <summary>What the plugin was handed, kept so its timers can be stopped.</summary>
+    public PluginContext? Given { get; init; }
 }
 
 /// <summary>
@@ -203,6 +206,7 @@ public sealed class PluginHost
             _panel.RemoveAll(manifest.Name);
             _modules.RemoveAll(manifest.Name);
             _log("ERROR", $"Plugin '{manifest.Name}' threw while starting and was not loaded: {e.Message}");
+            pluginContext.StopTimers();
             context?.Unload();
             return false;
         }
@@ -216,6 +220,7 @@ public sealed class PluginHost
                 Instance = instance,
                 Store = store,
                 Context = context,
+                Given = pluginContext,
             });
         }
 
@@ -260,6 +265,9 @@ public sealed class PluginHost
         // reload, leaving the old assembly loaded and the new one never read.
         try
         {
+            // Timers first. One left running would fire into an assembly that is
+            // no longer loaded, which ends the process rather than throwing.
+            plugin.Given?.StopTimers();
             plugin.Store.Save();
             plugin.Context?.Unload();
         }
