@@ -722,8 +722,6 @@ public sealed class FusionServer : IDisposable
 
         Plugins?.Joined.Raise(new Plugins.JoinEvent(
             platformId, player.DisplayName, player.Permission));
-
-        SendPersistentProps(player);
         player.Metadata[PermissionMetadataKey] = player.Permission.ToFusionString();
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
@@ -761,7 +759,16 @@ public sealed class FusionServer : IDisposable
         // 5. The rules: privacy, combat toggles and which level each action needs.
         SendTo(connection, ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
 
-        Log("INFO", $"Catch-up sent: {Players.Count - 1} players, level '{Config.LevelBarcode}'");
+        // 6. What is already in the world. Nobody else does this: Fusion only
+        //    sends creation catch-up when it is the host, and no client here is,
+        //    so without this a player who joins sees an empty level and the guns
+        //    everyone else is holding are not there.
+        EnsurePersistentProps(player);
+
+        int caught = SendWorldCatchup(player);
+
+        Log("INFO", $"Catch-up sent: {Players.Count - 1} players, {caught} entities, " +
+                    $"level '{Config.LevelBarcode}'");
 
         // Everyone's copy of LobbyInfo now has a stale player list.
         PushSettings();
@@ -1304,7 +1311,51 @@ public sealed class FusionServer : IDisposable
     /// ownerless on purpose: nobody simulates them, so they stay exactly where
     /// they were put, and being persistent is what stops a cull taking them.
     /// </summary>
-    private void SendPersistentProps(ConnectedPlayer player)
+    /// <summary>
+    /// Puts the world in front of somebody who has just arrived.
+    ///
+    /// A relay is not a host, and Fusion's own catch-up runs on the host alone,
+    /// so nothing tells a joining player what already exists. Every entity we
+    /// know about is sent as the spawn it originally was, with its own ID and its
+    /// original owner, so the newcomer agrees with everybody else about which
+    /// entity is which.
+    ///
+    /// No spawn effect, because these are not being spawned now. Once a client
+    /// knows an entity exists it asks that entity's owner for the rest, which is
+    /// how a holstered gun ends up in the right hand rather than on the floor.
+    /// </summary>
+    /// <returns>How many were sent.</returns>
+    private int SendWorldCatchup(ConnectedPlayer player)
+    {
+        var replay = WorldCatchup.For(Entities.Entities);
+
+        int sent = 0;
+
+        foreach (var entity in replay)
+        {
+            SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
+                entity.OwnerSmallId ?? player.SmallId,
+                entity.OwnerSmallId ?? player.SmallId,
+                entity.Id, entity.Barcode,
+                new Vec3(entity.X, entity.Y, entity.Z), entity.Rotation, 0,
+                spawnEffect: false), reliable: true);
+
+            sent++;
+        }
+
+        return sent;
+    }
+
+    /// <summary>
+    /// Registers this level's placed props, once, the first time anybody needs them.
+    ///
+    /// Only registering. The catch-up above sends every entity it knows about,
+    /// props included, so sending them here as well put each prop on a client
+    /// twice. They are left ownerless on purpose: nobody simulates them, so they
+    /// stay where they were put, and being persistent is what stops a cull
+    /// taking them.
+    /// </summary>
+    private void EnsurePersistentProps(ConnectedPlayer player)
     {
         if (Props is not { } store)
         {
@@ -1335,11 +1386,6 @@ public sealed class FusionServer : IDisposable
                 tracked.Persistent = true;
                 Entities.SetOwner(id, null);
             }
-
-            SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
-                player.SmallId, player.SmallId, id, prop.Barcode,
-                new Vec3(prop.X, prop.Y, prop.Z), prop.RotationBytes(), 0,
-                spawnEffect: false), reliable: true);
         }
     }
 
@@ -1766,11 +1812,17 @@ public sealed class FusionServer : IDisposable
             }
         }
 
+        if (handler == ModuleProtocol.ConstraintDeleteTag)
+        {
+            HandleConstraintDelete(sender, message);
+            return;
+        }
+
         if (handler != ModuleProtocol.ConstraintCreateTag)
         {
             if (_unknownModules.Add(handler.Value))
             {
-                Log("INFO", $"Module message {handler.Value} is not handled here");
+                Log("INFO", $"Module message {handler.Value} is not handled here, passing it on");
             }
 
             // The tag alone names the door. This is what shows what came through
@@ -1778,10 +1830,49 @@ public sealed class FusionServer : IDisposable
             ModuleInspector.Note(handler.Value, sender.SmallId, sender.DisplayName,
                 ModuleProtocol.TryReadHandlerPayload(message) ?? Array.Empty<byte>());
 
+            // Passed on rather than dropped. A module message is one mod talking
+            // to the same mod on another client, and Fusion's own relay forwards
+            // it unless a handler says otherwise. Swallowing them here broke
+            // every client mod that speaks over modules, and clearing a
+            // constraint with it: the delete never left the person who sent it.
+            Relay(sender, message);
             return;
         }
 
         HandleConstraintCreate(sender, message);
+    }
+
+    /// <summary>
+    /// Clears a constraint, and takes it off our books.
+    ///
+    /// The delete carries the constraint's entity ID and nothing else. Passing it
+    /// on is what makes the constraint disappear on everybody's screen; forgetting
+    /// the entity is what stops a constrained pair counting against the cap for
+    /// the rest of the session.
+    /// </summary>
+    private void HandleConstraintDelete(ConnectedPlayer sender, byte[] message)
+    {
+        if (!sender.Permission.IsAtLeast(Config.Constrainer))
+        {
+            Log("WARN", $"{sender.DisplayName} tried to clear a constraint but is " +
+                        $"{sender.Permission.ToFusionString()}, not " +
+                        $"{Config.Constrainer.ToFusionString()}, dropped");
+            return;
+        }
+
+        var payload = ModuleProtocol.TryReadHandlerPayload(message);
+
+        if (payload is { Length: >= 2 })
+        {
+            ushort id = System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(payload);
+
+            if (Entities.Remove(id))
+            {
+                Log("INFO", $"{sender.DisplayName} cleared constraint {id}");
+            }
+        }
+
+        Relay(sender, message);
     }
 
     /// <summary>

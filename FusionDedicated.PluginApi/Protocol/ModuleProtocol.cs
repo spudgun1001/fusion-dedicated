@@ -67,6 +67,13 @@ public static class ModuleProtocol
     public static readonly long ConstraintCreateTag =
         TagFor("LabFusion", "LabFusion.Marrow.Messages.ConstraintCreateMessage");
 
+    /// <summary>
+    /// The handler that clears a constraint. Its payload is the two byte ID of
+    /// the constraint entity, and nothing else.
+    /// </summary>
+    public static readonly long ConstraintDeleteTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.ConstraintDeleteMessage");
+
     /// <summary>Which handler a module message belongs to, or null if it is not one.</summary>
     public static long? TryReadHandlerTag(ReadOnlySpan<byte> message)
     {
