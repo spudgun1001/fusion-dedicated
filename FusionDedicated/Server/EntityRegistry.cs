@@ -373,14 +373,23 @@ public sealed class EntityRegistry
     /// Only inherited or ownerless ones are eligible, so a player's own work is never
     /// taken away to make room for someone else.
     /// </summary>
-    public List<ushort> EvictOldest(int count)
+    /// <param name="anyOwner">
+    /// A last resort. When every entity belongs to somebody still connected there is
+    /// nothing abandoned to take, and a full world stays full: from then on every
+    /// spawn is refused, for everybody, until a restart. A busy server reached that
+    /// after three hours and nobody could spawn anything. Losing the least recently
+    /// touched prop is worse for one player than the world being locked is for all
+    /// of them, so this widens the search rather than refusing.
+    /// </param>
+    public List<ushort> EvictOldest(int count, bool anyOwner = false)
     {
         var removed = new List<ushort>();
 
         lock (_lock)
         {
             var candidates = _entities.Values
-                .Where(e => e.Removable && (e.Inherited || e.IsOrphaned))
+                .Where(e => e.Removable
+                    && (anyOwner || e.Inherited || e.IsOrphaned))
                 .OrderBy(e => e.LastUpdate)
                 .Take(count)
                 .ToList();

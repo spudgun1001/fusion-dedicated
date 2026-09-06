@@ -853,8 +853,25 @@ public sealed class FusionServer : IDisposable
 
             if (Entities.Count >= Config.MaxEntities)
             {
+                // Nothing abandoned to take, so take the oldest thing there is.
+                // A world that stays full refuses every spawn from every player
+                // until somebody restarts the server, which is a worse outcome
+                // than one stale prop going.
+                var forced = Entities.EvictOldest(Config.EvictBatchSize, anyOwner: true);
+
+                if (forced.Count > 0)
+                {
+                    DespawnOnClients(forced);
+                    Log("WARN", $"World still at capacity with nothing abandoned, so the " +
+                                $"{forced.Count} least recently touched entities were removed. " +
+                                "Set IdleTimeoutSeconds so it does not come to this.");
+                }
+            }
+
+            if (Entities.Count >= Config.MaxEntities)
+            {
                 Log("WARN", $"Spawn denied: entity limit reached ({Config.MaxEntities}) " +
-                            "and nothing was eligible for eviction");
+                            "and nothing could be evicted");
                 return;
             }
         }
