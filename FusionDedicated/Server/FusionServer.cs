@@ -294,11 +294,27 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void DespawnOnClients(IEnumerable<ushort> ids)
     {
-        byte despawner = Players.Players.FirstOrDefault()?.SmallId ?? PlayerRegistry.ServerSmallId;
+        var doomed = ids.ToList();
 
-        foreach (ushort id in ids)
+        if (doomed.Count == 0)
         {
-            Broadcast(ServerProtocol.WriteDespawnResponse(despawner, id, false), reliable: true);
+            return;
+        }
+
+        var players = Players.Players.ToList();
+        var present = players.Select(p => p.SmallId).ToList();
+
+        // Each player is told by somebody else, because a despawn credited to the
+        // player receiving it is not acted on by their own client.
+        foreach (var recipient in players)
+        {
+            byte despawner = DespawnAttribution.For(recipient.SmallId, present);
+
+            foreach (ushort id in doomed)
+            {
+                SendTo(recipient.Connection,
+                    ServerProtocol.WriteDespawnResponse(despawner, id, false), reliable: true);
+            }
         }
     }
 
@@ -1150,11 +1166,6 @@ public sealed class FusionServer : IDisposable
     public int PurgeEntitiesOf(byte smallId)
     {
         // If the owner has already gone, name someone who is still here, see
-        // ClearAllEntities for why an unresolvable sender is ignored by clients.
-        byte despawner = Players.Get(smallId) != null
-            ? smallId
-            : Players.Players.FirstOrDefault()?.SmallId ?? smallId;
-
         // Their own spawns only, sweeping up inherited props would delete the work of
         // players who have since left.
         var doomed = Entities.Entities
@@ -1165,8 +1176,9 @@ public sealed class FusionServer : IDisposable
         foreach (ushort id in doomed)
         {
             Entities.Remove(id);
-            Broadcast(ServerProtocol.WriteDespawnResponse(despawner, id, false), reliable: true);
         }
+
+        DespawnOnClients(doomed);
 
         return doomed.Count;
     }
@@ -1182,16 +1194,11 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     public int ClearAllEntities(bool includeDiscovered = false)
     {
-        byte despawner = Players.Players.FirstOrDefault()?.SmallId ?? PlayerRegistry.ServerSmallId;
-
         // Clear() decides what is eligible; discovered entities are held back unless
         // asked for, because one may be a scene prop rather than a spawn.
         var doomed = Entities.Clear(includeDiscovered);
 
-        foreach (ushort id in doomed)
-        {
-            Broadcast(ServerProtocol.WriteDespawnResponse(despawner, id, false), reliable: true);
-        }
+        DespawnOnClients(doomed);
 
         if (doomed.Count > 0)
         {
