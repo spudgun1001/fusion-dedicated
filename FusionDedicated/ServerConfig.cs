@@ -224,6 +224,25 @@ public sealed class ServerConfig
     public bool PluginsEnabled { get; set; }
 
     /// <summary>
+    /// Lets the egg's Plugins switch decide, since nothing else in the panel does.
+    /// Only PLUGINS_ENABLED is read this way: every other setting is edited in the
+    /// web panel and lives in server.json, and an environment variable quietly
+    /// putting one back on every restart would be a trap.
+    /// </summary>
+    /// <returns>The value it was set to, or null when the variable is not set.</returns>
+    public bool? ApplyPluginEnvironment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        PluginsEnabled = value.Trim().ToLowerInvariant() is "1" or "true" or "yes" or "on";
+
+        return PluginsEnabled;
+    }
+
+    /// <summary>
     /// Records module messages nothing handled, so a plugin can be written to host
     /// a client mod. Off unless asked for: payloads may carry player content.
     /// </summary>

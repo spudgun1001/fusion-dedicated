@@ -34,6 +34,9 @@ public static class Program
             config.Save(ConfigPath);
         }
 
+        bool? pluginsFromEgg = config.ApplyPluginEnvironment(
+            Environment.GetEnvironmentVariable("PLUGINS_ENABLED"));
+
         Banner(config);
 
         // ---- Steam ----
@@ -333,7 +336,9 @@ public static class Program
         }
         else
         {
-            server.Log("INFO", "Plugins are off; set PluginsEnabled to load them");
+            server.Log("INFO", pluginsFromEgg == false
+                ? "Plugins are off; turn on Plugins in the server settings to load them"
+                : "Plugins are off; set PluginsEnabled in server.json to load them");
         }
 
         rcon.Start();
