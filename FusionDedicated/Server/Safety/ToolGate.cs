@@ -153,6 +153,13 @@ public static class SpawnAuthority
             return BlockVerdict.Allowed;
         }
 
+        // Ammunition first and always, config or no config. A gun nobody can
+        // reload is worse than a spawn menu nobody has locked down yet.
+        if (Ammunition.IsAmmo(barcode))
+        {
+            return BlockVerdict.Allowed;
+        }
+
         if (IsExempt(barcode, exempt))
         {
             return BlockVerdict.Allowed;

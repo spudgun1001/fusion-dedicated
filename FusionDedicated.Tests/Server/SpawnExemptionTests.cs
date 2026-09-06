@@ -53,9 +53,20 @@ public class SpawnExemptionTests
     }
 
     [Fact]
-    public void An_empty_exemption_list_holds_everything_to_the_rank()
+    public void An_empty_exemption_list_holds_everything_else_to_the_rank()
     {
         Assert.True(SpawnAuthority.Check(
+            PermissionLevel.Default, PermissionLevel.Operator,
+            "Author.Pallet.Spawnable.AK74", Array.Empty<string>()).Blocked);
+    }
+
+    [Fact]
+    public void An_empty_exemption_list_still_lets_ammunition_through()
+    {
+        // This used to be blocked, and a server with the list unedited had guns
+        // nobody could reload. Ammunition is built in now, so the config only ever
+        // adds to it.
+        Assert.False(SpawnAuthority.Check(
             PermissionLevel.Default, PermissionLevel.Operator,
             "Author.Pallet.Spawnable.AK74Magazine", Array.Empty<string>()).Blocked);
     }
