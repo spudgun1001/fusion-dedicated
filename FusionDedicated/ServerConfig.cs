@@ -194,8 +194,14 @@ public sealed class ServerConfig
     /// spawn rank would stop people reloading. Base game barcodes carry no readable
     /// name, so those have to be named in full.
     /// </summary>
+    /// <summary>
+    /// Deliberately conservative. Every word here lets anyone spawn anything
+    /// carrying it, so "mag" is not on the list: it would exempt a magnum as
+    /// readily as a magazine. Mods that name a magazine something else have to be
+    /// named in full, or exempted by their spawn source instead.
+    /// </summary>
     public static readonly string[] DefaultSpawningExempt =
-        { "magazine", "ammo", "cartridge" };
+        { "magazine", "ammo", "cartridge", "speedloader", "clip" };
 
     public List<string> SpawningExempt { get; set; } = new(DefaultSpawningExempt);
 
