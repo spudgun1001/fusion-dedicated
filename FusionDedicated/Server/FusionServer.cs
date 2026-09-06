@@ -75,6 +75,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>The owner's editable blocklist.json, when present.</summary>
     public BlocklistStore? Blocklist { get; set; }
 
+    /// <summary>Plugin events, when a host is running. Null means no plugins.</summary>
+    public Plugins.PluginEvents? Plugins { get; set; }
+
     /// <summary>When set, bans.json is authoritative over the config ban list.</summary>
     public Bans.BanStore? BanList { get; set; }
 
@@ -253,6 +256,8 @@ public sealed class FusionServer : IDisposable
         }
 
         Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}), {reason}");
+
+        Plugins?.Left.Raise(new Plugins.LeaveEvent(player.PlatformId, player.DisplayName));
 
         NoteDeparture(player.DisplayName, reason);
 
@@ -600,6 +605,17 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Before a slot is given, so a plugin refusing costs nothing.
+        var pluginJoin = Plugins?.Joining.Raise(new Plugins.JoinEvent(
+            platformId, request.Metadata.GetValueOrDefault("Username", ""),
+            Ranks?.Get(platformId) ?? Config.GetPermission(platformId)));
+
+        if (pluginJoin is { Allowed: false })
+        {
+            Reject(pluginJoin.Reason);
+            return;
+        }
+
         byte? smallId = Players.AllocateSmallId();
 
         if (smallId == null)
@@ -638,6 +654,9 @@ public sealed class FusionServer : IDisposable
         // The client sends its own idea of its permission level; the server's list is
         // what counts, so overwrite it before anyone else sees the metadata.
         player.Permission = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
+
+        Plugins?.Joined.Raise(new Plugins.JoinEvent(
+            platformId, player.DisplayName, player.Permission));
         player.Metadata[PermissionMetadataKey] = player.Permission.ToFusionString();
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
@@ -724,6 +743,17 @@ public sealed class FusionServer : IDisposable
         {
             Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
                         $"denied: {toolVerdict.Reason}");
+            return;
+        }
+
+        var pluginSpawn = Plugins?.Spawn.Raise(new Plugins.SpawnEvent(
+            sender.PlatformId, sender.DisplayName, sender.Permission,
+            request.Value.Barcode, request.Value.Source));
+
+        if (pluginSpawn is { Allowed: false })
+        {
+            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+                        $"denied by a plugin: {pluginSpawn.Reason}");
             return;
         }
 
@@ -834,7 +864,10 @@ public sealed class FusionServer : IDisposable
                     return false;
                 }
 
-                return true;
+                var pluginDamage = Plugins?.Damage.Raise(new Plugins.DamageEvent(
+                    sender.PlatformId, sender.DisplayName, 0, damage ?? 0f));
+
+                return pluginDamage is not { Allowed: false };
 
             case GateProtocol.TagPlayerRepTeleport:
                 if (!sender.Permission.IsAtLeast(Config.Teleportation))
@@ -845,7 +878,10 @@ public sealed class FusionServer : IDisposable
                     return false;
                 }
 
-                return true;
+                var pluginTeleport = Plugins?.Teleport.Raise(new Plugins.TeleportEvent(
+                    sender.PlatformId, sender.DisplayName, sender.Permission));
+
+                return pluginTeleport is not { Allowed: false };
 
             case GateProtocol.TagPlayerRepAvatar:
                 string? barcode = GateProtocol.TryReadAvatarBarcode(message);
@@ -860,6 +896,16 @@ public sealed class FusionServer : IDisposable
                                     $"the {verdict.Layer} blocklist: {verdict.Reason}");
                         return false;
                     }
+                }
+
+                var pluginAvatar = Plugins?.Avatar.Raise(new Plugins.AvatarEvent(
+                    sender.PlatformId, sender.DisplayName, sender.Permission, barcode ?? ""));
+
+                if (pluginAvatar is { Allowed: false })
+                {
+                    Log("WARN", $"{sender.DisplayName} tried to wear '{barcode}', refused by a " +
+                                $"plugin: {pluginAvatar.Reason}");
+                    return false;
                 }
 
                 return true;
@@ -943,6 +989,16 @@ public sealed class FusionServer : IDisposable
         {
             Log("WARN", $"{sender.DisplayName} tried to {action} {target.DisplayName} " +
                         $"but is {sender.Permission.ToFusionString()}, not {required.ToFusionString()}");
+        }
+
+        var pluginModeration = Plugins?.Moderation.Raise(new Plugins.ModerationEvent(
+            sender.PlatformId, sender.DisplayName, target.PlatformId, command.ToString()));
+
+        if (pluginModeration is { Allowed: false })
+        {
+            Log("WARN", $"{sender.DisplayName} tried to {command} {target.DisplayName}, " +
+                        $"refused by a plugin: {pluginModeration.Reason}");
+            return;
         }
 
         switch (command)
@@ -1167,6 +1223,18 @@ public sealed class FusionServer : IDisposable
     /// Used when the spam guard trips, so the flood is cleaned up rather than left
     /// hanging in everyone's world.
     /// </summary>
+    /// <summary>Removes one entity and tells the clients. For plugins.</summary>
+    public bool DespawnEntity(ushort entityId)
+    {
+        if (!Entities.Remove(entityId))
+        {
+            return false;
+        }
+
+        DespawnOnClients(new[] { entityId });
+        return true;
+    }
+
     public int PurgeEntitiesOf(byte smallId)
     {
         // If the owner has already gone, name someone who is still here, see
@@ -1411,6 +1479,20 @@ public sealed class FusionServer : IDisposable
             return true;
         }
 
+        var pluginTool = Plugins?.Tool.Raise(new Plugins.ToolEvent(
+            sender.PlatformId, sender.DisplayName, sender.Permission, entity.Barcode, entityId));
+
+        if (pluginTool is { Allowed: false })
+        {
+            Log("WARN", $"{sender.DisplayName} took '{entity.ShortName}' against a plugin: " +
+                        $"{pluginTool.Reason}, removing it");
+
+            Entities.Remove(entityId);
+            DespawnOnClients(new[] { entityId });
+
+            return false;
+        }
+
         var verdict = ToolGate.Check(entity.Barcode, sender.Permission, ToolGatesFromConfig());
 
         if (!verdict.Blocked)
@@ -1470,6 +1552,16 @@ public sealed class FusionServer : IDisposable
             Log("WARN", $"{sender.DisplayName} tried to constrain but is " +
                         $"{sender.Permission.ToFusionString()}, not " +
                         $"{Config.Constrainer.ToFusionString()}, dropped");
+            return;
+        }
+
+        var pluginConstraint = Plugins?.Constraint.Raise(new Plugins.ConstraintEvent(
+            sender.PlatformId, sender.DisplayName, sender.Permission));
+
+        if (pluginConstraint is { Allowed: false })
+        {
+            Log("WARN", $"Constraint by {sender.DisplayName} denied by a plugin: " +
+                        $"{pluginConstraint.Reason}");
             return;
         }
 

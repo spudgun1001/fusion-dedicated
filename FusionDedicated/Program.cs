@@ -6,6 +6,7 @@ using FusionDedicated.Server.Audit;
 using FusionDedicated.Server.Bans;
 using FusionDedicated.Server.Ranks;
 using FusionDedicated.Server.Safety;
+using FusionDedicated.Plugins;
 using FusionDedicated.Web;
 using Steamworks;
 
@@ -269,6 +270,36 @@ public static class Program
 
         using var rcon = new RconServer(commands, config.RconPassword, config.RconPort,
         (level, message) => server.Log(level, message));
+
+        var pluginHealth = new PluginHealth();
+        var pluginEvents = new PluginEvents(pluginHealth, (level, message) => server.Log(level, message));
+
+        // Kick takes a small id rather than a SteamID, so the delegate resolves it.
+        var pluginActions = new ServerPluginActions(
+            (id, reason) =>
+            {
+                if (server.Players.GetByPlatformId(id) is { } target)
+                {
+                    server.Kick(target.SmallId, reason);
+                }
+            },
+            (id, reason) => server.Ban(id, "", reason),
+            (id, level) => server.SetPermission(id, "", level),
+            id => server.DespawnEntity(id));
+
+        var plugins = new PluginHost(
+            Path.Combine(AppContext.BaseDirectory, "plugins"),
+            pluginEvents, pluginHealth, pluginActions,
+            (level, message) => server.Log(level, message));
+
+        server.Plugins = pluginEvents;
+
+        int loadedPlugins = plugins.LoadAll();
+
+        if (loadedPlugins > 0)
+        {
+            server.Log("INFO", $"{loadedPlugins} plugins loaded");
+        }
 
         rcon.Start();
 
