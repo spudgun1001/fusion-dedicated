@@ -19,6 +19,7 @@ public sealed class CommandProcessor
         purge <who>
         players
         level <barcode> [title]
+        plugins [reload]
         help
         """;
 

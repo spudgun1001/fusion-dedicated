@@ -48,4 +48,14 @@ public class PluginCommandTests
 
         Assert.Contains("2", processor.Execute("plugins reload"));
     }
+
+    [Fact]
+    public void Help_says_the_plugins_command_exists()
+    {
+        // It worked but was not listed, so the only way to find it was the source.
+        var target = new FakeTarget();
+        var commands = new CommandProcessor(target);
+
+        Assert.Contains("plugins", commands.Execute("help"));
+    }
 }
