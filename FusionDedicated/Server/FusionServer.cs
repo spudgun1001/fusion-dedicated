@@ -472,6 +472,10 @@ public sealed class FusionServer : IDisposable
                 HandleOwnershipRequest(sender, message);
                 return;
 
+            case ModuleProtocol.TagModule when sender != null:
+                HandleModuleMessage(sender, message);
+                return;
+
             case ServerProtocol.TagModInfoRequest when sender != null:
                 HandleModInfoRequest(sender, message);
                 return;
@@ -1421,6 +1425,91 @@ public sealed class FusionServer : IDisposable
 
         return false;
     }
+
+    /// <summary>Module handler tags already reported, so each is said once.</summary>
+    private readonly HashSet<long> _unknownModules = new();
+
+    /// <summary>
+    /// Module messages carry whatever Fusion's own modules define. The only one the
+    /// server has to act on is a constraint, which needs the host to hand out an
+    /// entity id for each end before anybody can build it.
+    /// </summary>
+    private void HandleModuleMessage(ConnectedPlayer sender, byte[] message)
+    {
+        long? handler = ModuleProtocol.TryReadHandlerTag(message);
+
+        if (handler == null)
+        {
+            return;
+        }
+
+        if (handler != ModuleProtocol.ConstraintCreateTag)
+        {
+            if (_unknownModules.Add(handler.Value))
+            {
+                Log("INFO", $"Module message {handler.Value} is not handled here");
+            }
+
+            return;
+        }
+
+        HandleConstraintCreate(sender, message);
+    }
+
+    /// <summary>
+    /// Answers a constraint. The two ends become entities of their own, so the host
+    /// allocates an id for each, writes them into the message and passes it on. They
+    /// are the last two fields, so none of the constraint data before them has to be
+    /// understood to do it.
+    /// </summary>
+    private void HandleConstraintCreate(ConnectedPlayer sender, byte[] message)
+    {
+        if (!sender.Permission.IsAtLeast(Config.Constrainer))
+        {
+            Log("WARN", $"{sender.DisplayName} tried to constrain but is " +
+                        $"{sender.Permission.ToFusionString()}, not " +
+                        $"{Config.Constrainer.ToFusionString()}, dropped");
+            return;
+        }
+
+        byte[]? payload = ModuleProtocol.TryReadHandlerPayload(message);
+
+        if (payload == null)
+        {
+            Log("WARN", $"Constraint from {sender.DisplayName} did not parse");
+            return;
+        }
+
+        // Two more entities per constraint, so the world cap has to hold here as
+        // well or constraint spam walks straight past it.
+        if (Entities.Count + 2 > Config.MaxEntities)
+        {
+            Log("WARN", $"Constraint by {sender.DisplayName} denied: entity limit reached");
+            return;
+        }
+
+        ushort point1 = Entities.AllocateId();
+        ushort point2 = Entities.AllocateId();
+
+        byte[]? rewritten = ModuleProtocol.WithPointIds(payload, point1, point2);
+
+        if (rewritten == null)
+        {
+            Log("WARN", $"Constraint from {sender.DisplayName} was too short to carry its ids");
+            return;
+        }
+
+        Entities.Register(point1, ConstraintBarcode, sender.SmallId, 0, 0, 0);
+        Entities.Register(point2, ConstraintBarcode, sender.SmallId, 0, 0, 0);
+
+        Broadcast(ModuleProtocol.WriteModuleToClients(
+            ModuleProtocol.ConstraintCreateTag, sender.SmallId, rewritten), reliable: true);
+
+        Log("INFO", $"Constraint by {sender.DisplayName}, ends {point1} and {point2}");
+    }
+
+    /// <summary>Stands in for a barcode so the panel and the culls can see these.</summary>
+    private const string ConstraintBarcode = "fusion.constraint";
 
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {
