@@ -174,6 +174,16 @@ public static class Program
             ? config.LogDirectory
             : Path.Combine(AppContext.BaseDirectory, config.LogDirectory));
 
+        // A list written by hand can name the same SteamID twice, and only the first
+        // was ever in effect. Cleared before the ranks file takes it over.
+        int duplicates = config.DedupePermissions();
+
+        if (duplicates > 0)
+        {
+            Console.WriteLine($"Removed {duplicates} repeated entries from the rank list.");
+            config.Save(ConfigPath);
+        }
+
         var ranks = new RankStore(Path.Combine(AppContext.BaseDirectory, "ranks.json"));
         ranks.Load();
 

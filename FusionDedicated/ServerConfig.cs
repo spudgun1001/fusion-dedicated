@@ -380,6 +380,45 @@ public sealed class ServerConfig
         => Permissions.FirstOrDefault(p => p.PlatformId == platformId)?.Level
            ?? PermissionLevel.Default;
 
+    /// <summary>
+    /// Collapses repeated SteamIDs, which a file written by hand or by an older
+    /// build can carry. Only the first was ever in effect, so the rest were showing
+    /// in the panel without meaning anything. Returns how many went.
+    /// </summary>
+    public int DedupePermissions()
+    {
+        var kept = new Dictionary<ulong, PermissionEntry>();
+        var order = new List<PermissionEntry>();
+
+        foreach (var entry in Permissions)
+        {
+            if (kept.TryGetValue(entry.PlatformId, out var first))
+            {
+                // The highest rank wins, so collapsing never demotes anybody, and a
+                // later name replaces an earlier one unless it is blank.
+                if (entry.Level > first.Level)
+                {
+                    first.Level = entry.Level;
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.Username))
+                {
+                    first.Username = entry.Username;
+                }
+
+                continue;
+            }
+
+            kept[entry.PlatformId] = entry;
+            order.Add(entry);
+        }
+
+        int removed = Permissions.Count - order.Count;
+        Permissions = order;
+
+        return removed;
+    }
+
     public void SetPermission(ulong platformId, string username, PermissionLevel level)
     {
         var existing = Permissions.FirstOrDefault(p => p.PlatformId == platformId);

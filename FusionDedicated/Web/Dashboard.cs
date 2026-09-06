@@ -367,14 +367,18 @@ public sealed class Dashboard
             }).ToArray(),
 
             // Saved ranks, including people who are not connected right now.
-            roster = _config.Permissions
-                .OrderByDescending(e => e.Level)
+            // ranks.json is authoritative when it exists, so the panel reads what is
+            // actually in force rather than the config list it superseded.
+            roster = (_server.Ranks is { } ranks
+                    ? ranks.Entries.Select(e => (e.Key, e.Value.Name, e.Value.Rank))
+                    : _config.Permissions.Select(e => (e.PlatformId, e.Username, e.Level)))
+                .OrderByDescending(e => e.Item3)
                 .Select(e => new
                 {
-                    platformId = e.PlatformId.ToString(),
-                    username = e.Username,
-                    level = (int)e.Level,
-                    online = players.Any(p => p.PlatformId == e.PlatformId),
+                    platformId = e.Item1.ToString(),
+                    username = e.Item2,
+                    level = (int)e.Item3,
+                    online = players.Any(p => p.PlatformId == e.Item1),
                 }).ToArray(),
 
             muted = _server.Mutes.Muted.Select(id => id.ToString()).ToArray(),
