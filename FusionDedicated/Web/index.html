@@ -345,6 +345,7 @@
   .chip.guest    { color: hsl(var(--destructive-strong)); background: hsl(var(--destructive-soft)); }
   .chip.orphan   { color: hsl(var(--warning-strong));     background: hsl(var(--warning-soft)); }
   .chip.live     { color: hsl(var(--success-strong));     background: hsl(var(--success-soft)); }
+  .chip.kept     { color: hsl(var(--success-strong));     background: hsl(var(--success-soft)); }
 
   /* ---------- controls ---------- */
 
@@ -1587,6 +1588,7 @@ function renderWorld(d) {
     ? empty('No entities')
     : '<table class="stack"><thead><tr>' +
       '<th>ID</th><th>Item</th><th>Owner</th><th class="right">Position</th>' +
+      '<th class="right">Actions</th>' +
       '</tr></thead><tbody>' +
       d.entities.recent.map(e => '<tr>' +
         '<td class="m dim" data-label="ID">' + e.id + '</td>' +
@@ -1596,6 +1598,12 @@ function renderWorld(d) {
           ? '<span class="chip orphan">orphan</span>'
           : '<span class="chip">' + e.owner + '</span>') + '</td>' +
         '<td class="m right dim" data-label="Position">' + e.x + ', ' + e.y + ', ' + e.z + '</td>' +
+        '<td class="right" data-label="Actions"><div class="acts">' +
+          (e.persistent
+            ? '<span class="chip kept">kept</span>' +
+              '<button onclick="persist(' + e.id + ', 0)">Drop</button>'
+            : '<button onclick="persist(' + e.id + ', 1)">Keep</button>') +
+        '</div></td>' +
         '</tr>').join('') + '</tbody></table>';
 }
 
@@ -1812,6 +1820,14 @@ async function noteBan(platformId) {
   if (note === null) return;
 
   await fetch('/api/bannote?platformId=' + platformId + '&note=' + encodeURIComponent(note));
+  poll();
+}
+
+async function persist(id, keep) {
+  const r = await (await fetch('/api/persist?id=' + id + '&keep=' + keep)).json();
+
+  if (!r.ok) { alert(r.error || 'That did not work.'); }
+
   poll();
 }
 

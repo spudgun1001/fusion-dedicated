@@ -27,10 +27,30 @@ public sealed class TrackedEntity
     public float Z { get; set; }
 
     /// <summary>
+    /// The seven rotation bytes this was spawned with, kept so a prop can be put
+    /// back the way round it was. Empty for anything the server only learned about
+    /// from a pose update.
+    /// </summary>
+    public byte[] Rotation { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Placed on purpose and meant to stay. Exempt from every cull, from eviction
+    /// at the entity cap, and from Clear all.
+    /// </summary>
+    public bool Persistent { get; set; }
+
+    /// <summary>
     /// True when the owner left and nobody has taken over. A dedicated server runs no
     /// physics, so an orphan simply hangs wherever it was, it needs adopting or culling.
     /// </summary>
     public bool IsOrphaned => OwnerSmallId == null;
+
+    /// <summary>
+    /// A persistent prop is deliberately ownerless, so nobody simulates it and it
+    /// stays where it was put. That would normally make it an orphan to be culled,
+    /// which is why every cull asks this first.
+    /// </summary>
+    public bool Removable => !Persistent;
 
     public string ShortName
     {
@@ -142,7 +162,8 @@ public sealed class EntityRegistry
         }
     }
 
-    public TrackedEntity Register(ushort id, string barcode, byte owner, float x, float y, float z)
+    public TrackedEntity Register(ushort id, string barcode, byte owner, float x, float y, float z,
+        byte[]? rotation = null)
     {
         var entity = new TrackedEntity
         {
@@ -152,6 +173,7 @@ public sealed class EntityRegistry
             X = x,
             Y = y,
             Z = z,
+            Rotation = rotation ?? Array.Empty<byte>(),
         };
 
         lock (_lock)
@@ -272,7 +294,9 @@ public sealed class EntityRegistry
 
         lock (_lock)
         {
-            foreach (var entity in _entities.Values.Where(e => !e.Discovered && e.IsOrphaned && e.LastUpdate < cutoff).ToList())
+            foreach (var entity in _entities.Values
+                .Where(e => e.Removable && !e.Discovered && e.IsOrphaned && e.LastUpdate < cutoff)
+                .ToList())
             {
                 _entities.Remove(entity.Id);
                 removed.Add(entity.Id);
@@ -301,6 +325,11 @@ public sealed class EntityRegistry
         {
             foreach (var entity in _entities.Values.ToList())
             {
+                if (!entity.Removable)
+                {
+                    continue;
+                }
+
                 bool stale;
 
                 if (entity.IsOrphaned)
@@ -343,7 +372,7 @@ public sealed class EntityRegistry
         lock (_lock)
         {
             var candidates = _entities.Values
-                .Where(e => e.Inherited || e.IsOrphaned)
+                .Where(e => e.Removable && (e.Inherited || e.IsOrphaned))
                 .OrderBy(e => e.LastUpdate)
                 .Take(count)
                 .ToList();
@@ -363,12 +392,30 @@ public sealed class EntityRegistry
     /// unless asked for: one may be a scene prop, and despawning that desynchronises
     /// every client.
     /// </summary>
+    /// <summary>
+    /// Empties the books completely, persistent props included. For a level change,
+    /// where the old world is gone whatever it was made of. The props themselves are
+    /// kept in their own file and go back on the level they belong to.
+    /// </summary>
+    public List<ushort> Forget()
+    {
+        lock (_lock)
+        {
+            var removed = _entities.Keys.ToList();
+            _entities.Clear();
+
+            return removed;
+        }
+    }
+
     public List<ushort> Clear(bool includeDiscovered = false)
     {
         lock (_lock)
         {
+            // Surviving a clear is the point of marking something persistent, so
+            // Clear all leaves them and removing one is its own deliberate press.
             var removed = _entities.Values
-                .Where(e => includeDiscovered || !e.Discovered)
+                .Where(e => e.Removable && (includeDiscovered || !e.Discovered))
                 .Select(e => e.Id)
                 .ToList();
 

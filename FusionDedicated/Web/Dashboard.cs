@@ -195,6 +195,10 @@ public sealed class Dashboard
                 });
                 return;
 
+            case "/api/persist":
+                HandlePersist(context, query);
+                return;
+
             case "/api/mute":
                 HandleMute(context, query, muted: true);
                 return;
@@ -498,6 +502,7 @@ public sealed class Dashboard
                         barcode = e.Barcode,
                         owner = e.OwnerSmallId,
                         orphaned = e.IsOrphaned,
+                        persistent = e.Persistent,
                         x = MathF.Round(e.X, 1),
                         y = MathF.Round(e.Y, 1),
                         z = MathF.Round(e.Z, 1),
@@ -788,6 +793,28 @@ public sealed class Dashboard
 
         _config.Save(Program.ConfigPath);
         ServeJson(context, new { ok = true });
+    }
+
+    /// <summary>Marks a prop to be put back after a restart, or stops doing so.</summary>
+    private void HandlePersist(HttpListenerContext context, System.Collections.Specialized.NameValueCollection query)
+    {
+        if (!ushort.TryParse(query["id"], out ushort id))
+        {
+            ServeJson(context, new { ok = false, error = "Which prop?" });
+            return;
+        }
+
+        bool keep = query["keep"] != "0";
+
+        bool done = keep
+            ? _server.KeepProp(id, query["note"] ?? "")
+            : _server.ForgetProp(id);
+
+        ServeJson(context, new
+        {
+            ok = done,
+            error = done ? null : "That prop is no longer in the world.",
+        });
     }
 
     private void HandlePurge(HttpListenerContext context, NameValueCollection query)

@@ -99,6 +99,17 @@ public static class Program
 
         server.RebuildBlocklist();
 
+        var props = new FusionDedicated.Server.Props.PersistentPropStore(
+            Path.Combine(AppContext.BaseDirectory, "props.json"));
+
+        props.Load();
+        server.Props = props;
+
+        if (props.Count > 0)
+        {
+            server.Log("INFO", $"{props.Count} placed props will be put back");
+        }
+
         if (config.ExtendedProtection)
         {
             server.Log("INFO", $"Extended protection on: {BuiltInSafety.Barcodes.Count} built-in " +

@@ -75,6 +75,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>The owner's editable blocklist.json, when present.</summary>
     public BlocklistStore? Blocklist { get; set; }
 
+    /// <summary>Props that outlive a restart, when the file is in use.</summary>
+    public Props.PersistentPropStore? Props { get; set; }
+
     /// <summary>Plugin events, when a host is running. Null means no plugins.</summary>
     public Plugins.PluginEvents? Plugins { get; set; }
 
@@ -719,6 +722,8 @@ public sealed class FusionServer : IDisposable
 
         Plugins?.Joined.Raise(new Plugins.JoinEvent(
             platformId, player.DisplayName, player.Permission));
+
+        SendPersistentProps(player);
         player.Metadata[PermissionMetadataKey] = player.Permission.ToFusionString();
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
@@ -886,7 +891,8 @@ public sealed class FusionServer : IDisposable
         ushort entityId = Entities.AllocateId();
 
         Entities.Register(entityId, request.Value.Barcode, sender.SmallId,
-            request.Value.Position.X, request.Value.Position.Y, request.Value.Position.Z);
+            request.Value.Position.X, request.Value.Position.Y, request.Value.Position.Z,
+            request.Value.Rotation);
 
         Broadcast(FusionProtocol.BuildSpawnResponse(sender.SmallId, sender.SmallId, entityId,
             request.Value.Barcode, request.Value.Position, request.Value.Rotation,
@@ -1290,6 +1296,101 @@ public sealed class FusionServer : IDisposable
         => Broadcast(ModuleProtocol.WriteModuleToClients(
             handlerTag, PlayerRegistry.ServerSmallId, payload), reliable: true);
 
+    /// <summary>
+    /// Puts this level's placed props in front of somebody who just joined.
+    ///
+    /// They are registered once, the first time anybody needs them, and sent to
+    /// everyone after that, so every client agrees on the ids. They are left
+    /// ownerless on purpose: nobody simulates them, so they stay exactly where
+    /// they were put, and being persistent is what stops a cull taking them.
+    /// </summary>
+    private void SendPersistentProps(ConnectedPlayer player)
+    {
+        if (Props is not { } store)
+        {
+            return;
+        }
+
+        foreach (var prop in store.For(Config.LevelBarcode))
+        {
+            var existing = Entities.Entities.FirstOrDefault(e =>
+                e.Persistent
+                && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
+                && Math.Abs(e.X - prop.X) < 0.5f
+                && Math.Abs(e.Z - prop.Z) < 0.5f);
+
+            ushort id;
+
+            if (existing != null)
+            {
+                id = existing.Id;
+            }
+            else
+            {
+                id = Entities.AllocateId();
+
+                var tracked = Entities.Register(id, prop.Barcode, player.SmallId,
+                    prop.X, prop.Y, prop.Z, prop.RotationBytes());
+
+                tracked.Persistent = true;
+                Entities.SetOwner(id, null);
+            }
+
+            SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
+                player.SmallId, player.SmallId, id, prop.Barcode,
+                new Vec3(prop.X, prop.Y, prop.Z), prop.RotationBytes(), 0,
+                spawnEffect: false), reliable: true);
+        }
+    }
+
+    /// <summary>Marks a tracked entity to be put back after a restart.</summary>
+    public bool KeepProp(ushort entityId, string note)
+    {
+        if (Props is not { } store || Entities.Get(entityId) is not { } entity)
+        {
+            return false;
+        }
+
+        entity.Persistent = true;
+
+        store.Add(new Props.PersistentProp
+        {
+            Barcode = entity.Barcode,
+            Level = Config.LevelBarcode,
+            X = entity.X,
+            Y = entity.Y,
+            Z = entity.Z,
+            Rotation = Convert.ToHexString(entity.Rotation),
+            Note = note,
+        });
+
+        store.Save();
+
+        // Ownerless from here on, so nobody's physics moves it and nobody's
+        // leaving orphans it.
+        Entities.SetOwner(entityId, null);
+
+        Log("INFO", $"'{entity.ShortName}' will be put back on {Config.LevelTitle}");
+        return true;
+    }
+
+    /// <summary>Stops putting a prop back, and lets the culls have it again.</summary>
+    public bool ForgetProp(ushort entityId)
+    {
+        if (Props is not { } store || Entities.Get(entityId) is not { } entity)
+        {
+            return false;
+        }
+
+        entity.Persistent = false;
+
+        store.Remove(entity.Barcode, Config.LevelBarcode, entity.X, entity.Y, entity.Z);
+        store.Save();
+
+        Log("INFO", $"'{entity.ShortName}' will not be put back");
+        return true;
+    }
+
     /// <summary>Removes one entity and tells the clients. For plugins.</summary>
     public bool DespawnEntity(ushort entityId)
     {
@@ -1358,7 +1459,9 @@ public sealed class FusionServer : IDisposable
         Config.LevelModId = modId;
         Config.LevelModFileId = modFileId;
 
-        Entities.Clear();
+        // Everything goes, props included. Anything placed on the new level is put
+        // back as players arrive on it.
+        Entities.Forget();
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
             reliable: true);

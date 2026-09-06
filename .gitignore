@@ -40,6 +40,9 @@ docs/
 # The ban list is keyed by other people's SteamIDs, like server.json.
 bans.json
 
+# Props placed on a running server, which belong to that server and not the repo.
+props.json
+
 # Whitelist and moderation trail hold other people's SteamIDs.
 whitelist.json
 moderation.log
