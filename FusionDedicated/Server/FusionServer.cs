@@ -674,12 +674,13 @@ public sealed class FusionServer : IDisposable
         }
 
         var rankVerdict = SpawnAuthority.Check(
-            sender.Permission, Config.Spawning, request.Value.Barcode, Config.SpawningExempt);
+            sender.Permission, Config.Spawning, request.Value.Barcode, Config.SpawningExempt,
+            request.Value.Source, Config.SpawningExemptSources);
 
         if (rankVerdict.Blocked)
         {
             Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
-                        $"denied: {rankVerdict.Reason}");
+                        $"denied: {rankVerdict.Reason} (source={request.Value.Source})");
             return;
         }
 

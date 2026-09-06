@@ -136,6 +136,17 @@ public static class SpawnAuthority
     public static BlockVerdict Check(
         PermissionLevel rank, PermissionLevel required,
         string barcode, IEnumerable<string> exempt)
+        => Check(rank, required, barcode, exempt, 0, Array.Empty<int>());
+
+    /// <param name="source">
+    /// What asked for the spawn. A spawn menu reports 2, and a capture of an
+    /// ordinary client spawn reported 1, so this separates a menu from whatever the
+    /// game does for itself in a way the barcode cannot.
+    /// </param>
+    public static BlockVerdict Check(
+        PermissionLevel rank, PermissionLevel required,
+        string barcode, IEnumerable<string> exempt,
+        byte source, IEnumerable<int> exemptSources)
     {
         if (rank.IsAtLeast(required))
         {
@@ -145,6 +156,14 @@ public static class SpawnAuthority
         if (IsExempt(barcode, exempt))
         {
             return BlockVerdict.Allowed;
+        }
+
+        foreach (int allowed in exemptSources)
+        {
+            if (allowed == source)
+            {
+                return BlockVerdict.Allowed;
+            }
         }
 
         return new BlockVerdict(true, "rank", $"spawning needs {required.ToFusionString()}");

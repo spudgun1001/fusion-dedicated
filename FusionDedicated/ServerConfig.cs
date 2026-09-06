@@ -198,6 +198,14 @@ public sealed class ServerConfig
         { "magazine", "ammo", "cartridge" };
 
     public List<string> SpawningExempt { get; set; } = new(DefaultSpawningExempt);
+
+    /// <summary>
+    /// Spawn sources that ignore <see cref="Spawning"/>. A spawn menu reports 2, and
+    /// a capture of an ordinary client spawn reported 1, so listing the sources the
+    /// game uses for itself holds back menus without stopping normal play. Empty
+    /// means the rank covers every spawn whatever asked for it.
+    /// </summary>
+    public List<int> SpawningExemptSources { get; set; } = new();
     public PermissionLevel CustomAvatars { get; set; } = PermissionLevel.Default;
     public PermissionLevel Kicking { get; set; } = PermissionLevel.Operator;
     public PermissionLevel Banning { get; set; } = PermissionLevel.Operator;
