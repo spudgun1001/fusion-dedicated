@@ -10,8 +10,13 @@ public class PluginHostTests : IDisposable
 
     private readonly List<string> _log = new();
     private readonly PluginHealth _health = new();
+    private readonly PluginPanel _panel;
 
-    public PluginHostTests() => Directory.CreateDirectory(_dir);
+    public PluginHostTests()
+    {
+        Directory.CreateDirectory(_dir);
+        _panel = new PluginPanel(_health, (_, _) => { });
+    }
 
     public void Dispose()
     {
@@ -53,10 +58,36 @@ public class PluginHostTests : IDisposable
     }
 
     private PluginHost Host(PluginEvents events)
-        => new(_dir, events, _health, new NoActions(),
+        => new(_dir, events, _health, _panel, new NoActions(),
             (level, message) => _log.Add(level + " " + message));
 
     private PluginEvents Events() => new(_health, (_, _) => { });
+
+    private sealed class PagePlugin : IFusionPlugin
+    {
+        public void Start(PluginContext context)
+        {
+            context.Panel.Register(context.Name, () => new PluginPage("Police"));
+            context.Panel.OnAction(context.Name, "add", _ => { });
+        }
+
+        public void Shutdown() { }
+    }
+
+    [Fact]
+    public void A_plugins_page_goes_when_it_is_unloaded()
+    {
+        var events = Events();
+        var host = Host(events);
+
+        host.LoadFromInstance("police", new PagePlugin());
+
+        Assert.Equal(new[] { "police" }, _panel.Pages);
+
+        host.Unload("police");
+
+        Assert.Empty(_panel.Pages);
+    }
 
     [Fact]
     public void A_loaded_plugin_is_started_and_its_handlers_take_effect()

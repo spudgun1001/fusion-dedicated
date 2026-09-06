@@ -237,9 +237,12 @@ public static class Program
             (id, level) => server.SetPermission(id, "", level),
             id => server.DespawnEntity(id));
 
+        var pluginPanel = new PluginPanel(pluginHealth,
+            (level, message) => server.Log(level, message));
+
         var plugins = new PluginHost(
             Path.Combine(AppContext.BaseDirectory, "plugins"),
-            pluginEvents, pluginHealth, pluginActions,
+            pluginEvents, pluginHealth, pluginPanel, pluginActions,
             (level, message) => server.Log(level, message));
 
         var commands = new CommandProcessor(new ServerCommandTarget(server, plugins));

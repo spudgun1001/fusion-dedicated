@@ -31,6 +31,7 @@ public class PluginContextTests : IDisposable
         => new("police",
             new PluginEvents(new PluginHealth(), (_, _) => { }),
             new PluginStore(Path.Combine(_dir, "data.json")),
+            new PluginPanel(new PluginHealth(), (_, _) => { }),
             actions ?? new RecordingActions(),
             (level, message) => _log.Add(level + " " + message));
 
