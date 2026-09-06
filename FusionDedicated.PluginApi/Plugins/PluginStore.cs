@@ -17,10 +17,19 @@ public sealed class PluginStore
 
     private readonly string _path;
     private readonly object _lock = new();
+    private readonly Action<string, string>? _log;
 
     private Dictionary<string, JsonElement> _values = new(StringComparer.OrdinalIgnoreCase);
+    private bool _warned;
 
-    public PluginStore(string path) => _path = path;
+    public PluginStore(string path, Action<string, string>? log = null)
+    {
+        _path = path;
+        _log = log;
+    }
+
+    /// <summary>False once a write has failed and not yet succeeded again.</summary>
+    public bool Writable { get; private set; } = true;
 
     public T? Get<T>(string key)
     {
@@ -89,7 +98,17 @@ public sealed class PluginStore
         }
     }
 
-    public void Save()
+    /// <summary>
+    /// Writes the file, and never throws.
+    ///
+    /// A plugin calls this on every change, and a store that threw took the
+    /// whole reload down with it when the file turned out to be unwritable. The
+    /// values stay correct in memory whatever happens here, so failing quietly
+    /// is right, but failing silently is not: an operator whose file cannot be
+    /// written would otherwise watch a roster save and then vanish on restart.
+    /// </summary>
+    /// <returns>True when the file was written.</returns>
+    public bool Save()
     {
         try
         {
@@ -102,10 +121,31 @@ public sealed class PluginStore
 
             Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? ".");
             File.WriteAllText(_path, JsonSerializer.Serialize(forDisk, Options));
+
+            if (!Writable)
+            {
+                _log?.Invoke("INFO", $"'{_path}' can be written again");
+            }
+
+            Writable = true;
+            _warned = false;
+
+            return true;
         }
-        catch (IOException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+            or System.Security.SecurityException or NotSupportedException)
         {
-            // The values stay correct in memory until a write succeeds.
+            Writable = false;
+
+            // Said once rather than on every change, since a plugin saves often.
+            if (!_warned)
+            {
+                _warned = true;
+                _log?.Invoke("WARN", $"Nothing can be saved to '{_path}': {e.Message}. " +
+                                     "Changes are kept until the server stops, then lost.");
+            }
+
+            return false;
         }
     }
 }

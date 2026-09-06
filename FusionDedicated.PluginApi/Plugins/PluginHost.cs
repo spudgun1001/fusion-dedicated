@@ -84,11 +84,25 @@ public sealed class PluginHost
     }
 
     /// <summary>Unloads everything and loads it again. Returns how many started.</summary>
+    /// <summary>
+    /// Unloads everything and reads the folder again.
+    ///
+    /// One plugin refusing to unload must not stop the rest being reloaded, or a
+    /// single bad plugin leaves the server running yesterday's code with no sign
+    /// of it beyond one line in the log.
+    /// </summary>
     public int ReloadAll()
     {
         foreach (var plugin in Loaded)
         {
-            Unload(plugin.Name);
+            try
+            {
+                Unload(plugin.Name);
+            }
+            catch (Exception e)
+            {
+                _log("WARN", $"Plugin '{plugin.Name}' could not be unloaded: {e.Message}");
+            }
         }
 
         return LoadAll();
@@ -171,7 +185,7 @@ public sealed class PluginHost
     private bool Start(PluginManifest manifest, IFusionPlugin instance,
         AssemblyLoadContext? context, string folder)
     {
-        var store = new PluginStore(Path.Combine(folder, "data.json"));
+        var store = new PluginStore(Path.Combine(folder, "data.json"), _log);
         store.Load();
 
         var pluginContext = new PluginContext(
@@ -240,8 +254,19 @@ public sealed class PluginHost
         _panel.RemoveAll(plugin.Name);
         _modules.RemoveAll(plugin.Name);
         _health.Forget(plugin.Name);
-        plugin.Store.Save();
-        plugin.Context?.Unload();
+
+        // Everything from here has to happen even if one part of it fails. An
+        // unwritable data.json used to throw out of here and abort the whole
+        // reload, leaving the old assembly loaded and the new one never read.
+        try
+        {
+            plugin.Store.Save();
+            plugin.Context?.Unload();
+        }
+        catch (Exception e)
+        {
+            _log("WARN", $"Plugin '{plugin.Name}' did not unload cleanly: {e.Message}");
+        }
 
         _log("INFO", $"Plugin '{plugin.Name}' unloaded");
         return true;
