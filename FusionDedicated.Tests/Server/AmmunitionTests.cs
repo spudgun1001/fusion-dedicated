@@ -51,20 +51,34 @@ public class AmmunitionTests
         => Assert.True(Ammunition.IsAmmo(barcode));
 
     [Theory]
-    // The six crates out of 1005 starting with Mag that are a weapon.
+    // Mag is an allow word outright, which the operator asked for.
+    //
+    // Six crates out of the 1005 beginning with Mag are a weapon rather than a
+    // magazine, and they skip the rank gate along with everything else. Naming
+    // them to be excluded kept catching real magazines instead: MagMakarov and
+    // MagMA5C begin with "magma", and a magnum's own magazine begins with
+    // "magnum". A gun nobody can reload is the worse outcome, and these are
+    // still checked against the blocklist afterwards.
     [InlineData("SomePack.Spawnable.Magnum")]
     [InlineData("SomePack.Spawnable.MagnumKeyes")]
-    [InlineData("SomePack.Spawnable.MagnumSurvivialKnife")]
     [InlineData("SomePack.Spawnable.MagpulMasada")]
-    public void A_weapon_that_begins_with_mag_is_still_gated(string barcode)
-        => Assert.False(Ammunition.IsAmmo(barcode));
+    public void A_weapon_that_begins_with_mag_is_let_through_too(string barcode)
+        => Assert.True(Ammunition.IsAmmo(barcode));
 
     [Theory]
     [InlineData("SomePack.Spawnable.Magnummag")]
-    [InlineData("SomePack.Spawnable.MagnumMag")]
+    [InlineData("SomePack.Spawnable.MagMakarov")]
+    [InlineData("SomePack.Spawnable.MagMA5C")]
     [InlineData("SomePack.Spawnable.MagnumAmmo")]
-    public void A_magazine_for_one_of_those_weapons_still_passes(string barcode)
+    public void The_magazines_that_naming_them_used_to_break_still_pass(string barcode)
         => Assert.True(Ammunition.IsAmmo(barcode));
+
+    [Theory]
+    // Nothing changes for a barcode that does not begin with Mag.
+    [InlineData("SomePack.Spawnable.Nimbus")]
+    [InlineData("SomePack.Spawnable.AK47")]
+    public void A_weapon_that_does_not_begin_with_mag_is_still_gated(string barcode)
+        => Assert.False(Ammunition.IsAmmo(barcode));
 
     [Theory]
     [InlineData("BaBaCorp.MiscExplosiveDevices.Spawnable.ExplosionGasGrenade")]

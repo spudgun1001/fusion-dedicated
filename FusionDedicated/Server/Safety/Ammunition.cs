@@ -23,19 +23,6 @@ public static class Ammunition
     };
 
     /// <summary>
-    /// Crates that start with Mag and are a weapon rather than a magazine.
-    ///
-    /// Only these two. Adding the other Mag words a review suggested (magic,
-    /// magma, magnet) looks safer and is not: MagMakarov and MagMA5C start with
-    /// "magma", and excluding them stops people reloading. Checked against the
-    /// 1005 crates beginning with Mag in a real mod folder, where the only
-    /// weapons were three Magnums, a Magnum knife, MagnumKeyes and MagpulMasada.
-    /// The rest of the collisions are props and cosmetics, and exempting a prop
-    /// from a rank gate costs nothing.
-    /// </summary>
-    private static readonly string[] NotAmmo = { "magnum", "magpul" };
-
-    /// <summary>
     /// The base game's own ammunition, by barcode.
     ///
     /// Base game crates predate the readable barcode format, so a magazine is
@@ -120,20 +107,16 @@ public static class Ammunition
             }
         }
 
-        if (!crate.StartsWith("mag", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        foreach (string weapon in NotAmmo)
-        {
-            if (crate.StartsWith(weapon, StringComparison.OrdinalIgnoreCase)
-                && !crate.EndsWith("mag", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        // Anything starting with Mag, with no exceptions. The naming convention
+        // is near universal: of the 1005 such crates in a real mod folder, all
+        // but six were magazines, and the six are three Magnums, a Magnum knife,
+        // MagnumKeyes and MagpulMasada.
+        //
+        // Excluding those six by name cost more than it saved. Every attempt
+        // caught real magazines with it, because MagMakarov and MagMA5C begin
+        // with "magma" and a magnum's own magazine begins with "magnum". A gun
+        // nobody can reload is worse than six crates skipping a rank gate, and
+        // they are still checked against the blocklist afterwards.
+        return crate.StartsWith("mag", StringComparison.OrdinalIgnoreCase);
     }
 }
