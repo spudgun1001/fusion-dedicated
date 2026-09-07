@@ -142,9 +142,12 @@ public sealed class PersistentPropStore
                 _props = parsed;
             }
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or IOException
+            or UnauthorizedAccessException)
         {
-            // A broken file must not throw away props somebody placed.
+            // A broken file must not throw away props somebody placed, and a file
+            // being written at this moment throws from the read rather than the
+            // parse.
         }
     }
 

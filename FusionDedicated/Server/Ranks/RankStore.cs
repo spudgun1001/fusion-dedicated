@@ -107,9 +107,14 @@ public sealed class RankStore
                 _entries = rebuilt;
             }
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or IOException
+            or UnauthorizedAccessException)
         {
             // Keep whatever we already had rather than dropping every rank.
+        // A file being written at this moment throws IOException from the read,
+        // not JsonException, and this is called from the main loop every ten
+        // seconds. It escaped, nothing above caught it, and the server died: the
+        // panel saving while the reload ran was enough to do it.
         }
     }
 

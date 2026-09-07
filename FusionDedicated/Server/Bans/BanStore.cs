@@ -170,9 +170,14 @@ public sealed class BanStore
                 _entries = rebuilt;
             }
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or IOException
+            or UnauthorizedAccessException)
         {
             // Keep the list we had rather than unbanning everyone over a stray comma.
+        // A file being written at this moment throws IOException from the read,
+        // not JsonException, and this is called from the main loop every ten
+        // seconds. It escaped, nothing above caught it, and the server died: the
+        // panel saving while the reload ran was enough to do it.
         }
     }
 
