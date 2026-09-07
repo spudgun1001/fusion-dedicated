@@ -34,6 +34,14 @@ public static class GateProtocol
         byte relayType = reader.ReadByte();
         reader.ReadByte();
 
+        // ToTarget carries the target before the sender. Skipping only the sender
+        // left the reader two bytes short, which put route bytes inside the body
+        // and, for an RPC variable, inside the key naming which variable it is.
+        if (relayType == 4)
+        {
+            reader.ReadNullableByte();
+        }
+
         if (relayType != 0)
         {
             reader.ReadNullableByte();

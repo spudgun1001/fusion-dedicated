@@ -554,21 +554,9 @@ public sealed class FusionServer : IDisposable
             case GateProtocol.TagPointItemEquipState when sender != null:
                 // Kept as it changes. The join catch-up sends each player's
                 // cosmetics, and it was only ever what they arrived wearing.
-                if (GateProtocol.TryReadEquipState(message) is var (barcode, equipped)
-                    && barcode.Length > 0)
+                if (GateProtocol.TryReadEquipState(message) is var (barcode, equipped))
                 {
-                    if (equipped)
-                    {
-                        if (!sender.EquippedItems.Contains(barcode, StringComparer.Ordinal))
-                        {
-                            sender.EquippedItems.Add(barcode);
-                        }
-                    }
-                    else
-                    {
-                        sender.EquippedItems.RemoveAll(
-                            b => string.Equals(b, barcode, StringComparison.Ordinal));
-                    }
+                    sender.SetEquipped(barcode, equipped);
                 }
 
                 break;
@@ -820,7 +808,7 @@ public sealed class FusionServer : IDisposable
 
         Plugins?.Joined.Raise(new Plugins.JoinEvent(
             platformId, player.DisplayName, player.Permission));
-        player.Metadata[PermissionMetadataKey] = player.Permission.ToFusionString();
+        player.SetMetadata(PermissionMetadataKey, player.Permission.ToFusionString());
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
         {
@@ -907,11 +895,20 @@ public sealed class FusionServer : IDisposable
         // behalf and stuffing an id into somebody else's queue.
         ushort allocated = Entities.AllocateId();
 
+        // An unqueue costs an entity that no cull reclaims, so it is held to the
+        // same per player count as spawning. Without it, two thousand of these
+        // filled the world permanently and nobody could spawn anything again.
+        int owned = Entities.Entities.Count(
+            e => e.OwnerSmallId == sender.SmallId && e.Discovered);
+
+        bool room = Entities.Count < Config.MaxEntities
+            && (Config.MaxEntitiesPerPlayer <= 0 || owned < Config.MaxEntitiesPerPlayer);
+
         // Answered whatever happens. The client has no retry and no timeout: it
         // waits on this reply before the grab or the seat that asked for it can
         // proceed, so a silent refusal is that object dead for the session.
         // Above the cap the id is still given and simply not tracked.
-        if (Entities.Count < Config.MaxEntities)
+        if (room)
         {
             // Registered as theirs, discovered rather than spawned: it was
             // already in the level, so a newcomer's own copy has it and the join
@@ -921,8 +918,11 @@ public sealed class FusionServer : IDisposable
         }
         else
         {
-            Log("WARN", $"Unqueue for {sender.DisplayName} answered but not tracked: " +
-                        "entity limit reached");
+            if (_unqueueRefused.Add(sender.SmallId))
+            {
+                Log("WARN", $"Unqueue for {sender.DisplayName} answered but not tracked: " +
+                            "at the entity limit");
+            }
         }
 
         SendTo(sender.Connection, FusionProtocol.BuildUnqueueResponse(
@@ -961,12 +961,24 @@ public sealed class FusionServer : IDisposable
 
         // Keyed on what names the object inside the level, so the same object is
         // never remembered twice.
+        var key = (prop.Value.Hash, prop.Value.Index);
+
         lock (_cacheLock)
         {
-            _sceneProps[(prop.Value.Hash, prop.Value.Index)] = prop.Value with
+            // Room only for something already known once the ceiling is reached,
+            // so a flood cannot push out what is real.
+            if (_sceneProps.Count >= MaxCachedProps && !_sceneProps.ContainsKey(key))
             {
-                OwnerSmallId = sender.SmallId,
-            };
+                if (_cacheFull.Add("props"))
+                {
+                    Log("WARN", $"Holding {MaxCachedProps} scene objects and not taking more. " +
+                                "A level does not have this many, so somebody is sending them.");
+                }
+
+                return;
+            }
+
+            _sceneProps[key] = prop.Value with { OwnerSmallId = sender.SmallId };
         }
     }
 
@@ -986,6 +998,20 @@ public sealed class FusionServer : IDisposable
     private readonly object _cacheLock = new();
 
     /// <summary>
+    /// What the caches will hold before they stop taking new entries.
+    ///
+    /// Everything in them comes from a message a client sent, keyed on numbers
+    /// the client chose, so without a ceiling one player can make the server hold
+    /// whatever they like for the life of the level, and make every future join
+    /// carry it. A real level has tens of these, not thousands.
+    /// </summary>
+    private const int MaxCachedProps = 4096;
+    private const int MaxCachedVariables = 2048;
+
+    /// <summary>The most of a message body worth keeping. A real one is tiny.</summary>
+    private const int MaxCachedBody = 512;
+
+    /// <summary>
     /// Constraints that exist, keyed on the first of their two ends, with the
     /// payload exactly as it was sent on. Replayed to a newcomer.
     /// </summary>
@@ -1000,6 +1026,12 @@ public sealed class FusionServer : IDisposable
     /// saw the real one.
     /// </summary>
     private readonly Dictionary<(byte Tag, string Path), byte[]> _rpcVariables = new();
+
+    /// <summary>Which caches have already said they are full, so it is said once.</summary>
+    private readonly HashSet<string> _cacheFull = new();
+
+    /// <summary>Players already told they are at the limit, so it is said once.</summary>
+    private readonly HashSet<byte> _unqueueRefused = new();
 
     private bool HasLevelVariables
     {
@@ -1027,6 +1059,19 @@ public sealed class FusionServer : IDisposable
 
         foreach (var prop in props)
         {
+            // Gone from the world, so the id may already belong to something
+            // else. Telling a newcomer about it would weld their copy of the
+            // level to whatever holds that id now.
+            if (Entities.Get(prop.EntityId) == null)
+            {
+                lock (_cacheLock)
+                {
+                    _sceneProps.Remove((prop.Hash, prop.Index));
+                }
+
+                continue;
+            }
+
             byte owner = Players.Get(prop.OwnerSmallId) != null
                 ? prop.OwnerSmallId
                 : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
@@ -1053,15 +1098,25 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        List<(byte Owner, byte[] Payload)> welds;
+        List<(ushort End, byte Owner, byte[] Payload)> welds;
 
         lock (_cacheLock)
         {
-            welds = _constraints.Values.ToList();
+            welds = _constraints.Select(c => (c.Key, c.Value.Owner, c.Value.Payload)).ToList();
         }
 
         foreach (var weld in welds)
         {
+            if (Entities.Get(weld.End) == null)
+            {
+                lock (_cacheLock)
+                {
+                    _constraints.Remove(weld.End);
+                }
+
+                continue;
+            }
+
             byte from = Players.Get(weld.Owner) != null
                 ? weld.Owner
                 : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
@@ -1090,9 +1145,27 @@ public sealed class FusionServer : IDisposable
 
         // Only the latest matters. A gate opened and closed forty times needs one
         // message to say which it is now.
+        if (body.Length > MaxCachedBody)
+        {
+            return;
+        }
+
+        var key = (tag, Convert.ToHexString(path));
+
         lock (_cacheLock)
         {
-            _rpcVariables[(tag, Convert.ToHexString(path))] = body;
+            if (_rpcVariables.Count >= MaxCachedVariables && !_rpcVariables.ContainsKey(key))
+            {
+                if (_cacheFull.Add("variables"))
+                {
+                    Log("WARN", $"Holding {MaxCachedVariables} level variables and not taking " +
+                                "more. A level does not have this many.");
+                }
+
+                return;
+            }
+
+            _rpcVariables[key] = body;
         }
     }
 
@@ -1149,7 +1222,7 @@ public sealed class FusionServer : IDisposable
         // a mod's per-player state reverted for whoever joined next.
         if (Players.Get(request.Value.PlayerSmallId) is { } owner)
         {
-            owner.Metadata[request.Value.Key] = request.Value.Value;
+            owner.SetMetadata(request.Value.Key, request.Value.Value);
         }
 
         Broadcast(FusionProtocol.BuildMetadataResponse(
@@ -1161,8 +1234,14 @@ public sealed class FusionServer : IDisposable
         if (string.Equals(request.Value.Key, "Loading", StringComparison.OrdinalIgnoreCase)
             && bool.TryParse(request.Value.Value, out bool loading)
             && !loading
+            && !sender.LevelStateSent
             && HasLevelVariables)
         {
+            // Once each. They say when they are ready and the answer is the whole
+            // level's state, so repeating the claim would be a cheap way to make
+            // the server send it again and again.
+            sender.LevelStateSent = true;
+
             int replayed = SendRpcVariables(sender);
 
             if (replayed > 0)
@@ -2032,6 +2111,13 @@ public sealed class FusionServer : IDisposable
             _sceneProps.Clear();
             _constraints.Clear();
             _rpcVariables.Clear();
+            _cacheFull.Clear();
+        }
+
+        // A new level means new state, so everybody is owed it again.
+        foreach (var player in Players.Players)
+        {
+            player.LevelStateSent = false;
         }
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
@@ -2077,7 +2163,7 @@ public sealed class FusionServer : IDisposable
         if (player != null)
         {
             player.Permission = level;
-            player.Metadata[PermissionMetadataKey] = level.ToFusionString();
+            player.SetMetadata(PermissionMetadataKey, level.ToFusionString());
 
             Broadcast(ServerProtocol.WritePlayerMetadataResponse(
                 player.SmallId, PermissionMetadataKey, level.ToFusionString()), reliable: true);
@@ -2813,11 +2899,18 @@ public sealed class FusionServer : IDisposable
 
         Task.Delay(250).ContinueWith(_ =>
         {
-            SteamNetworkingSockets.CloseConnection(connection, 0, reason, false);
-
-            lock (_closingLock)
+            // Released whatever happens. Steam reuses connection handles, so one
+            // left behind here silently refuses whoever lands on it next.
+            try
             {
-                _closing.Remove(connection.m_HSteamNetConnection);
+                SteamNetworkingSockets.CloseConnection(connection, 0, reason, false);
+            }
+            finally
+            {
+                lock (_closingLock)
+                {
+                    _closing.Remove(connection.m_HSteamNetConnection);
+                }
             }
         });
     }

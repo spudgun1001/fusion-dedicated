@@ -13,8 +13,107 @@ public sealed class ConnectedPlayer
     public string Nickname { get; set; } = "";
     public string AvatarBarcode { get; set; } = "";
     public byte[] AvatarStats { get; set; } = Array.Empty<byte>();
-    public Dictionary<string, string> Metadata { get; set; } = new();
-    public List<string> EquippedItems { get; set; } = new();
+    /// <summary>
+    /// Their metadata. Written from the message loop when they change a key and
+    /// from the panel when a rank changes, and read on the message loop when
+    /// somebody joins, so every touch goes through the methods below rather than
+    /// the dictionary itself.
+    /// </summary>
+    private readonly Dictionary<string, string> _metadata = new();
+    private readonly List<string> _equipped = new();
+    private readonly object _stateLock = new();
+
+    /// <summary>The most keys and cosmetics to hold. Both come from the client.</summary>
+    private const int MaxMetadataKeys = 64;
+    private const int MaxEquippedItems = 128;
+    private const int MaxMetadataLength = 256;
+
+    /// <summary>A copy, safe to read while another thread is writing.</summary>
+    public Dictionary<string, string> Metadata
+    {
+        get { lock (_stateLock) { return new Dictionary<string, string>(_metadata); } }
+        set { lock (_stateLock) { Replace(_metadata, value); } }
+    }
+
+    public List<string> EquippedItems
+    {
+        get { lock (_stateLock) { return _equipped.ToList(); } }
+        set
+        {
+            lock (_stateLock)
+            {
+                _equipped.Clear();
+                _equipped.AddRange(value.Take(MaxEquippedItems));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets one key, within limits. Both the key and the value are whatever the
+    /// client sent, and the whole dictionary is repeated to everybody who joins
+    /// afterwards, so an unbounded one is paid for on every future join.
+    /// </summary>
+    public void SetMetadata(string key, string value)
+    {
+        if (key.Length is 0 or > MaxMetadataLength || value.Length > MaxMetadataLength)
+        {
+            return;
+        }
+
+        lock (_stateLock)
+        {
+            if (_metadata.Count >= MaxMetadataKeys && !_metadata.ContainsKey(key))
+            {
+                return;
+            }
+
+            _metadata[key] = value;
+        }
+    }
+
+    /// <summary>Puts a cosmetic on or takes it off, within the same kind of limit.</summary>
+    public void SetEquipped(string barcode, bool equipped)
+    {
+        if (barcode.Length is 0 or > MaxMetadataLength)
+        {
+            return;
+        }
+
+        lock (_stateLock)
+        {
+            if (!equipped)
+            {
+                _equipped.RemoveAll(b => string.Equals(b, barcode, StringComparison.Ordinal));
+                return;
+            }
+
+            if (_equipped.Count < MaxEquippedItems
+                && !_equipped.Contains(barcode, StringComparer.Ordinal))
+            {
+                _equipped.Add(barcode);
+            }
+        }
+    }
+
+    private static void Replace(Dictionary<string, string> into, Dictionary<string, string> from)
+    {
+        into.Clear();
+
+        foreach (var (key, value) in from.Take(MaxMetadataKeys))
+        {
+            into[key] = value;
+        }
+    }
+
+    /// <summary>
+    /// Whether the level's own state has been sent to them.
+    ///
+    /// A client decides when it says it has finished loading, and it is the same
+    /// message every time, so without this it could ask for the whole level's
+    /// state as often as it liked and have the server build and send all of it
+    /// each time, on the thread everybody else's traffic runs on.
+    /// </summary>
+    public bool LevelStateSent { get; set; }
 
     /// <summary>
     /// Level this player joined with. Mirrored into their Fusion metadata so every
