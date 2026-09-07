@@ -1044,6 +1044,7 @@ public sealed class FusionServer : IDisposable
 
         if (request == null)
         {
+            Log("WARN", $"A moderation command from {sender.DisplayName} did not parse");
             return;
         }
 
@@ -1051,20 +1052,34 @@ public sealed class FusionServer : IDisposable
 
         if (!targetId.HasValue)
         {
+            Log("WARN", $"{sender.DisplayName} sent a {command} naming nobody");
             return;
         }
 
         var target = Players.Get(targetId.Value);
 
-        if (target == null || target.SmallId == sender.SmallId)
+        // Every one of these used to return in silence, so a moderator pressing
+        // the button saw nothing happen and there was nothing in the log either.
+        if (target == null)
         {
+            Log("WARN", $"{sender.DisplayName} tried to {command} SmallID " +
+                        $"{targetId.Value}, who is no longer connected");
+            return;
+        }
+
+        if (target.SmallId == sender.SmallId)
+        {
+            Log("WARN", $"{sender.DisplayName} tried to {command} themselves");
             return;
         }
 
         void Deny(string action, PermissionLevel required)
         {
-            Log("WARN", $"{sender.DisplayName} tried to {action} {target.DisplayName} " +
-                        $"but is {sender.Permission.ToFusionString()}, not {required.ToFusionString()}");
+            var verdict = Moderation.Check(
+                action, sender.Permission, target.Permission, required);
+
+            Log("WARN", $"{sender.DisplayName} tried to {action} {target.DisplayName}: " +
+                        $"{verdict.Reason}");
         }
 
         var pluginModeration = Plugins?.Moderation.Raise(new Plugins.ModerationEvent(
@@ -1080,33 +1095,22 @@ public sealed class FusionServer : IDisposable
         switch (command)
         {
             case ServerProtocol.PermissionCommand.Kick:
-                if (!sender.Permission.IsAtLeast(Config.Kicking))
+                if (!Moderation.Check("kick", sender.Permission, target.Permission,
+                        Config.Kicking).Allowed)
                 {
                     Deny("kick", Config.Kicking);
                     return;
                 }
 
-                // Moderators cannot act on someone ranked at or above them.
-                if (target.Permission >= sender.Permission)
-                {
-                    Deny("kick", sender.Permission);
-                    return;
-                }
-
                 Log("WARN", $"{sender.DisplayName} kicked {target.DisplayName}");
-                Kick(target.SmallId, $"Kicked by {target.DisplayName}");
+                Kick(target.SmallId, $"Kicked by {sender.DisplayName}");
                 return;
 
             case ServerProtocol.PermissionCommand.Ban:
-                if (!sender.Permission.IsAtLeast(Config.Banning))
+                if (!Moderation.Check("ban", sender.Permission, target.Permission,
+                        Config.Banning).Allowed)
                 {
                     Deny("ban", Config.Banning);
-                    return;
-                }
-
-                if (target.Permission >= sender.Permission)
-                {
-                    Deny("ban", sender.Permission);
                     return;
                 }
 
