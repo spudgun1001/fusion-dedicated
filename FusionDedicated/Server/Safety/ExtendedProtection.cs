@@ -105,18 +105,21 @@ public sealed class NicknameGuard
 
     public NicknameVerdict Allow(byte smallId, string nickname, DateTime now)
     {
-        if (_reserved.Contains(Normalise(nickname)))
-        {
-            return new NicknameVerdict(false, $"'{nickname.Trim()}' is a reserved name");
-        }
-
-        if (_maxPerMinute <= 0)
-        {
-            return new NicknameVerdict(true, "");
-        }
-
+        // One lock for the whole thing. The reserved list and the limit are both
+        // replaced when settings are pushed, from the panel's own thread, so
+        // reading either outside it reads a field another thread is assigning.
         lock (_lock)
         {
+            if (_reserved.Contains(Normalise(nickname)))
+            {
+                return new NicknameVerdict(false, $"'{nickname.Trim()}' is a reserved name");
+            }
+
+            if (_maxPerMinute <= 0)
+            {
+                return new NicknameVerdict(true, "");
+            }
+
             if (!_changes.TryGetValue(smallId, out var times))
             {
                 times = new List<DateTime>(4);

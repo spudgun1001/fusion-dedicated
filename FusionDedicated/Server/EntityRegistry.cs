@@ -140,6 +140,19 @@ public sealed class EntityRegistry
     /// does not merely clash with another prop, it lands on top of a person, so a
     /// real host never hands out anything under 256.
     /// </summary>
+    /// <summary>
+    /// Things somebody spawned, which is what the world cap is about.
+    ///
+    /// A scene object is not clutter: it was in the level already and became
+    /// networked because somebody touched it. Counting those against the cap let
+    /// a busy level fill it with its own furniture and refuse every spawn, and
+    /// nothing reclaims them, so it never recovered.
+    /// </summary>
+    public int SpawnedCount
+    {
+        get { lock (_lock) { return _entities.Values.Count(e => !e.Discovered); } }
+    }
+
     public int DiscoveredCount
     {
         get { lock (_lock) { return _entities.Values.Count(e => e.Discovered); } }
@@ -289,7 +302,7 @@ public sealed class EntityRegistry
             // it is also a free entity from an unauthenticated packet. Refusing
             // past the cap stops a client inflating the count, which is what made
             // the eviction below something a player could aim.
-            if (_capacity > 0 && _entities.Count >= _capacity)
+            if (_capacity > 0 && _entities.Count >= _capacity * 2)
             {
                 return;
             }
@@ -452,12 +465,16 @@ public sealed class EntityRegistry
         lock (_lock)
         {
             var candidates = _entities.Values
+                // Discovered ones came with the level and synthetic ones are not
+                // spawnables, so despawning either tells clients about something
+                // they cannot act on. That held on the last resort pass and not
+                // on this one, so the same prop was safe from the timer and taken
+                // in a burst at the cap instead.
                 .Where(e => e.Removable
+                    && !e.Discovered
+                    && !e.Synthetic
                     && (anyOwner
-                        // Discovered ones came with the level and synthetic ones
-                        // are not spawnables, so despawning either tells clients
-                        // about something they cannot act on.
-                        ? !e.Discovered && !e.Synthetic && e.LastUpdate < cutoff
+                        ? e.LastUpdate < cutoff
                         : e.Inherited || e.IsOrphaned))
                 .OrderBy(e => e.LastUpdate)
                 .Take(count)

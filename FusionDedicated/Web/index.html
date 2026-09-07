@@ -931,8 +931,11 @@
 'use strict';
 
 const $ = id => document.getElementById(id);
-const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
-  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/* Apostrophes too. A player's name is theirs to choose and lands inside
+   onclick="kick(1, 'name')", so one apostrophe closed the string and the rest
+   of the name became script running in whoever had the panel open. */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 let state = null;
 let history = [];

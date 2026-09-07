@@ -22,6 +22,24 @@ public record struct Quat(float X, float Y, float Z, float W)
 {
     public static readonly Quat Identity = new(0, 0, 0, 1);
 
+    /// <summary>
+    /// Unit length, as the mod's own Expand returns.
+    ///
+    /// It cost nothing while a pose rotation was only ever read. Re-encoding one
+    /// into the seven byte form a spawn carries pushes the whole norm error into
+    /// the largest component, which measured at about twice the error of
+    /// normalising first: a worst case of 2.6 degrees against 1.5.
+    /// </summary>
+    public Quat Normalized
+    {
+        get
+        {
+            float length = MathF.Sqrt((X * X) + (Y * Y) + (Z * Z) + (W * W));
+
+            return length < 1e-6f ? Identity : new Quat(X / length, Y / length, Z / length, W / length);
+        }
+    }
+
     public override string ToString() => $"({X,5:F2},{Y,5:F2},{Z,5:F2},{W,5:F2})";
 }
 
@@ -146,7 +164,7 @@ public sealed class FusionRigPose
     private static Quat ReadSmallQuaternion(ref FusionNetReader r)
     {
         return new Quat(FromSByte(r.ReadSByte()), FromSByte(r.ReadSByte()),
-                        FromSByte(r.ReadSByte()), FromSByte(r.ReadSByte()));
+                        FromSByte(r.ReadSByte()), FromSByte(r.ReadSByte())).Normalized;
     }
 
     public void Write(FusionNetWriter w)

@@ -548,7 +548,7 @@ public sealed class FusionServer : IDisposable
             case 212 when sender != null:
             case 213 when sender != null:
             case 214 when sender != null:
-                NoteRpcVariable(tag, message);
+                NoteRpcVariable(tag, sender.SmallId, message);
                 break;
 
             case GateProtocol.TagPointItemEquipState when sender != null:
@@ -901,7 +901,7 @@ public sealed class FusionServer : IDisposable
         int owned = Entities.Entities.Count(
             e => e.OwnerSmallId == sender.SmallId && e.Discovered);
 
-        bool room = Entities.Count < Config.MaxEntities
+        bool room = Entities.Count < Config.MaxEntities * 2
             && (Config.MaxEntitiesPerPlayer <= 0 || owned < Config.MaxEntitiesPerPlayer);
 
         // Answered whatever happens. The client has no retry and no timeout: it
@@ -1025,7 +1025,7 @@ public sealed class FusionServer : IDisposable
     /// somebody joining saw the level in its default state while everybody else
     /// saw the real one.
     /// </summary>
-    private readonly Dictionary<(byte Tag, string Path), byte[]> _rpcVariables = new();
+    private readonly Dictionary<(byte Tag, string Path), (byte From, byte[] Body)> _rpcVariables = new();
 
     /// <summary>Which caches have already said they are full, so it is said once.</summary>
     private readonly HashSet<string> _cacheFull = new();
@@ -1134,7 +1134,7 @@ public sealed class FusionServer : IDisposable
     /// <summary>
     /// Remembers the latest value of an RPC variable, then lets it carry on.
     /// </summary>
-    private void NoteRpcVariable(byte tag, byte[] message)
+    private void NoteRpcVariable(byte tag, byte from, byte[] message)
     {
         byte[]? body = GateProtocol.TryReadBody(message, tag);
 
@@ -1165,7 +1165,7 @@ public sealed class FusionServer : IDisposable
                 return;
             }
 
-            _rpcVariables[key] = body;
+            _rpcVariables[key] = (from, body);
         }
     }
 
@@ -1181,17 +1181,24 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        List<(byte Tag, byte[] Body)> variables;
+        List<(byte Tag, byte From, byte[] Body)> variables;
 
         lock (_cacheLock)
         {
-            variables = _rpcVariables.Select(v => (v.Key.Tag, v.Value)).ToList();
+            variables = _rpcVariables
+                .Select(v => (v.Key.Tag, v.Value.From, v.Value.Body))
+                .ToList();
         }
 
-        foreach (var (tag, body) in variables)
+        foreach (var (tag, from, body) in variables)
         {
+            // As the player who set it, and only while they are still here. A
+            // value stamped as the server would present whatever somebody put in
+            // the cache to every later joiner as though the level said it.
+            byte source = Players.Get(from) != null ? from : player.SmallId;
+
             SendTo(player.Connection,
-                GateProtocol.BuildRpcVariable(tag, player.SmallId, body), reliable: true);
+                GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body), reliable: true);
 
             sent++;
         }
@@ -1215,6 +1222,30 @@ public sealed class FusionServer : IDisposable
             Log("WARN", $"{sender.DisplayName} tried to set metadata on SmallID " +
                         $"{request.Value.PlayerSmallId}, which is not theirs");
             return;
+        }
+
+        // A nickname is metadata like any other, so handling metadata at all
+        // opened a way around both nickname guards: the reserved names that stop
+        // somebody calling themselves an operator, and the cap on how often a
+        // name may change. Neither was reachable before, because this message was
+        // dropped and a name could only be set at the handshake.
+        if (string.Equals(request.Value.Key, "Nickname", StringComparison.OrdinalIgnoreCase)
+            && Players.Get(request.Value.PlayerSmallId) is { } named)
+        {
+            var verdict = _nicknames.Allow(
+                named.SmallId, request.Value.Value, DateTime.UtcNow);
+
+            if (!verdict.Allowed)
+            {
+                Log("WARN", $"{named.DisplayName} tried the nickname " +
+                            $"'{request.Value.Value}': {verdict.Reason}");
+                return;
+            }
+
+            // The panel and the lobby read this rather than the metadata, so it
+            // showed the name they arrived with while everybody in game saw the
+            // new one.
+            named.Nickname = request.Value.Value;
         }
 
         // Kept as well as passed on. The join catch-up sends each player's
@@ -1313,7 +1344,7 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        if (Entities.Count >= Config.MaxEntities)
+        if (Entities.SpawnedCount >= Config.MaxEntities)
         {
             // Make room from abandoned props rather than refusing. A refused spawn is
             // invisible to the player, they pull the trigger and nothing happens -
@@ -1327,7 +1358,7 @@ public sealed class FusionServer : IDisposable
                 Log("INFO", $"World at capacity, evicted {evicted.Count} abandoned entities");
             }
 
-            if (Entities.Count >= Config.MaxEntities)
+            if (Entities.SpawnedCount >= Config.MaxEntities)
             {
                 // Nothing abandoned to take, so take the oldest thing there is.
                 // A world that stays full refuses every spawn from every player
@@ -1349,7 +1380,7 @@ public sealed class FusionServer : IDisposable
                 }
             }
 
-            if (Entities.Count >= Config.MaxEntities)
+            if (Entities.SpawnedCount >= Config.MaxEntities)
             {
                 Log("WARN", $"Spawn denied: entity limit reached ({Config.MaxEntities}) " +
                             "and nothing could be evicted");
@@ -1401,7 +1432,12 @@ public sealed class FusionServer : IDisposable
 
         // Echoed rather than chosen. A real host passes the request's own source
         // through, and it decides how a client treats the thing afterwards.
-        spawned.Source = request.Value.Source;
+        //
+        // Held to the three the enum has, unlike the host, because we keep it and
+        // repeat it to everybody who joins for the rest of the level.
+        spawned.Source = request.Value.Source <= FusionProtocol.SourcePlayer
+            ? request.Value.Source
+            : FusionProtocol.SourcePlayer;
 
         Broadcast(FusionProtocol.BuildSpawnResponse(sender.SmallId, sender.SmallId, entityId,
             request.Value.Barcode, request.Value.Position, request.Value.Rotation,
@@ -2531,7 +2567,7 @@ public sealed class FusionServer : IDisposable
 
         // Two more entities per constraint, so the world cap has to hold here as
         // well or constraint spam walks straight past it.
-        if (Entities.Count + 2 > Config.MaxEntities)
+        if (Entities.SpawnedCount + 2 > Config.MaxEntities)
         {
             Log("WARN", $"Constraint by {sender.DisplayName} denied: entity limit reached");
             return;

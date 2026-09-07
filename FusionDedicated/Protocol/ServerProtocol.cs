@@ -548,11 +548,18 @@ public static class ServerProtocol
                 return Array.Empty<byte>();
             }
 
-            var targets = new byte[count];
+            // Each named once. The list is the sender's, and naming somebody 255
+            // times had the server send them 255 copies of whatever was attached.
+            var targets = new List<byte>(count);
 
             for (int i = 0; i < count; i++)
             {
-                targets[i] = reader.ReadByte();
+                byte target = reader.ReadByte();
+
+                if (!targets.Contains(target))
+                {
+                    targets.Add(target);
+                }
             }
 
             return targets;

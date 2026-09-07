@@ -41,6 +41,16 @@ public static class GateProtocol
         {
             reader.ReadNullableByte();
         }
+        else if (relayType == 5)
+        {
+            // A length prefixed list of small ids rather than one nullable byte.
+            int count = reader.ReadInt32();
+
+            for (int i = 0; i < count && i < 256; i++)
+            {
+                reader.ReadByte();
+            }
+        }
 
         if (relayType != 0)
         {
@@ -145,7 +155,12 @@ public static class GateProtocol
     /// <summary>
     /// Rebuilds an RPC variable message for one player, from the body we kept.
     /// </summary>
-    public static byte[] BuildRpcVariable(byte tag, byte targetSmallId, byte[] body)
+    /// <param name="fromSmallId">
+    /// Whoever set it. Not the server: the value is a client's, and stamping it
+    /// as ours would present anything somebody put in the cache to every later
+    /// joiner as though the level itself had said it.
+    /// </param>
+    public static byte[] BuildRpcVariable(byte tag, byte targetSmallId, byte fromSmallId, byte[] body)
     {
         var message = new FusionNetWriter(body.Length + 32);
 
@@ -153,7 +168,7 @@ public static class GateProtocol
         message.Write((byte)4);                 // ToTarget
         message.Write((byte)0);                 // Reliable
         message.WriteNullable(targetSmallId);
-        message.WriteNullable((byte)0);         // sender: the server
+        message.WriteNullable(fromSmallId);
         message.WriteBlock(body);
 
         return message.ToArray();

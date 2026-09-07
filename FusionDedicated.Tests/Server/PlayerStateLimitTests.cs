@@ -145,3 +145,48 @@ public class PlayerStateLimitTests
         Assert.Empty(faults);
     }
 }
+
+/// <summary>
+/// Amplifiers: one small message from one client costing the server, or another
+/// player, a great deal more than it cost to send.
+/// </summary>
+public class AmplificationTests
+{
+    [Fact]
+    public void A_target_named_many_times_is_sent_to_once()
+    {
+        // Naming somebody 255 times had the server send them 255 copies of
+        // whatever was attached, which could be the whole message size.
+        var message = new BonelabServerBrowser.Fusion.FusionNetWriter(64);
+
+        message.Write((byte)200);
+        message.Write((byte)5);     // ToTargets
+        message.Write((byte)0);
+        message.WriteBlock(new byte[] { 7, 7, 7, 7, 7, 3, 7, 3 });
+        message.WriteNullable((byte)1);
+        message.WriteBlock(new byte[] { 9 });
+
+        var targets = FusionDedicated.Protocol.ServerProtocol.ReadTargets(message.ToArray());
+
+        Assert.Equal(new byte[] { 7, 3 }, targets);
+    }
+
+    [Fact]
+    public void An_apostrophe_in_a_name_cannot_close_a_handler_string()
+    {
+        // A name lands inside onclick="kick(1, 'name')" in the panel, so one
+        // apostrophe closed the string and the rest ran as script for whoever
+        // had the panel open.
+        string page = File.ReadAllText(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..",
+            "FusionDedicated", "Web", "index.html"));
+
+        int start = page.IndexOf("const esc =", StringComparison.Ordinal);
+
+        Assert.True(start > 0, "the escaping helper moved");
+
+        string helper = page[start..(start + 200)];
+
+        Assert.Contains("&#39;", helper);
+    }
+}

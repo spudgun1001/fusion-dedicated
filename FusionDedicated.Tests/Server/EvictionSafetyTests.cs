@@ -62,10 +62,14 @@ public class EvictionSafetyTests
     }
 
     [Fact]
-    public void A_client_cannot_inflate_the_world_past_the_cap()
+    public void A_client_cannot_inflate_the_world_without_end()
     {
         // Poses arrive from an unauthenticated packet with no rate limit, so this
         // is the amplification that made the eviction worth aiming.
+        //
+        // The ceiling is twice the spawn cap, not equal to it: a scene object is
+        // not somebody's spawn and no longer counts against what people may
+        // spawn, so the registry has to hold both without one starving the other.
         var registry = new EntityRegistry { Capacity = 20 };
 
         for (int i = 0; i < 500; i++)
@@ -73,7 +77,26 @@ public class EvictionSafetyTests
             registry.NotePose((ushort)(1000 + i), 9, 0, 0, 0);
         }
 
-        Assert.Equal(20, registry.Count);
+        Assert.Equal(40, registry.Count);
+    }
+
+    [Fact]
+    public void A_level_full_of_scene_objects_does_not_stop_anybody_spawning()
+    {
+        // Scene objects are never reclaimed, so counting them against the spawn
+        // cap meant a busy level filled it with its own furniture and refused
+        // every spawn for the rest of the session.
+        var registry = new EntityRegistry { Capacity = 100 };
+
+        for (int i = 0; i < 90; i++)
+        {
+            registry.NotePose((ushort)(1000 + i), 9, 0, 0, 0);
+        }
+
+        registry.Register(300, "Pack.Spawnable.Crate", 1, 0, 0, 0);
+
+        Assert.Equal(91, registry.Count);
+        Assert.Equal(1, registry.SpawnedCount);
     }
 
     [Fact]

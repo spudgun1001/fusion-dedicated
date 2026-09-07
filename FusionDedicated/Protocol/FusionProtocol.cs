@@ -456,7 +456,10 @@ public static class FusionProtocol
             // Live clients ask for no effect, which is what makes a reload quiet.
             // Read separately so a client that stops here still gets its spawn.
             bool spawnEffect = false;
-            byte source = 0;
+            // Player, matching every other default here. Zero is EntitySource
+            // None, which is the exact state this change exists to avoid: a
+            // client only cleans a magazine up when the source says Player.
+            byte source = SourcePlayer;
 
             try
             {
@@ -599,6 +602,16 @@ public static class FusionProtocol
             {
                 reader.ReadNullableByte();
             }
+            else if (relayType == 5)
+            {
+                // A length prefixed list of small ids where a target would be.
+                int targets = reader.ReadInt32();
+
+                for (int i = 0; i < targets && i < 256; i++)
+                {
+                    reader.ReadByte();
+                }
+            }
 
             if (relayType != 0)
             {
@@ -667,6 +680,16 @@ public static class FusionProtocol
             if (relayType == 4)
             {
                 reader.ReadNullableByte();
+            }
+            else if (relayType == 5)
+            {
+                // A length prefixed list of small ids where a target would be.
+                int targets = reader.ReadInt32();
+
+                for (int i = 0; i < targets && i < 256; i++)
+                {
+                    reader.ReadByte();
+                }
             }
 
             if (relayType != 0)
@@ -737,6 +760,16 @@ public static class FusionProtocol
             if (relayType == 4)
             {
                 reader.ReadNullableByte();      // the route's target
+            }
+            else if (relayType == 5)
+            {
+                // A length prefixed list of small ids where a target would be.
+                int targets = reader.ReadInt32();
+
+                for (int i = 0; i < targets && i < 256; i++)
+                {
+                    reader.ReadByte();
+                }
             }
 
             if (relayType != 0)
