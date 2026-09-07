@@ -560,6 +560,140 @@ public static class FusionProtocol
     }
 
     public const byte TagEntityPoseUpdate = 17;
+    public const byte TagEntityUnqueueRequest = 13;
+    public const byte TagPlayerMetadataResponse = 60;
+
+    /// <summary>A player asking for one of their metadata keys to be set.</summary>
+    public readonly record struct MetadataRequest(byte PlayerSmallId, string Key, string Value);
+
+    /// <summary>Reads a PlayerMetadataRequest, or null when it does not parse.</summary>
+    public static MetadataRequest? TryReadMetadataRequest(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            reader.ReadByte();                  // tag
+            byte relayType = reader.ReadByte();
+            reader.ReadByte();                  // channel
+
+            if (relayType == 4)
+            {
+                reader.ReadNullableByte();
+            }
+
+            if (relayType != 0)
+            {
+                reader.ReadNullableByte();      // sender
+            }
+
+            reader.ReadInt32();                 // payload length
+
+            byte player = reader.ReadByte();    // PlayerReference is one byte
+            string? key = reader.ReadString();
+            string? value = reader.ReadString();
+
+            return key == null ? null : new MetadataRequest(player, key, value ?? "");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tells everyone a metadata key was set.
+    ///
+    /// The host validates that somebody may write their own keys and then sends
+    /// this. Nothing did on a relay, so a value a player set never left them and
+    /// anything reading it elsewhere saw nothing.
+    /// </summary>
+    public static byte[] BuildMetadataResponse(byte playerSmallId, string key, string value)
+    {
+        var payload = new FusionNetWriter(key.Length + value.Length + 32);
+
+        payload.Write(playerSmallId);
+        payload.Write(key);
+        payload.Write(value);
+
+        var message = new FusionNetWriter(key.Length + value.Length + 64);
+
+        message.Write(TagPlayerMetadataResponse);
+        message.Write((byte)2);          // ToClients
+        message.Write((byte)0);          // Reliable
+        message.WriteNullable((byte)0);  // sender: the server
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
+    public const byte TagEntityUnqueueResponse = 14;
+
+    /// <summary>
+    /// A client asking for a real id for something it has networked locally.
+    /// </summary>
+    /// <param name="UserSmallId">Who asked, and where the answer goes.</param>
+    /// <param name="QueuedId">Their own temporary id, echoed back so they can match it.</param>
+    public readonly record struct UnqueueRequest(byte UserSmallId, ushort QueuedId);
+
+    /// <summary>Reads an EntityUnqueueRequest, or null when it does not parse.</summary>
+    public static UnqueueRequest? TryReadUnqueueRequest(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            reader.ReadByte();                  // tag
+            byte relayType = reader.ReadByte();
+            reader.ReadByte();                  // channel
+
+            if (relayType == 4)
+            {
+                reader.ReadNullableByte();      // the route's target
+            }
+
+            if (relayType != 0)
+            {
+                reader.ReadNullableByte();      // sender
+            }
+
+            reader.ReadInt32();                 // payload length
+
+            return new UnqueueRequest(reader.ReadByte(), reader.ReadUInt16());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Answers one, with the id the server picked.
+    ///
+    /// Routed to the one player who asked. A real host sends this from
+    /// EntityUnqueueRequestMessage; without it the client waits for ever, the
+    /// entity is never registered, and everything downstream of it silently does
+    /// not happen: no NetworkPropCreate, so nobody else ever hears of the object.
+    /// </summary>
+    public static byte[] BuildUnqueueResponse(byte targetSmallId, ushort queuedId, ushort allocatedId)
+    {
+        var payload = new FusionNetWriter(8);
+
+        payload.WriteUInt16(queuedId);
+        payload.WriteUInt16(allocatedId);
+
+        var message = new FusionNetWriter(24);
+
+        message.Write(TagEntityUnqueueResponse);
+        message.Write((byte)4);                    // ToTarget
+        message.Write((byte)0);                    // Reliable
+        message.WriteNullable(targetSmallId);      // the route's target, a nullable byte
+        message.WriteNullable((byte)0);            // sender: the server
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
     public const byte TagEntityOwnershipRequest = 15;
     public const byte TagEntityOwnershipResponse = 16;
 

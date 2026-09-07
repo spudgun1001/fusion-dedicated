@@ -521,6 +521,14 @@ public sealed class FusionServer : IDisposable
                 HandleOwnershipRequest(sender, message);
                 return;
 
+            case FusionProtocol.TagEntityUnqueueRequest when sender != null:
+                HandleUnqueueRequest(sender, message);
+                return;
+
+            case GateProtocol.TagPlayerMetadataRequest when sender != null:
+                HandleMetadataRequest(sender, message);
+                return;
+
             case ModuleProtocol.TagModule when sender != null:
                 HandleModuleMessage(sender, message);
                 return;
@@ -810,6 +818,85 @@ public sealed class FusionServer : IDisposable
     }
 
     // ---- world bookkeeping ----
+
+    /// <summary>
+    /// Gives a real id to something a client has networked on its own.
+    ///
+    /// A scene object is not networked until somebody interacts with it: grabs
+    /// it, sits in it, or hits it hard enough. The client builds the entity
+    /// locally, parks it under a temporary id, and asks the server for a real
+    /// one. Only the host answers, so on a relay nothing did, and the client
+    /// waited for ever.
+    ///
+    /// Everything downstream waits with it. The registration callback never
+    /// fires, so NetworkPropCreate is never sent and nobody else ever hears the
+    /// object exists. That is a destructible door that works alone and not
+    /// together, and a passenger who never looks seated because the seat itself
+    /// was still waiting for this.
+    /// </summary>
+    private void HandleUnqueueRequest(ConnectedPlayer sender, byte[] message)
+    {
+        var request = FusionProtocol.TryReadUnqueueRequest(message);
+
+        if (request == null)
+        {
+            Log("WARN", $"EntityUnqueueRequest from {sender.DisplayName} did not parse");
+            return;
+        }
+
+        // The asker is named in the payload, but it is their own claim. Answering
+        // whoever actually sent it stops one client asking for ids on another's
+        // behalf and stuffing an id into somebody else's queue.
+        if (Entities.Count >= Config.MaxEntities)
+        {
+            Log("WARN", $"Unqueue for {sender.DisplayName} denied: entity limit reached");
+            return;
+        }
+
+        ushort allocated = Entities.AllocateId();
+
+        // Registered as theirs, discovered rather than spawned: it was already in
+        // the level, so a newcomer's own copy has it and the join catch-up must
+        // not send it as a spawn.
+        var entity = Entities.Register(allocated, "", sender.SmallId, 0, 0, 0);
+        entity.Discovered = true;
+
+        SendTo(sender.Connection, FusionProtocol.BuildUnqueueResponse(
+            sender.SmallId, request.Value.QueuedId, allocated), reliable: true);
+    }
+
+    /// <summary>
+    /// Passes on a metadata key a player set on themselves.
+    ///
+    /// Only the host answers this, so on a relay nothing did and a value never
+    /// left the person who set it. Anything reading somebody else's metadata,
+    /// which is how mods carry per-player state, saw nothing at all.
+    ///
+    /// The authority rule is Fusion's own: you may write your own keys, and an
+    /// operator may write anybody's. A client naming somebody else is refused
+    /// rather than trusted, since the name in the payload is only their claim.
+    /// </summary>
+    private void HandleMetadataRequest(ConnectedPlayer sender, byte[] message)
+    {
+        var request = FusionProtocol.TryReadMetadataRequest(message);
+
+        if (request == null)
+        {
+            Log("WARN", $"PlayerMetadataRequest from {sender.DisplayName} did not parse");
+            return;
+        }
+
+        if (request.Value.PlayerSmallId != sender.SmallId
+            && !sender.Permission.IsAtLeast(PermissionLevel.Operator))
+        {
+            Log("WARN", $"{sender.DisplayName} tried to set metadata on SmallID " +
+                        $"{request.Value.PlayerSmallId}, which is not theirs");
+            return;
+        }
+
+        Broadcast(FusionProtocol.BuildMetadataResponse(
+            request.Value.PlayerSmallId, request.Value.Key, request.Value.Value), reliable: true);
+    }
 
     private void HandleSpawnRequest(ConnectedPlayer sender, byte[] message)
     {
@@ -2190,8 +2277,9 @@ public sealed class FusionServer : IDisposable
                 // because a client that keeps asking would fill the log.
                 if (_unhandledTags.Add(message[0]))
                 {
-                    Log("WARN", $"Message tag {message[0]} is addressed to the server " +
-                                "and nothing here answers it, so it was dropped");
+                    Log("WARN", $"Message tag {message[0]} ({NameOfTag(message[0])}) is " +
+                                "addressed to the server and nothing here answers it, so it " +
+                                "was dropped");
                 }
 
                 return;
@@ -2217,6 +2305,26 @@ public sealed class FusionServer : IDisposable
                 return;
         }
     }
+
+    /// <summary>
+    /// What a native tag is called, for the one log line that says something was
+    /// dropped. Every message a client addresses to the server is named here, so
+    /// that line points at the gap instead of leaving somebody to find a number
+    /// in the decompiled game.
+    /// </summary>
+    private static string NameOfTag(byte tag) => tag switch
+    {
+        1 => "ConnectionRequest",
+        3 => "Disconnect",
+        13 => "EntityUnqueueRequest",
+        15 => "EntityOwnershipRequest",
+        20 => "SpawnRequest",
+        22 => "DespawnRequest",
+        59 => "PlayerMetadataRequest",
+        62 => "LevelRequest, which only the panel may do here",
+        68 => "PermissionCommandRequest",
+        _ => "unknown",
+    };
 
     public void Broadcast(byte[] message, bool reliable, byte? except = null)
     {

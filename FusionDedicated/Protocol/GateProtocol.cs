@@ -12,6 +12,7 @@ public static class GateProtocol
     public const byte TagPlayerRepAvatar = 5;
     public const byte TagSlowMoButton = 58;
     public const byte TagPlayerMetadataRequest = 59;
+    public const byte TagPlayerMetadataResponse = 60;
     public const byte TagPlayerRepDamage = 64;
     public const byte TagPlayerRepTeleport = 69;
 
