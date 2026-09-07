@@ -257,13 +257,32 @@ public sealed class FusionServer : IDisposable
 
     private void HandleDisconnect(HSteamNetConnection connection, string reason)
     {
-        var player = Players.Remove(connection);
-
-        if (player == null)
+        if (Players.Remove(connection) is { } player)
         {
-            return;
+            Depart(player, reason);
         }
+    }
 
+    /// <summary>
+    /// Everything that has to happen when somebody is no longer here.
+    ///
+    /// Separate from the disconnect callback because a kick never reaches that
+    /// callback: Steam does not raise one for a connection the server closes
+    /// itself, only for one the peer closes or that faults. So a kicked or banned
+    /// player was removed from their own game and left standing in everybody
+    /// else's, holding entities nobody could clean up.
+    ///
+    /// Safe to reach twice. The peer's own close arrives moments later, and by
+    /// then they are already out of the register, so this does not run again.
+    /// </summary>
+    /// <param name="announce">
+    /// What the other clients are told. The reason a socket closed is a Steam
+    /// string like "Closing Connection", which is useful in the log and no use on
+    /// somebody's screen, so an ordinary leave is announced plainly and only a
+    /// kick passes its own wording through.
+    /// </param>
+    private void Depart(ConnectedPlayer player, string reason, string? announce = null)
+    {
         Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}), {reason}");
 
         Plugins?.Left.Raise(new Plugins.LeaveEvent(player.PlatformId, player.DisplayName));
@@ -286,7 +305,8 @@ public sealed class FusionServer : IDisposable
                 : $"{affected.Count} entities left without an owner");
         }
 
-        Broadcast(ServerProtocol.WriteDisconnect(player.PlatformId, "Player left"), reliable: true);
+        Broadcast(ServerProtocol.WriteDisconnect(player.PlatformId, announce ?? "Player left"),
+            reliable: true);
 
         PushSettings();
     }
@@ -2150,9 +2170,17 @@ public sealed class FusionServer : IDisposable
 
         Log("WARN", $"Kicked {player.DisplayName}: {reason}");
 
-        SendTo(player.Connection, ServerProtocol.WriteDisconnect(player.PlatformId, reason), reliable: true);
-
         var connection = player.Connection;
+
+        // Them first, so they are told why before the socket goes.
+        SendTo(connection, ServerProtocol.WriteDisconnect(player.PlatformId, reason), reliable: true);
+
+        // Then everybody else, here rather than from the disconnect callback,
+        // because closing the connection ourselves does not raise one.
+        if (Players.Remove(connection) is { } gone)
+        {
+            Depart(gone, reason, announce: reason);
+        }
 
         Task.Delay(250).ContinueWith(_ =>
         {

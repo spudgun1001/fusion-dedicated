@@ -92,3 +92,34 @@ public class ModerationTests
             PermissionLevel.Default, PermissionLevel.Operator).Allowed);
     }
 }
+
+/// <summary>
+/// A banned player was removed from their own game and left standing in
+/// everybody else's. Steam raises no status callback for a connection the server
+/// closes itself, so the departure never ran: they stayed in the register, their
+/// entities were never handed on, and nobody was told they had gone.
+/// </summary>
+public class DepartureTests
+{
+    [Fact]
+    public void Removing_somebody_twice_only_finds_them_once()
+    {
+        // The kick does the departure itself, and the peer's own close arrives
+        // moments later. The second one has to find nobody, or everything from
+        // orphaning entities to announcing the leave would happen twice.
+        var registry = new PlayerRegistry();
+        var connection = new Steamworks.HSteamNetConnection(42);
+
+        registry.Add(new ConnectedPlayer
+        {
+            Connection = connection,
+            PlatformId = 76561198000000001,
+            SmallId = 3,
+            Username = "Kanzaaa",
+        });
+
+        Assert.NotNull(registry.Remove(connection));
+        Assert.Null(registry.Remove(connection));
+        Assert.Equal(0, registry.Count);
+    }
+}
