@@ -539,6 +539,28 @@ public sealed class FusionServer : IDisposable
                 NotePropCreate(sender, message);
                 break;
 
+            case GateProtocol.TagPointItemEquipState when sender != null:
+                // Kept as it changes. The join catch-up sends each player's
+                // cosmetics, and it was only ever what they arrived wearing.
+                if (GateProtocol.TryReadEquipState(message) is var (barcode, equipped)
+                    && barcode.Length > 0)
+                {
+                    if (equipped)
+                    {
+                        if (!sender.EquippedItems.Contains(barcode, StringComparer.Ordinal))
+                        {
+                            sender.EquippedItems.Add(barcode);
+                        }
+                    }
+                    else
+                    {
+                        sender.EquippedItems.RemoveAll(
+                            b => string.Equals(b, barcode, StringComparison.Ordinal));
+                    }
+                }
+
+                break;
+
             case GateProtocol.TagPlayerMetadataRequest when sender != null:
                 HandleMetadataRequest(sender, message);
                 return;
@@ -831,9 +853,11 @@ public sealed class FusionServer : IDisposable
 
         int caught = SendWorldCatchup(player);
         int scene = SendSceneProps(player);
+        int welds = SendConstraints(player);
 
         Log("INFO", $"Catch-up sent: {Players.Count - 1} players, {caught} entities, " +
-                    $"{scene} scene objects, level '{Config.LevelBarcode}'");
+                    $"{scene} scene objects, {welds} constraints, " +
+                    $"level '{Config.LevelBarcode}'");
 
         // Everyone's copy of LobbyInfo now has a stale player list.
         PushSettings();
@@ -938,6 +962,12 @@ public sealed class FusionServer : IDisposable
     private readonly Dictionary<(int Hash, int Index), FusionProtocol.PropCreate> _sceneProps = new();
 
     /// <summary>
+    /// Constraints that exist, keyed on the first of their two ends, with the
+    /// payload exactly as it was sent on. Replayed to a newcomer.
+    /// </summary>
+    private readonly Dictionary<ushort, (byte Owner, byte[] Payload)> _constraints = new();
+
+    /// <summary>
     /// Tells a newcomer about every scene object already networked.
     ///
     /// The owner is rewritten to somebody who is still here. A client resolves
@@ -958,6 +988,34 @@ public sealed class FusionServer : IDisposable
 
             SendTo(player.Connection, FusionProtocol.BuildPropCreate(
                 owner, prop.Hash, prop.Index, prop.EntityId), reliable: true);
+
+            sent++;
+        }
+
+        return sent;
+    }
+
+    /// <summary>
+    /// Tells a newcomer about every constraint already in the world.
+    ///
+    /// The payload is the one that was broadcast, ids and all, so their copy
+    /// agrees with everybody else's. Sent as the maker if they are still here,
+    /// otherwise as somebody who is, since a client resolves the name it is given
+    /// and cannot resolve one who has left.
+    /// </summary>
+    private int SendConstraints(ConnectedPlayer player)
+    {
+        int sent = 0;
+
+        foreach (var (_, weld) in _constraints.ToList())
+        {
+            byte from = Players.Get(weld.Owner) != null
+                ? weld.Owner
+                : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
+                    ?? player.SmallId;
+
+            SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
+                ModuleProtocol.ConstraintCreateTag, from, weld.Payload), reliable: true);
 
             sent++;
         }
@@ -1593,10 +1651,14 @@ public sealed class FusionServer : IDisposable
             // person told about it hears the same answer.
             byte owner = entity.OwnerSmallId ?? Adopt(entity, player);
 
+            // Not tracker zero. A client counts its own spawn trackers up from
+            // zero, and a catch-up naming a tracker it is waiting on would fire
+            // that callback with the wrong thing. Nothing counts this high.
             SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
                 owner, owner,
                 entity.Id, entity.Barcode,
-                new Vec3(entity.X, entity.Y, entity.Z), entity.Rotation, 0,
+                new Vec3(entity.X, entity.Y, entity.Z), entity.Rotation,
+                CatchupTracker,
                 spawnEffect: false, source: entity.Source), reliable: true);
 
             sent++;
@@ -1846,6 +1908,7 @@ public sealed class FusionServer : IDisposable
         // back as players arrive on it.
         Entities.Forget();
         _sceneProps.Clear();
+        _constraints.Clear();
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
             reliable: true);
@@ -2197,6 +2260,13 @@ public sealed class FusionServer : IDisposable
         // session with nothing able to remove it.
         ushort? partner = entity.Partner;
 
+        _constraints.Remove(id);
+
+        if (partner.HasValue)
+        {
+            _constraints.Remove(partner.Value);
+        }
+
         if (Entities.Remove(id))
         {
             Log("INFO", partner.HasValue
@@ -2273,6 +2343,11 @@ public sealed class FusionServer : IDisposable
         end1.Partner = point2;
         end2.Partner = point1;
 
+        // Kept so somebody joining later is told about it. A host replays every
+        // constraint on catch-up; without this everything welded together comes
+        // apart for a newcomer while staying joined for everyone else.
+        _constraints[point1] = (sender.SmallId, rewritten);
+
         Broadcast(ModuleProtocol.WriteModuleToClients(
             ModuleProtocol.ConstraintCreateTag, sender.SmallId, rewritten), reliable: true);
 
@@ -2281,6 +2356,12 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Stands in for a barcode so the panel and the culls can see these.</summary>
     private const string ConstraintBarcode = "fusion.constraint";
+
+    /// <summary>
+    /// The tracker id used for a catch-up spawn. A client allocates its own from
+    /// zero upwards, so this is a number none of them will reach.
+    /// </summary>
+    private const uint CatchupTracker = uint.MaxValue;
 
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {

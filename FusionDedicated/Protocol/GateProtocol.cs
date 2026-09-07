@@ -97,6 +97,36 @@ public static class GateProtocol
     /// the previous avatar's, so height, reach and where a player could grab from
     /// were all somebody else's.
     /// </summary>
+    public const byte TagPointItemEquipState = 206;
+
+    /// <summary>
+    /// A cosmetic being put on or taken off.
+    ///
+    /// Every client keeps this on its copy of the player, so a host's catch-up
+    /// carries the live list. Ours was written once at the handshake, so anything
+    /// equipped or removed since showed wrong to whoever joined next.
+    /// </summary>
+    public static (string Barcode, bool Equipped)? TryReadEquipState(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (!TrySkipPrefix(ref reader, message, TagPointItemEquipState))
+            {
+                return null;
+            }
+
+            string? barcode = reader.ReadString();
+
+            return barcode == null ? null : (barcode, reader.ReadBool());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static byte[]? TryReadAvatarStats(ReadOnlySpan<byte> message)
     {
         try

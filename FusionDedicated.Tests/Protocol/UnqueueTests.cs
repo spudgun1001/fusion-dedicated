@@ -202,4 +202,53 @@ public class UnqueueTests
         Assert.InRange(message[^1], FusionProtocol.SourceNone, FusionProtocol.SourcePlayer);
         Assert.Equal(FusionProtocol.SourcePlayer, message[^1]);
     }
+
+    [Fact]
+    public void A_catch_up_spawn_never_uses_a_tracker_a_client_is_waiting_on()
+    {
+        // A client numbers its own spawn trackers from zero upward, so a
+        // catch-up naming zero could complete a callback it was waiting on with
+        // the wrong object.
+        byte[] message = FusionProtocol.BuildSpawnResponse(
+            1, 1, 300, "Pack.Spawnable.Crate", new Vec3(0, 0, 0), null, uint.MaxValue);
+
+        var fusion = new OracleReader(message);
+
+        fusion.ReadByte();
+        fusion.ReadByte();
+        fusion.ReadByte();
+        fusion.ReadNullableByte();
+        fusion.ReadInt32();
+        fusion.ReadByte();          // owner
+        fusion.ReadUInt16();        // entity id
+        fusion.ReadString();        // barcode
+        for (int i = 0; i < 3; i++) { fusion.ReadSingle(); }
+        for (int i = 0; i < 7; i++) { fusion.ReadByte(); }
+
+        Assert.Equal(uint.MaxValue, fusion.ReadUInt32());
+    }
+
+    [Fact]
+    public void A_cosmetic_going_on_and_coming_off_reads_back()
+    {
+        foreach (bool equipped in new[] { true, false })
+        {
+            var data = new OracleWriter();
+            data.Write("SLZ.BONELAB.Content.PointItem.Hat");
+            data.Write(equipped);
+
+            var message = new OracleWriter();
+            message.Write((byte)206);
+            message.Write((byte)3);     // ToOtherClients
+            message.Write((byte)0);
+            message.Write((byte?)3);
+            message.Write(data.ToArray());
+
+            var state = GateProtocol.TryReadEquipState(message.ToArray());
+
+            Assert.NotNull(state);
+            Assert.Equal("SLZ.BONELAB.Content.PointItem.Hat", state!.Value.Barcode);
+            Assert.Equal(equipped, state.Value.Equipped);
+        }
+    }
 }
