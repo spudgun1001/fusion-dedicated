@@ -961,10 +961,13 @@ public sealed class FusionServer : IDisposable
 
         // Keyed on what names the object inside the level, so the same object is
         // never remembered twice.
-        _sceneProps[(prop.Value.Hash, prop.Value.Index)] = prop.Value with
+        lock (_cacheLock)
         {
-            OwnerSmallId = sender.SmallId,
-        };
+            _sceneProps[(prop.Value.Hash, prop.Value.Index)] = prop.Value with
+            {
+                OwnerSmallId = sender.SmallId,
+            };
+        }
     }
 
     /// <summary>
@@ -972,6 +975,15 @@ public sealed class FusionServer : IDisposable
     /// Cleared with the world, since the next level has its own.
     /// </summary>
     private readonly Dictionary<(int Hash, int Index), FusionProtocol.PropCreate> _sceneProps = new();
+
+    /// <summary>
+    /// Guards the three caches below.
+    ///
+    /// They are written from the message loop and cleared from the panel and the
+    /// console, which are their own threads. A Dictionary written from two at
+    /// once corrupts rather than complains, so every touch takes this.
+    /// </summary>
+    private readonly object _cacheLock = new();
 
     /// <summary>
     /// Constraints that exist, keyed on the first of their two ends, with the
@@ -989,6 +1001,11 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private readonly Dictionary<(byte Tag, string Path), byte[]> _rpcVariables = new();
 
+    private bool HasLevelVariables
+    {
+        get { lock (_cacheLock) { return _rpcVariables.Count > 0; } }
+    }
+
     /// <summary>
     /// Tells a newcomer about every scene object already networked.
     ///
@@ -1001,7 +1018,14 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        foreach (var prop in _sceneProps.Values.ToList())
+        List<FusionProtocol.PropCreate> props;
+
+        lock (_cacheLock)
+        {
+            props = _sceneProps.Values.ToList();
+        }
+
+        foreach (var prop in props)
         {
             byte owner = Players.Get(prop.OwnerSmallId) != null
                 ? prop.OwnerSmallId
@@ -1029,7 +1053,14 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        foreach (var (_, weld) in _constraints.ToList())
+        List<(byte Owner, byte[] Payload)> welds;
+
+        lock (_cacheLock)
+        {
+            welds = _constraints.Values.ToList();
+        }
+
+        foreach (var weld in welds)
         {
             byte from = Players.Get(weld.Owner) != null
                 ? weld.Owner
@@ -1059,7 +1090,10 @@ public sealed class FusionServer : IDisposable
 
         // Only the latest matters. A gate opened and closed forty times needs one
         // message to say which it is now.
-        _rpcVariables[(tag, Convert.ToHexString(path))] = body;
+        lock (_cacheLock)
+        {
+            _rpcVariables[(tag, Convert.ToHexString(path))] = body;
+        }
     }
 
     /// <summary>
@@ -1074,7 +1108,14 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        foreach (var ((tag, _), body) in _rpcVariables.ToList())
+        List<(byte Tag, byte[] Body)> variables;
+
+        lock (_cacheLock)
+        {
+            variables = _rpcVariables.Select(v => (v.Key.Tag, v.Value)).ToList();
+        }
+
+        foreach (var (tag, body) in variables)
         {
             SendTo(player.Connection,
                 GateProtocol.BuildRpcVariable(tag, player.SmallId, body), reliable: true);
@@ -1120,7 +1161,7 @@ public sealed class FusionServer : IDisposable
         if (string.Equals(request.Value.Key, "Loading", StringComparison.OrdinalIgnoreCase)
             && bool.TryParse(request.Value.Value, out bool loading)
             && !loading
-            && _rpcVariables.Count > 0)
+            && HasLevelVariables)
         {
             int replayed = SendRpcVariables(sender);
 
@@ -1986,9 +2027,12 @@ public sealed class FusionServer : IDisposable
         // Everything goes, props included. Anything placed on the new level is put
         // back as players arrive on it.
         Entities.Forget();
-        _sceneProps.Clear();
-        _constraints.Clear();
-        _rpcVariables.Clear();
+        lock (_cacheLock)
+        {
+            _sceneProps.Clear();
+            _constraints.Clear();
+            _rpcVariables.Clear();
+        }
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
             reliable: true);
@@ -2340,11 +2384,14 @@ public sealed class FusionServer : IDisposable
         // session with nothing able to remove it.
         ushort? partner = entity.Partner;
 
-        _constraints.Remove(id);
-
-        if (partner.HasValue)
+        lock (_cacheLock)
         {
-            _constraints.Remove(partner.Value);
+            _constraints.Remove(id);
+
+            if (partner.HasValue)
+            {
+                _constraints.Remove(partner.Value);
+            }
         }
 
         if (Entities.Remove(id))
@@ -2426,7 +2473,10 @@ public sealed class FusionServer : IDisposable
         // Kept so somebody joining later is told about it. A host replays every
         // constraint on catch-up; without this everything welded together comes
         // apart for a newcomer while staying joined for everyone else.
-        _constraints[point1] = (sender.SmallId, rewritten);
+        lock (_cacheLock)
+        {
+            _constraints[point1] = (sender.SmallId, rewritten);
+        }
 
         Broadcast(ModuleProtocol.WriteModuleToClients(
             ModuleProtocol.ConstraintCreateTag, sender.SmallId, rewritten), reliable: true);
