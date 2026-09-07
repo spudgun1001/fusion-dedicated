@@ -23,7 +23,7 @@ public static class GateProtocol
     /// Steps over tag, relay type, channel, the nullable sender byte and the payload
     /// length. Returns false when the message is too short to hold them.
     /// </summary>
-    private static bool TrySkipPrefix(ref FusionNetReader reader, ReadOnlySpan<byte> message, byte expectedTag)
+    internal static bool TrySkipPrefix(ref FusionNetReader reader, ReadOnlySpan<byte> message, byte expectedTag)
     {
         if (message.Length < 3 || message[0] != expectedTag)
         {
@@ -98,6 +98,79 @@ public static class GateProtocol
     /// were all somebody else's.
     /// </summary>
     public const byte TagPointItemEquipState = 206;
+
+    /// <summary>
+    /// The RPC variable tags. A level's own state lives in these: lights, gates,
+    /// elevators, whatever an SDK map wires up.
+    /// </summary>
+    public static readonly byte[] RpcVariableTags = { 210, 211, 212, 213, 214 };
+
+    /// <summary>
+    /// Which variable an RPC message is about, as raw bytes.
+    ///
+    /// ComponentPathData names it the same way on every machine: whether it
+    /// belongs to an entity, which one, which component, and a hash of where it
+    /// sits in the level. Six bytes, or fourteen when the hash is there. The
+    /// value follows and is not read, because replaying only needs the last
+    /// message for each variable, whatever type it held.
+    /// </summary>
+    /// <summary>The body of a native message, past the prefix.</summary>
+    public static byte[]? TryReadBody(ReadOnlySpan<byte> message, byte tag)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (!TrySkipPrefix(ref reader, message, tag))
+            {
+                return null;
+            }
+
+            return reader.ReadRaw(message.Length - reader.Position).ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds an RPC variable message for one player, from the body we kept.
+    /// </summary>
+    public static byte[] BuildRpcVariable(byte tag, byte targetSmallId, byte[] body)
+    {
+        var message = new FusionNetWriter(body.Length + 32);
+
+        message.Write(tag);
+        message.Write((byte)4);                 // ToTarget
+        message.Write((byte)0);                 // Reliable
+        message.WriteNullable(targetSmallId);
+        message.WriteNullable((byte)0);         // sender: the server
+        message.WriteBlock(body);
+
+        return message.ToArray();
+    }
+
+    public static byte[]? TryReadRpcPath(ReadOnlySpan<byte> payload)
+    {
+        try
+        {
+            if (payload.Length < 6)
+            {
+                return null;
+            }
+
+            // HasEntity, EntityID, ComponentIndex, then whether a hash follows.
+            int length = payload[5] != 0 ? 14 : 6;
+
+            return payload.Length < length ? null : payload[..length].ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
 
     /// <summary>
     /// A cosmetic being put on or taken off.

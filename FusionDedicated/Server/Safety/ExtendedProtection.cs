@@ -7,13 +7,30 @@ namespace FusionDedicated.Server.Safety;
 /// </summary>
 public sealed class SpawnRateLimiter
 {
-    private readonly int _maxPerSecond;
     private readonly Dictionary<byte, List<DateTime>> _hits = new();
     private readonly object _lock = new();
+
+    private int _maxPerSecond;
 
     public SpawnRateLimiter(int maxPerSecond)
     {
         _maxPerSecond = maxPerSecond;
+    }
+
+    /// <summary>
+    /// Changes the cap and keeps what everybody has already spent.
+    ///
+    /// This used to be a new object every time the settings were pushed, which
+    /// is every join, every leave and every kick. Each one wiped the history, so
+    /// the per-second cap reset for the whole server whenever anybody came or
+    /// went, which is exactly when somebody spamming spawns benefits from it.
+    /// </summary>
+    public void SetLimit(int maxPerSecond)
+    {
+        lock (_lock)
+        {
+            _maxPerSecond = maxPerSecond;
+        }
     }
 
     public bool Allow(byte smallId, DateTime now)
@@ -60,16 +77,28 @@ public readonly record struct NicknameVerdict(bool Allowed, string Reason);
 /// </summary>
 public sealed class NicknameGuard
 {
-    private readonly int _maxPerMinute;
-    private readonly HashSet<string> _reserved;
     private readonly Dictionary<byte, List<DateTime>> _changes = new();
     private readonly object _lock = new();
+
+    private int _maxPerMinute;
+    private HashSet<string> _reserved;
 
     public NicknameGuard(int maxChangesPerMinute, IEnumerable<string> reserved)
     {
         _maxPerMinute = maxChangesPerMinute;
         _reserved = new HashSet<string>(
             reserved.Select(Normalise), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Changes the limits and keeps everybody's history, as above.</summary>
+    public void SetLimits(int maxChangesPerMinute, IEnumerable<string> reserved)
+    {
+        lock (_lock)
+        {
+            _maxPerMinute = maxChangesPerMinute;
+            _reserved = new HashSet<string>(
+                reserved.Select(Normalise), StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     private static string Normalise(string name) => name.Trim();

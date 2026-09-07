@@ -255,7 +255,13 @@ public sealed class EntityRegistry
     /// Records a pose, registering the entity if this is the first we have heard of
     /// it. Ids below FirstEntityId are player rigs and are left alone.
     /// </summary>
-    public void NotePose(ushort id, byte owner, float x, float y, float z)
+    /// <param name="rotation">
+    /// How it is turned now, in the seven byte form a spawn carries. Kept so a
+    /// player joining later is told the object as it stands rather than as it was
+    /// first spawned.
+    /// </param>
+    public void NotePose(ushort id, byte owner, float x, float y, float z,
+        byte[]? rotation = null)
     {
         if (id < FirstEntityId)
         {
@@ -269,6 +275,12 @@ public sealed class EntityRegistry
                 entity.X = x;
                 entity.Y = y;
                 entity.Z = z;
+
+                if (rotation is { Length: > 0 })
+                {
+                    entity.Rotation = rotation;
+                }
+
                 entity.LastUpdate = DateTime.UtcNow;
                 return;
             }

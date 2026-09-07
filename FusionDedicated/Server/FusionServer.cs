@@ -116,8 +116,12 @@ public sealed class FusionServer : IDisposable
 
         var limits = ExtendedLimits.Resolve(Config.ExtendedProtection, file);
 
-        _rateLimiter = new SpawnRateLimiter(limits.MaxSpawnsPerSecond);
-        _nicknames = new NicknameGuard(limits.MaxNicknameChangesPerMinute, limits.ReservedNicknames);
+        // Adjusted rather than replaced. This runs on every join, leave and kick,
+        // and a new object each time threw away what everybody had spent, so the
+        // per-second spawn cap reset for the whole server whenever anybody came
+        // or went.
+        _rateLimiter.SetLimit(limits.MaxSpawnsPerSecond);
+        _nicknames.SetLimits(limits.MaxNicknameChangesPerMinute, limits.ReservedNicknames);
     }
 
     public void Dispose()
@@ -537,6 +541,14 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagNetworkPropCreate when sender != null:
                 NotePropCreate(sender, message);
+                break;
+
+            case 210 when sender != null:
+            case 211 when sender != null:
+            case 212 when sender != null:
+            case 213 when sender != null:
+            case 214 when sender != null:
+                NoteRpcVariable(tag, message);
                 break;
 
             case GateProtocol.TagPointItemEquipState when sender != null:
@@ -968,6 +980,16 @@ public sealed class FusionServer : IDisposable
     private readonly Dictionary<ushort, (byte Owner, byte[] Payload)> _constraints = new();
 
     /// <summary>
+    /// The last value of every RPC variable, by tag and by which variable it is.
+    ///
+    /// A level's own state lives in these: lights, gates, elevators, anything an
+    /// SDK map wires up. A host replays them to a newcomer; nothing did here, so
+    /// somebody joining saw the level in its default state while everybody else
+    /// saw the real one.
+    /// </summary>
+    private readonly Dictionary<(byte Tag, string Path), byte[]> _rpcVariables = new();
+
+    /// <summary>
     /// Tells a newcomer about every scene object already networked.
     ///
     /// The owner is rewritten to somebody who is still here. A client resolves
@@ -1023,6 +1045,46 @@ public sealed class FusionServer : IDisposable
         return sent;
     }
 
+    /// <summary>
+    /// Remembers the latest value of an RPC variable, then lets it carry on.
+    /// </summary>
+    private void NoteRpcVariable(byte tag, byte[] message)
+    {
+        byte[]? body = GateProtocol.TryReadBody(message, tag);
+
+        if (body == null || GateProtocol.TryReadRpcPath(body) is not { } path)
+        {
+            return;
+        }
+
+        // Only the latest matters. A gate opened and closed forty times needs one
+        // message to say which it is now.
+        _rpcVariables[(tag, Convert.ToHexString(path))] = body;
+    }
+
+    /// <summary>
+    /// Sends a player every RPC variable's current value.
+    ///
+    /// Not at join. These carry SkipHandleWhileLoading, which means a client
+    /// throws them away rather than queueing them while it loads, so sending
+    /// during the handshake would be sending them into nothing. This runs when
+    /// the player says they have finished loading instead.
+    /// </summary>
+    private int SendRpcVariables(ConnectedPlayer player)
+    {
+        int sent = 0;
+
+        foreach (var ((tag, _), body) in _rpcVariables.ToList())
+        {
+            SendTo(player.Connection,
+                GateProtocol.BuildRpcVariable(tag, player.SmallId, body), reliable: true);
+
+            sent++;
+        }
+
+        return sent;
+    }
+
     private void HandleMetadataRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = FusionProtocol.TryReadMetadataRequest(message);
@@ -1051,6 +1113,23 @@ public sealed class FusionServer : IDisposable
 
         Broadcast(FusionProtocol.BuildMetadataResponse(
             request.Value.PlayerSmallId, request.Value.Key, request.Value.Value), reliable: true);
+
+        // A client says so here when it has finished loading the level, which is
+        // the only moment it will accept the level's own state. Anything sent
+        // before this was thrown away rather than queued.
+        if (string.Equals(request.Value.Key, "Loading", StringComparison.OrdinalIgnoreCase)
+            && bool.TryParse(request.Value.Value, out bool loading)
+            && !loading
+            && _rpcVariables.Count > 0)
+        {
+            int replayed = SendRpcVariables(sender);
+
+            if (replayed > 0)
+            {
+                Log("INFO", $"{sender.DisplayName} finished loading, sent {replayed} " +
+                            "level variables");
+            }
+        }
     }
 
     private void HandleSpawnRequest(ConnectedPlayer sender, byte[] message)
@@ -1909,6 +1988,7 @@ public sealed class FusionServer : IDisposable
         Entities.Forget();
         _sceneProps.Clear();
         _constraints.Clear();
+        _rpcVariables.Clear();
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
             reliable: true);
@@ -2459,7 +2539,8 @@ public sealed class FusionServer : IDisposable
         // exists. Registering it is what makes it visible; removing it is not safe
         // without knowing whether it is a scene prop, so that stays opt-in.
         Entities.NotePose(pose.Value.EntityId, sender.SmallId,
-            pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z);
+            pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
+            pose.Value.Rotation);
     }
 
     // ---- relaying ----

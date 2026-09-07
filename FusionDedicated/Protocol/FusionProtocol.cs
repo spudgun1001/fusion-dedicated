@@ -892,7 +892,14 @@ public static class FusionProtocol
     /// Reads an entity's networked pose: a ushort ID, a body count, then one
     /// BodyPose per body. Validated against a 31 byte capture (2 + 1 + 28).
     /// </summary>
-    public static (ushort EntityId, Vec3 Position, Vec3 Velocity)? TryReadEntityPose(ReadOnlySpan<byte> message)
+    /// <returns>
+    /// The rotation comes back as the seven bytes a spawn carries, not the four
+    /// a pose uses, so it can be repeated to somebody joining later. Without it
+    /// the catch-up sent the rotation a thing was spawned at, however it has been
+    /// turned since.
+    /// </returns>
+    public static (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation)?
+        TryReadEntityPose(ReadOnlySpan<byte> message)
     {
         try
         {
@@ -919,7 +926,10 @@ public static class FusionProtocol
             // Only the first body is needed to locate the object.
             var body = FusionRigPose.ReadBodyPose(ref reader);
 
-            return (entityId, body.Position, body.Velocity);
+            var rotation = new FusionNetWriter(8);
+            WriteSerializedQuaternion(rotation, body.Rotation);
+
+            return (entityId, body.Position, body.Velocity, rotation.ToArray());
         }
         catch
         {

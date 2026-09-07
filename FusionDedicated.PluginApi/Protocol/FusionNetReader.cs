@@ -17,6 +17,9 @@ public ref struct FusionNetReader
         _position = 0;
     }
 
+    /// <summary>How far in we are, so a caller can take the rest.</summary>
+    public int Position => _position;
+
     public byte ReadByte() => _buffer[_position++];
 
     public bool ReadBool() => ReadByte() != 0;
