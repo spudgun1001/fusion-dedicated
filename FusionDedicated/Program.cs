@@ -364,6 +364,7 @@ public static class Program
             quit.Cancel();
         };
 
+        bool wasPublished = lobby.IsPublished;
         var lastLobbyUpdate = DateTime.UtcNow;
         var lastTick = DateTime.UtcNow;
         var lastSample = DateTime.UtcNow;
@@ -377,7 +378,14 @@ public static class Program
 
             if ((DateTime.UtcNow - lastLobbyUpdate).TotalSeconds >= 5)
             {
-                lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
+                if (!lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID)
+                    && wasPublished)
+                {
+                    server.Log("WARN", "The Steam lobby has gone, so the server is no longer in " +
+                                       "the browser. Publishing it again.");
+                }
+
+                wasPublished = lobby.IsPublished;
                 lastLobbyUpdate = DateTime.UtcNow;
             }
 
@@ -387,6 +395,7 @@ public static class Program
                 && await lobby.PublishAsync(config.MaxPlayers))
             {
                 lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
+                wasPublished = true;
                 server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
             }
 

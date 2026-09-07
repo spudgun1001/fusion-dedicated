@@ -67,19 +67,35 @@ public sealed class LobbyPublisher : IDisposable
     /// <summary>
     /// Rewrites the lobby metadata. Called whenever the roster or settings change so
     /// the browser shows live player counts.
+    ///
+    /// Also how a lost lobby is noticed. Steam hands back false when the lobby is
+    /// no longer ours to write to, which is what happens if the Steam connection
+    /// drops and comes back: the lobby is gone, but nothing tells us, and the id
+    /// we are holding stays as valid-looking as it ever was. A server ran 22
+    /// hours and quietly vanished from the browser that way, with the retry that
+    /// exists for this never firing because it only asks whether we think we are
+    /// published.
     /// </summary>
-    public void Update(ServerConfig config, IReadOnlyList<ConnectedPlayer> players, ulong hostSteamId)
+    /// <returns>False when the lobby has gone and needs publishing again.</returns>
+    public bool Update(ServerConfig config, IReadOnlyList<ConnectedPlayer> players, ulong hostSteamId)
     {
         if (!IsPublished)
         {
-            return;
+            return false;
         }
 
         bool full = players.Count >= config.MaxPlayers;
 
         var info = LobbyInfoBuilder.Build(config, players, hostSteamId);
 
-        SteamMatchmaking.SetLobbyData(_lobbyId, IdentifierKey, bool.TrueString);
+        if (!SteamMatchmaking.SetLobbyData(_lobbyId, IdentifierKey, bool.TrueString))
+        {
+            // Forgotten rather than closed: there is nothing left to leave, and
+            // holding the id would stop the retry ever trying again.
+            _lobbyId = CSteamID.Nil;
+            return false;
+        }
+
         SteamMatchmaking.SetLobbyData(_lobbyId, HasLobbyOpenKey, bool.TrueString);
         SteamMatchmaking.SetLobbyData(_lobbyId, LobbyCodeKey, config.ServerCode.ToUpperInvariant());
         SteamMatchmaking.SetLobbyData(_lobbyId, PrivacyKey, config.Privacy.ToString());
@@ -96,6 +112,8 @@ public sealed class LobbyPublisher : IDisposable
         };
 
         SteamMatchmaking.SetLobbyData(_lobbyId, KeyCollectionKey, JsonSerializer.Serialize(keys));
+
+        return true;
     }
 
     public void Close()
