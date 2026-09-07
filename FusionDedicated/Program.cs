@@ -373,74 +373,84 @@ public static class Program
 
         while (!quit.IsCancellationRequested)
         {
-            SteamAPI.RunCallbacks();
-
-            server.Receive();
-
-            if ((DateTime.UtcNow - lastLobbyUpdate).TotalSeconds >= 5)
+            // A dedicated server has to outlive its own mistakes. Nothing here
+            // was wrapped, so one unexpected throw anywhere in the loop ended the
+            // process with players on it: a file busy for a moment was enough.
+            try
             {
-                if (!lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID)
-                    && wasPublished)
+                SteamAPI.RunCallbacks();
+
+                server.Receive();
+
+                if ((DateTime.UtcNow - lastLobbyUpdate).TotalSeconds >= 5)
                 {
-                    server.Log("WARN", "The Steam lobby has gone, so the server is no longer in " +
-                                       "the browser. Publishing it again.");
+                    if (!lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID)
+                        && wasPublished)
+                    {
+                        server.Log("WARN", "The Steam lobby has gone, so the server is no longer in " +
+                                           "the browser. Publishing it again.");
+                    }
+
+                    wasPublished = lobby.IsPublished;
+                    lastLobbyUpdate = DateTime.UtcNow;
                 }
 
-                wasPublished = lobby.IsPublished;
-                lastLobbyUpdate = DateTime.UtcNow;
+                // Steam can take minutes to sign in. Asking once at startup left the
+                // server invisible for good when it had not finished by then.
+                //
+                // Started and left running, never awaited. Steam completes the call
+                // through RunCallbacks, this loop is the only thing pumping it, and
+                // awaiting here would suspend the loop waiting for a callback nothing
+                // can raise: the whole server would stop rather than recover.
+                if (lobbyPublish.MayStart(DateTime.UtcNow)
+                    && lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow))
+                {
+                    lobbyPublish.Started(lobby.PublishAsync(config.MaxPlayers), DateTime.UtcNow);
+                }
+
+                if (lobbyPublish.Collect() is { } published && published)
+                {
+                    lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
+                    wasPublished = true;
+                    server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
+                }
+
+                if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
+                {
+                    if (blocklist.ReloadIfChanged())
+                    {
+                        server.RebuildBlocklist();
+                        server.Log("INFO", "Reloaded blocklist.json");
+                    }
+
+                    if (bans.ReloadIfChanged())
+                    {
+                        server.Log("INFO", $"Reloaded bans.json, {bans.Entries.Count} listed");
+                    }
+
+                    if (members.ReloadIfChanged())
+                    {
+                        server.Log("INFO", $"Reloaded whitelist.json, {members.Entries.Count} listed");
+                    }
+
+                    if (bans.SweepExpired() > 0)
+                    {
+                        bans.Save();
+                    }
+
+                    server.Tick();
+                    lastTick = DateTime.UtcNow;
+                }
+
+                if ((DateTime.UtcNow - lastSample).TotalSeconds >= 5)
+                {
+                    server.Resources.Sample_(server);
+                    lastSample = DateTime.UtcNow;
+                }
             }
-
-            // Steam can take minutes to sign in. Asking once at startup left the
-            // server invisible for good when it had not finished by then.
-            //
-            // Started and left running, never awaited. Steam completes the call
-            // through RunCallbacks, this loop is the only thing pumping it, and
-            // awaiting here would suspend the loop waiting for a callback nothing
-            // can raise: the whole server would stop rather than recover.
-            if (lobbyPublish.MayStart(DateTime.UtcNow)
-                && lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow))
+            catch (Exception ex)
             {
-                lobbyPublish.Started(lobby.PublishAsync(config.MaxPlayers), DateTime.UtcNow);
-            }
-
-            if (lobbyPublish.Collect() is { } published && published)
-            {
-                lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
-                wasPublished = true;
-                server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
-            }
-
-            if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
-            {
-                if (blocklist.ReloadIfChanged())
-                {
-                    server.RebuildBlocklist();
-                    server.Log("INFO", "Reloaded blocklist.json");
-                }
-
-                if (bans.ReloadIfChanged())
-                {
-                    server.Log("INFO", $"Reloaded bans.json, {bans.Entries.Count} listed");
-                }
-
-                if (members.ReloadIfChanged())
-                {
-                    server.Log("INFO", $"Reloaded whitelist.json, {members.Entries.Count} listed");
-                }
-
-                if (bans.SweepExpired() > 0)
-                {
-                    bans.Save();
-                }
-
-                server.Tick();
-                lastTick = DateTime.UtcNow;
-            }
-
-            if ((DateTime.UtcNow - lastSample).TotalSeconds >= 5)
-            {
-                server.Resources.Sample_(server);
-                lastSample = DateTime.UtcNow;
+                server.Log("ERROR", $"The server loop threw and carried on: {ex.Message}");
             }
 
             await Task.Delay(16);
