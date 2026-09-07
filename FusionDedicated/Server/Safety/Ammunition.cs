@@ -22,7 +22,17 @@ public static class Ammunition
         "quickload", "stripperclip", "shellbox", "roundbox", "bulletbox",
     };
 
-    /// <summary>Crates that start with Mag and are a weapon rather than a magazine.</summary>
+    /// <summary>
+    /// Crates that start with Mag and are a weapon rather than a magazine.
+    ///
+    /// Only these two. Adding the other Mag words a review suggested (magic,
+    /// magma, magnet) looks safer and is not: MagMakarov and MagMA5C start with
+    /// "magma", and excluding them stops people reloading. Checked against the
+    /// 1005 crates beginning with Mag in a real mod folder, where the only
+    /// weapons were three Magnums, a Magnum knife, MagnumKeyes and MagpulMasada.
+    /// The rest of the collisions are props and cosmetics, and exempting a prop
+    /// from a rank gate costs nothing.
+    /// </summary>
     private static readonly string[] NotAmmo = { "magnum", "magpul" };
 
     /// <summary>

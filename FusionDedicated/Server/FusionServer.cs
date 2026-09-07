@@ -1394,9 +1394,18 @@ public sealed class FusionServer : IDisposable
 
         foreach (var entity in replay)
         {
+            // An owner every client will agree on. A client registers what it is
+            // told it owns with its own update loop and starts sending poses for
+            // it, so naming the person being caught up meant each new arrival
+            // took ownership of every ownerless prop and they all simulated the
+            // same object against each other. That is what flinging looks like.
+            //
+            // Adopting rather than naming one for this message alone, so the next
+            // person told about it hears the same answer.
+            byte owner = entity.OwnerSmallId ?? Adopt(entity, player);
+
             SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
-                entity.OwnerSmallId ?? player.SmallId,
-                entity.OwnerSmallId ?? player.SmallId,
+                owner, owner,
                 entity.Id, entity.Barcode,
                 new Vec3(entity.X, entity.Y, entity.Z), entity.Rotation, 0,
                 spawnEffect: false), reliable: true);
@@ -1405,6 +1414,23 @@ public sealed class FusionServer : IDisposable
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// Gives an ownerless entity to somebody, once, so every catch-up after this
+    /// names the same person. The longest-standing player rather than the newest,
+    /// because they are the least likely to leave next.
+    /// </summary>
+    private byte Adopt(TrackedEntity entity, ConnectedPlayer joining)
+    {
+        byte owner = Players.Players
+            .Where(p => p.SmallId != joining.SmallId)
+            .Select(p => (byte?)p.SmallId)
+            .FirstOrDefault() ?? joining.SmallId;
+
+        Entities.SetOwner(entity.Id, owner);
+
+        return owner;
     }
 
     /// <summary>
@@ -1934,14 +1960,11 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void HandleConstraintDelete(ConnectedPlayer sender, byte[] message)
     {
-        if (!sender.Permission.IsAtLeast(Config.Constrainer))
-        {
-            Log("WARN", $"{sender.DisplayName} tried to clear a constraint but is " +
-                        $"{sender.Permission.ToFusionString()}, not " +
-                        $"{Config.Constrainer.ToFusionString()}, dropped");
-            return;
-        }
-
+        // No rank gate here, unlike creating one. A client deletes its own copy
+        // only when this message comes back to it, so refusing one leaves the
+        // constraint on every screen with nothing able to remove it, including
+        // when a constrained prop is despawned. Ownership is the check that
+        // matters, and it is below.
         var payload = ModuleProtocol.TryReadHandlerPayload(message);
 
         if (payload is not { Length: >= 2 })
@@ -1971,9 +1994,21 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Both ends. The message names one, the clients drop both, and an end
+        // left on our books would count against the cap for the rest of the
+        // session with nothing able to remove it.
+        ushort? partner = entity.Partner;
+
         if (Entities.Remove(id))
         {
-            Log("INFO", $"{sender.DisplayName} cleared constraint {id}");
+            Log("INFO", partner.HasValue
+                ? $"{sender.DisplayName} cleared constraint {id} and {partner.Value}"
+                : $"{sender.DisplayName} cleared constraint {id}");
+        }
+
+        if (partner.HasValue)
+        {
+            Entities.Remove(partner.Value);
         }
 
         Relay(sender, message);
@@ -2032,8 +2067,13 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        Entities.Register(point1, ConstraintBarcode, sender.SmallId, 0, 0, 0).Synthetic = true;
-        Entities.Register(point2, ConstraintBarcode, sender.SmallId, 0, 0, 0).Synthetic = true;
+        var end1 = Entities.Register(point1, ConstraintBarcode, sender.SmallId, 0, 0, 0);
+        var end2 = Entities.Register(point2, ConstraintBarcode, sender.SmallId, 0, 0, 0);
+
+        end1.Synthetic = true;
+        end2.Synthetic = true;
+        end1.Partner = point2;
+        end2.Partner = point1;
 
         Broadcast(ModuleProtocol.WriteModuleToClients(
             ModuleProtocol.ConstraintCreateTag, sender.SmallId, rewritten), reliable: true);

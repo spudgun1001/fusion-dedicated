@@ -48,6 +48,13 @@ public sealed class TrackedEntity
     public bool Synthetic { get; set; }
 
     /// <summary>
+    /// The other end of the same constraint, when this is one. A delete names
+    /// only one of the two, and clients drop both, so without this the other end
+    /// stayed on our books for good and counted against the cap for ever.
+    /// </summary>
+    public ushort? Partner { get; set; }
+
+    /// <summary>
     /// True when the owner left and nobody has taken over. A dedicated server runs no
     /// physics, so an orphan simply hangs wherever it was, it needs adopting or culling.
     /// </summary>
