@@ -365,6 +365,19 @@ public static class FusionProtocol
         }
     }
 
+    /// <summary>
+    /// Fusion's EntitySource: None, Scene, Player. Nothing else is a member of
+    /// it, and we were sending three on every spawn, which is not one.
+    ///
+    /// A client reads it into the enum and compares against it. MagazineExtender
+    /// only attaches its cleaner when the source is Player, so every magazine
+    /// spawned on this server was never cleaned up on any client and the world
+    /// filled with them.
+    /// </summary>
+    public const byte SourceNone = 0;
+    public const byte SourceScene = 1;
+    public const byte SourcePlayer = 2;
+
     public const byte TagSpawnRequest = 20;
     public const byte TagSpawnResponse = 21;
 
@@ -476,7 +489,7 @@ public static class FusionProtocol
     /// wrong length is replaced with an upright rotation rather than written.</param>
     public static byte[] BuildSpawnResponse(byte senderSmallId, byte ownerId, ushort entityId,
         string barcode, Vec3 position, byte[]? rotation, uint trackerId,
-        bool spawnEffect = true, byte source = 3)
+        bool spawnEffect = true, byte source = SourcePlayer)
     {
         var payload = new FusionNetWriter(160);
 
@@ -561,6 +574,80 @@ public static class FusionProtocol
 
     public const byte TagEntityPoseUpdate = 17;
     public const byte TagEntityUnqueueRequest = 13;
+    public const byte TagNetworkPropCreate = 18;
+
+    /// <summary>
+    /// A client telling everyone it has networked a scene object.
+    ///
+    /// Hash and Index name the object within the level, the same way on every
+    /// machine, which is what lets a client find its own copy of it.
+    /// </summary>
+    public readonly record struct PropCreate(byte OwnerSmallId, int Hash, int Index, ushort EntityId);
+
+    /// <summary>Reads a NetworkPropCreate, or null when it does not parse.</summary>
+    public static PropCreate? TryReadPropCreate(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            reader.ReadByte();                  // tag
+            byte relayType = reader.ReadByte();
+            reader.ReadByte();                  // channel
+
+            if (relayType == 4)
+            {
+                reader.ReadNullableByte();
+            }
+
+            if (relayType != 0)
+            {
+                reader.ReadNullableByte();      // sender
+            }
+
+            reader.ReadInt32();                 // payload length
+
+            byte owner = reader.ReadByte();
+            int hash = reader.ReadInt32();
+            int index = reader.ReadInt32();
+
+            return new PropCreate(owner, hash, index, reader.ReadUInt16());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Tells one player about a scene object somebody else already networked.
+    ///
+    /// Only a host replays these, so a newcomer never heard of them and went on
+    /// to network the same object again under a second id. Everybody else
+    /// discards that, because their copy of the object is already registered, so
+    /// from then on nothing the newcomer does to it is seen and nothing anybody
+    /// else does to it reaches them.
+    /// </summary>
+    public static byte[] BuildPropCreate(byte ownerSmallId, int hash, int index, ushort entityId)
+    {
+        var payload = new FusionNetWriter(16);
+
+        payload.Write(ownerSmallId);
+        payload.Write(hash);
+        payload.Write(index);
+        payload.WriteUInt16(entityId);
+
+        var message = new FusionNetWriter(48);
+
+        message.Write(TagNetworkPropCreate);
+        message.Write((byte)3);                 // ToOtherClients, as the client sends it
+        message.Write((byte)0);                 // Reliable
+        message.WriteNullable(ownerSmallId);    // sender
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
     public const byte TagPlayerMetadataResponse = 60;
 
     /// <summary>A player asking for one of their metadata keys to be set.</summary>

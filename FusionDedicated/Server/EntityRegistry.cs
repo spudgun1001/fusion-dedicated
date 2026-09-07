@@ -48,6 +48,12 @@ public sealed class TrackedEntity
     public bool Synthetic { get; set; }
 
     /// <summary>
+    /// Fusion's EntitySource, as the spawn carried it. Repeated to a newcomer so
+    /// their copy agrees with everybody else's about what the thing is.
+    /// </summary>
+    public byte Source { get; set; } = 2;
+
+    /// <summary>
     /// The other end of the same constraint, when this is one. A delete names
     /// only one of the two, and clients drop both, so without this the other end
     /// stayed on our books for good and counted against the cap for ever.
@@ -366,6 +372,19 @@ public sealed class EntityRegistry
                     continue;
                 }
 
+                // A discovered entity is part of the level rather than a spawn.
+                // Despawning one desynchronises everybody: with a poolee it
+                // vanishes from the world, and without one the clients keep the
+                // id while the server frees it to be handed out again.
+                //
+                // Only the idle branch used to say so. A vehicle or door somebody
+                // networked and then left behind became inherited, and fifteen
+                // minutes later it went.
+                if (entity.Discovered)
+                {
+                    continue;
+                }
+
                 bool stale;
 
                 if (entity.IsOrphaned)
@@ -378,10 +397,7 @@ public sealed class EntityRegistry
                 }
                 else
                 {
-                    // A discovered entity may be part of the level rather than a
-                    // spawn, and despawning one of those desynchronises everybody.
                     stale = idleTimeout > TimeSpan.Zero
-                        && !entity.Discovered
                         && now - entity.LastUpdate > idleTimeout;
                 }
 

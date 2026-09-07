@@ -129,4 +129,77 @@ public class UnqueueTests
 
         Assert.Equal(9001, fusion.ReadUInt16());
     }
+
+    [Fact]
+    public void The_prop_create_that_follows_reads_back()
+    {
+        // After the unqueue reply the client broadcasts this, naming the object
+        // inside the level. Keeping it is what lets a later joiner bind their own
+        // copy to the same id instead of minting a second one.
+        var data = new OracleWriter();
+        data.Write((byte)3);        // owner
+        data.Write(1234567);        // hash
+        data.Write(2);              // index
+        data.Write((ushort)300);    // entity id
+
+        var message = new OracleWriter();
+        message.Write((byte)18);
+        message.Write((byte)3);     // ToOtherClients
+        message.Write((byte)0);
+        message.Write((byte?)3);
+        message.Write(data.ToArray());
+
+        var prop = FusionProtocol.TryReadPropCreate(message.ToArray());
+
+        Assert.NotNull(prop);
+        Assert.Equal(3, prop!.Value.OwnerSmallId);
+        Assert.Equal(1234567, prop.Value.Hash);
+        Assert.Equal(2, prop.Value.Index);
+        Assert.Equal(300, prop.Value.EntityId);
+    }
+
+    [Fact]
+    public void Our_prop_create_is_the_bytes_Fusion_would_have_written()
+    {
+        var data = new OracleWriter();
+        data.Write((byte)3);
+        data.Write(1234567);
+        data.Write(2);
+        data.Write((ushort)300);
+
+        var expected = new OracleWriter();
+        expected.Write((byte)18);
+        expected.Write((byte)3);
+        expected.Write((byte)0);
+        expected.Write((byte?)3);
+        expected.Write(data.ToArray());
+
+        Assert.Equal(expected.ToArray(), FusionProtocol.BuildPropCreate(3, 1234567, 2, 300));
+    }
+
+    [Fact]
+    public void A_prop_create_round_trips_through_us_unchanged()
+    {
+        // What the replay does: read one off the wire, keep it, write it back.
+        var prop = FusionProtocol.TryReadPropCreate(
+            FusionProtocol.BuildPropCreate(5, -99, 7, 4242))!.Value;
+
+        Assert.Equal(5, prop.OwnerSmallId);
+        Assert.Equal(-99, prop.Hash);
+        Assert.Equal(7, prop.Index);
+        Assert.Equal(4242, prop.EntityId);
+    }
+
+    [Fact]
+    public void A_spawn_carries_a_source_Fusion_recognises()
+    {
+        // EntitySource is None, Scene, Player. We were sending three, which is
+        // not a member of it, and a client comparing against Player took the
+        // wrong branch: magazines were never cleaned up and piled up instead.
+        byte[] message = FusionProtocol.BuildSpawnResponse(
+            1, 1, 300, "Pack.Spawnable.Mag", new Vec3(0, 0, 0), null, 0);
+
+        Assert.InRange(message[^1], FusionProtocol.SourceNone, FusionProtocol.SourcePlayer);
+        Assert.Equal(FusionProtocol.SourcePlayer, message[^1]);
+    }
 }

@@ -301,6 +301,16 @@ public sealed class FusionServer : IDisposable
         byte? heir = Players.Players.FirstOrDefault()?.SmallId;
         var affected = Entities.Orphan(player.SmallId, heir);
 
+        // Every client has already dropped the owner of these, so unless they are
+        // told who has them now nobody simulates them and they freeze.
+        if (heir is { } newOwner)
+        {
+            foreach (var entity in affected)
+            {
+                AnnounceOwner(entity.Id, newOwner);
+            }
+        }
+
         if (affected.Count > 0)
         {
             Log("INFO", heir.HasValue
@@ -525,6 +535,10 @@ public sealed class FusionServer : IDisposable
                 HandleUnqueueRequest(sender, message);
                 return;
 
+            case FusionProtocol.TagNetworkPropCreate when sender != null:
+                NotePropCreate(sender, message);
+                break;
+
             case GateProtocol.TagPlayerMetadataRequest when sender != null:
                 HandleMetadataRequest(sender, message);
                 return;
@@ -602,6 +616,13 @@ public sealed class FusionServer : IDisposable
                     Log("WARN", $"{sender.DisplayName} tried to wear '{worn}', refused by a " +
                                 $"plugin: {pluginAvatar.Reason}");
                     return;
+                }
+
+                // The measurements travel with the barcode and were never kept, so
+                // a newcomer was told the proportions each player joined in.
+                if (GateProtocol.TryReadAvatarStats(message) is { Length: > 0 } stats)
+                {
+                    sender.AvatarStats = stats;
                 }
 
                 // The panel and the lobby info read this, and it was only ever set
@@ -809,9 +830,10 @@ public sealed class FusionServer : IDisposable
         EnsurePersistentProps(player);
 
         int caught = SendWorldCatchup(player);
+        int scene = SendSceneProps(player);
 
         Log("INFO", $"Catch-up sent: {Players.Count - 1} players, {caught} entities, " +
-                    $"level '{Config.LevelBarcode}'");
+                    $"{scene} scene objects, level '{Config.LevelBarcode}'");
 
         // Everyone's copy of LobbyInfo now has a stale player list.
         PushSettings();
@@ -847,19 +869,25 @@ public sealed class FusionServer : IDisposable
         // The asker is named in the payload, but it is their own claim. Answering
         // whoever actually sent it stops one client asking for ids on another's
         // behalf and stuffing an id into somebody else's queue.
-        if (Entities.Count >= Config.MaxEntities)
-        {
-            Log("WARN", $"Unqueue for {sender.DisplayName} denied: entity limit reached");
-            return;
-        }
-
         ushort allocated = Entities.AllocateId();
 
-        // Registered as theirs, discovered rather than spawned: it was already in
-        // the level, so a newcomer's own copy has it and the join catch-up must
-        // not send it as a spawn.
-        var entity = Entities.Register(allocated, "", sender.SmallId, 0, 0, 0);
-        entity.Discovered = true;
+        // Answered whatever happens. The client has no retry and no timeout: it
+        // waits on this reply before the grab or the seat that asked for it can
+        // proceed, so a silent refusal is that object dead for the session.
+        // Above the cap the id is still given and simply not tracked.
+        if (Entities.Count < Config.MaxEntities)
+        {
+            // Registered as theirs, discovered rather than spawned: it was
+            // already in the level, so a newcomer's own copy has it and the join
+            // catch-up must not send it as a spawn.
+            var entity = Entities.Register(allocated, "", sender.SmallId, 0, 0, 0);
+            entity.Discovered = true;
+        }
+        else
+        {
+            Log("WARN", $"Unqueue for {sender.DisplayName} answered but not tracked: " +
+                        "entity limit reached");
+        }
 
         SendTo(sender.Connection, FusionProtocol.BuildUnqueueResponse(
             sender.SmallId, request.Value.QueuedId, allocated), reliable: true);
@@ -876,6 +904,67 @@ public sealed class FusionServer : IDisposable
     /// operator may write anybody's. A client naming somebody else is refused
     /// rather than trusted, since the name in the payload is only their claim.
     /// </summary>
+    /// <summary>
+    /// Remembers a scene object somebody networked, then lets it carry on to the
+    /// other clients as usual.
+    ///
+    /// Kept so a player who joins later can be told the same id everybody else
+    /// is using. Without it they never hear of the object, network it again under
+    /// a second id, and every message either way about that object is discarded
+    /// by the other side for the rest of the session: their seat is never seen,
+    /// and a door they break stays whole for everyone else.
+    /// </summary>
+    private void NotePropCreate(ConnectedPlayer sender, byte[] message)
+    {
+        var prop = FusionProtocol.TryReadPropCreate(message);
+
+        if (prop == null)
+        {
+            return;
+        }
+
+        // Keyed on what names the object inside the level, so the same object is
+        // never remembered twice.
+        _sceneProps[(prop.Value.Hash, prop.Value.Index)] = prop.Value with
+        {
+            OwnerSmallId = sender.SmallId,
+        };
+    }
+
+    /// <summary>
+    /// Scene objects somebody has networked, by what names them in the level.
+    /// Cleared with the world, since the next level has its own.
+    /// </summary>
+    private readonly Dictionary<(int Hash, int Index), FusionProtocol.PropCreate> _sceneProps = new();
+
+    /// <summary>
+    /// Tells a newcomer about every scene object already networked.
+    ///
+    /// The owner is rewritten to somebody who is still here. A client resolves
+    /// the owner it is given and then asks that player for the object's state; an
+    /// owner it cannot resolve gives it null, and the call it makes next
+    /// dereferences that, so the state never arrives.
+    /// </summary>
+    private int SendSceneProps(ConnectedPlayer player)
+    {
+        int sent = 0;
+
+        foreach (var prop in _sceneProps.Values.ToList())
+        {
+            byte owner = Players.Get(prop.OwnerSmallId) != null
+                ? prop.OwnerSmallId
+                : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
+                    ?? player.SmallId;
+
+            SendTo(player.Connection, FusionProtocol.BuildPropCreate(
+                owner, prop.Hash, prop.Index, prop.EntityId), reliable: true);
+
+            sent++;
+        }
+
+        return sent;
+    }
+
     private void HandleMetadataRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = FusionProtocol.TryReadMetadataRequest(message);
@@ -892,6 +981,14 @@ public sealed class FusionServer : IDisposable
             Log("WARN", $"{sender.DisplayName} tried to set metadata on SmallID " +
                         $"{request.Value.PlayerSmallId}, which is not theirs");
             return;
+        }
+
+        // Kept as well as passed on. The join catch-up sends each player's
+        // metadata, and it was only ever what they arrived with, so a nickname or
+        // a mod's per-player state reverted for whoever joined next.
+        if (Players.Get(request.Value.PlayerSmallId) is { } owner)
+        {
+            owner.Metadata[request.Value.Key] = request.Value.Value;
         }
 
         Broadcast(FusionProtocol.BuildMetadataResponse(
@@ -1041,13 +1138,18 @@ public sealed class FusionServer : IDisposable
 
         ushort entityId = Entities.AllocateId();
 
-        Entities.Register(entityId, request.Value.Barcode, sender.SmallId,
+        var spawned = Entities.Register(entityId, request.Value.Barcode, sender.SmallId,
             request.Value.Position.X, request.Value.Position.Y, request.Value.Position.Z,
             request.Value.Rotation);
 
+        // Echoed rather than chosen. A real host passes the request's own source
+        // through, and it decides how a client treats the thing afterwards.
+        spawned.Source = request.Value.Source;
+
         Broadcast(FusionProtocol.BuildSpawnResponse(sender.SmallId, sender.SmallId, entityId,
             request.Value.Barcode, request.Value.Position, request.Value.Rotation,
-            request.Value.TrackerId, request.Value.SpawnEffect), reliable: true);
+            request.Value.TrackerId, request.Value.SpawnEffect,
+            source: request.Value.Source), reliable: true);
 
         // Source and effect are logged because they are what tells a reload apart
         // from a spawn menu, which a barcode alone does not.
@@ -1495,7 +1597,7 @@ public sealed class FusionServer : IDisposable
                 owner, owner,
                 entity.Id, entity.Barcode,
                 new Vec3(entity.X, entity.Y, entity.Z), entity.Rotation, 0,
-                spawnEffect: false), reliable: true);
+                spawnEffect: false, source: entity.Source), reliable: true);
 
             sent++;
         }
@@ -1510,12 +1612,17 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private byte Adopt(TrackedEntity entity, ConnectedPlayer joining)
     {
+        // Somebody who is already here, so the newcomer is never told it owns
+        // something it is only being introduced to. A real host never does that,
+        // and on the receiving client it also fires the spawn callback for
+        // tracker 0, which is a real tracker number somebody may be waiting on.
         byte owner = Players.Players
             .Where(p => p.SmallId != joining.SmallId)
             .Select(p => (byte?)p.SmallId)
             .FirstOrDefault() ?? joining.SmallId;
 
         Entities.SetOwner(entity.Id, owner);
+        AnnounceOwner(entity.Id, owner);
 
         return owner;
     }
@@ -1738,6 +1845,7 @@ public sealed class FusionServer : IDisposable
         // Everything goes, props included. Anything placed on the new level is put
         // back as players arrive on it.
         Entities.Forget();
+        _sceneProps.Clear();
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
             reliable: true);
@@ -1966,6 +2074,9 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private readonly HashSet<uint> _closing = new();
 
+    /// <summary>Host-only tags a client has tried to send, so it is said once.</summary>
+    private readonly HashSet<byte> _forgedTags = new();
+
     private readonly object _closingLock = new();
 
     /// <summary>
@@ -2190,15 +2301,30 @@ public sealed class FusionServer : IDisposable
         Entities.SetOwner(entityId, requestedOwner);
 
         // The host's only job here is to confirm; it never claims anything itself.
+        AnnounceOwner(entityId, requestedOwner);
+    }
+
+    /// <summary>
+    /// Tells everybody who owns an entity now.
+    ///
+    /// Deciding it here and saying nothing is not enough. When a player leaves,
+    /// every client independently drops the owner of everything they held, so a
+    /// prop handed to an heir is owned by nobody as far as any of them knows.
+    /// Nobody simulates it, and after half a second without a pose their copy
+    /// freezes it in place. Adopting an ownerless prop for a newcomer had the
+    /// same shape: the server knew, and only the newcomer was told.
+    /// </summary>
+    private void AnnounceOwner(ushort entityId, byte owner)
+    {
         var payload = new FusionNetWriter(8);
-        payload.Write(requestedOwner);
+        payload.Write(owner);
         payload.WriteUInt16(entityId);
 
         var response = new FusionNetWriter(32);
         response.Write(FusionProtocol.TagEntityOwnershipResponse);
         response.Write((byte)2); // ToClients
         response.Write((byte)0); // Reliable
-        response.WriteNullable(sender.SmallId);
+        response.WriteNullable(owner);
         response.WriteBlock(payload.ToArray());
 
         Broadcast(response.ToArray(), reliable: true);
@@ -2260,8 +2386,53 @@ public sealed class FusionServer : IDisposable
     /// <summary>Server-addressed tags already reported, so each is said once.</summary>
     private readonly HashSet<byte> _unhandledTags = new();
 
+    /// <summary>
+    /// Messages only a host may send. A client sending one is ignored.
+    ///
+    /// Fusion refuses these on the receiving side: a handler marked ClientsOnly
+    /// throws when it sees a message the receiver handled as the server, and the
+    /// throw is swallowed. So on a real lobby a client forging one of these
+    /// achieves nothing.
+    ///
+    /// A relay forwards on the route byte alone, which handed every one of them
+    /// straight through. That is not a small hole. SpawnResponse alone puts any
+    /// barcode in front of every player without passing the blocklist, the tool
+    /// gate, the rank check, the rate limiter, the entity cap or any plugin;
+    /// Disconnect names a player and their game leaves; SceneLoad moves the whole
+    /// server; EntityOwnershipResponse takes an object out of somebody's hands.
+    /// Every gate this server has was reachable around.
+    /// </summary>
+    private static readonly HashSet<byte> HostOnlyTags = new()
+    {
+        2,    // ConnectionResponse, invents players
+        3,    // Disconnect, removes them
+        12,   // SceneLoad, moves everybody
+        14,   // EntityUnqueueResponse, corrupts another client's queue
+        16,   // EntityOwnershipResponse, takes an object from its holder
+        21,   // SpawnResponse, spawns anything past every gate
+        23,   // DespawnResponse, removes anything
+        45,   // ServerSettings, rewrites the rules on every client
+        60,   // PlayerMetadataResponse, writes anybody's metadata
+        69,   // PlayerRepTeleport, moves a player
+        201,  // DynamicsAssignment
+        202,  // GamemodeMetadataSet
+        203,  // GamemodeMetadataRemove
+    };
+
     private void Relay(ConnectedPlayer sender, byte[] message)
     {
+        if (HostOnlyTags.Contains(message[0]))
+        {
+            if (_forgedTags.Add(message[0]))
+            {
+                Log("WARN", $"{sender.DisplayName} sent tag {message[0]} " +
+                            $"({NameOfTag(message[0])}), which only a server may send. " +
+                            "Ignored. A stock client does not do this.");
+            }
+
+            return;
+        }
+
         var (relayType, channel, target) = ServerProtocol.ReadRoute(message);
 
         bool reliable = channel != 1;
@@ -2300,6 +2471,17 @@ public sealed class FusionServer : IDisposable
 
                 return;
 
+            case 5: // ToTargets, the listed players only
+                foreach (byte listedId in ServerProtocol.ReadTargets(message))
+                {
+                    if (Players.Get(listedId) is { } listed)
+                    {
+                        SendTo(listed.Connection, stamped, reliable);
+                    }
+                }
+
+                return;
+
             default:
                 Broadcast(stamped, reliable, except: sender.SmallId);
                 return;
@@ -2321,7 +2503,21 @@ public sealed class FusionServer : IDisposable
         20 => "SpawnRequest",
         22 => "DespawnRequest",
         59 => "PlayerMetadataRequest",
+        2 => "ConnectionResponse",
+        12 => "SceneLoad",
+        14 => "EntityUnqueueResponse",
+        16 => "EntityOwnershipResponse",
+        18 => "NetworkPropCreate",
+        21 => "SpawnResponse",
+        23 => "DespawnResponse",
+        45 => "ServerSettings",
+        60 => "PlayerMetadataResponse",
         62 => "LevelRequest, which only the panel may do here",
+        69 => "PlayerRepTeleport",
+        201 => "DynamicsAssignment",
+        202 => "GamemodeMetadataSet",
+        203 => "GamemodeMetadataRemove",
+        209 => "RPCEvent addressed to the server, which needs a game to run it",
         68 => "PermissionCommandRequest",
         _ => "unknown",
     };

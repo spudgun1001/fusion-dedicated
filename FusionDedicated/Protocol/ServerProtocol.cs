@@ -519,6 +519,50 @@ public static class ServerProtocol
     /// <summary>
     /// Reads a relayed message's route so the server knows where to forward it.
     /// </summary>
+    /// <summary>
+    /// The players a ToTargets message names.
+    ///
+    /// The list is a length prefixed block of small ids sitting where a single
+    /// target would be. Relaying one to everybody instead, which is what a
+    /// missing case did, sends a message meant for two people to the room.
+    /// </summary>
+    public static IReadOnlyList<byte> ReadTargets(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            reader.ReadByte();                       // tag
+            byte relayType = reader.ReadByte();
+            reader.ReadByte();                       // channel
+
+            if (relayType != 5)
+            {
+                return Array.Empty<byte>();
+            }
+
+            int count = reader.ReadInt32();
+
+            if (count is < 0 or > 255)
+            {
+                return Array.Empty<byte>();
+            }
+
+            var targets = new byte[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                targets[i] = reader.ReadByte();
+            }
+
+            return targets;
+        }
+        catch
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
     public static (byte RelayType, byte Channel, byte? Target) ReadRoute(ReadOnlySpan<byte> message)
     {
         if (message.Length < 3)

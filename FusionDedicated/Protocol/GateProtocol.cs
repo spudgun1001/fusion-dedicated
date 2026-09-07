@@ -88,4 +88,28 @@ public static class GateProtocol
             return null;
         }
     }
+
+    /// <summary>
+    /// The avatar's measurements, which travel in the same message as its barcode.
+    ///
+    /// A newcomer is told the stats every existing player joined with, and those
+    /// were never updated on a swap. The model was right and the proportions were
+    /// the previous avatar's, so height, reach and where a player could grab from
+    /// were all somebody else's.
+    /// </summary>
+    public static byte[]? TryReadAvatarStats(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            return TrySkipPrefix(ref reader, message, TagPlayerRepAvatar)
+                ? reader.ReadRaw(AvatarStatsSize).ToArray()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
