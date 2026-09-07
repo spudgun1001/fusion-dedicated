@@ -369,6 +369,7 @@ public static class Program
         var lastTick = DateTime.UtcNow;
         var lastSample = DateTime.UtcNow;
         var lobbyRetry = new LobbyRetry(TimeSpan.FromSeconds(30));
+        var lobbyPublish = new LobbyPublishGate();
 
         while (!quit.IsCancellationRequested)
         {
@@ -391,8 +392,18 @@ public static class Program
 
             // Steam can take minutes to sign in. Asking once at startup left the
             // server invisible for good when it had not finished by then.
-            if (lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow)
-                && await lobby.PublishAsync(config.MaxPlayers))
+            //
+            // Started and left running, never awaited. Steam completes the call
+            // through RunCallbacks, this loop is the only thing pumping it, and
+            // awaiting here would suspend the loop waiting for a callback nothing
+            // can raise: the whole server would stop rather than recover.
+            if (lobbyPublish.MayStart(DateTime.UtcNow)
+                && lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow))
+            {
+                lobbyPublish.Started(lobby.PublishAsync(config.MaxPlayers), DateTime.UtcNow);
+            }
+
+            if (lobbyPublish.Collect() is { } published && published)
             {
                 lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
                 wasPublished = true;
