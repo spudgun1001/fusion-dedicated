@@ -160,9 +160,12 @@ public sealed class PanelUsers
                 _accounts = new Dictionary<string, PanelAccount>(parsed, StringComparer.OrdinalIgnoreCase);
             }
         }
-        catch (JsonException)
+        catch (Exception e) when (e is JsonException or IOException
+            or UnauthorizedAccessException)
         {
-            // A broken file must not lock everyone out of a running server.
+            // A broken file must not lock everyone out of a running server, and
+            // a file being written at this moment throws from the read rather
+            // than the parse.
         }
     }
 

@@ -134,6 +134,18 @@ public sealed class EntityRegistry
 
     public const ushort FirstEntityId = 256;
 
+    /// <summary>
+    /// The most entities to hold, or zero for no limit. Only consulted where an
+    /// entity would be created from something a client sent unprompted.
+    /// </summary>
+    public int Capacity
+    {
+        get => _capacity;
+        set => _capacity = value;
+    }
+
+    private int _capacity;
+
     /// <summary>Next id the allocator will try. Exposed so pressure is visible.</summary>
     public ushort NextId
     {
@@ -245,6 +257,15 @@ public sealed class EntityRegistry
                 entity.Y = y;
                 entity.Z = z;
                 entity.LastUpdate = DateTime.UtcNow;
+                return;
+            }
+
+            // A pose for an id nobody spawned is how scene props are noticed, and
+            // it is also a free entity from an unauthenticated packet. Refusing
+            // past the cap stops a client inflating the count, which is what made
+            // the eviction below something a player could aim.
+            if (_capacity > 0 && _entities.Count >= _capacity)
+            {
                 return;
             }
 
@@ -381,15 +402,28 @@ public sealed class EntityRegistry
     /// touched prop is worse for one player than the world being locked is for all
     /// of them, so this widens the search rather than refusing.
     /// </param>
-    public List<ushort> EvictOldest(int count, bool anyOwner = false)
+    /// <param name="idleFor">
+    /// With <paramref name="anyOwner"/>, how long an entity must have sat still
+    /// before it can be taken. Without it a player's own prop is destroyed while
+    /// they are holding it, and worse, the order is by last update, so anybody
+    /// who can add entities faster than they are evicted decides whose work
+    /// goes. Requiring real idleness means nothing in use is ever a candidate.
+    /// </param>
+    public List<ushort> EvictOldest(int count, bool anyOwner = false, TimeSpan idleFor = default)
     {
         var removed = new List<ushort>();
+        var cutoff = DateTime.UtcNow - (idleFor == default ? TimeSpan.FromMinutes(2) : idleFor);
 
         lock (_lock)
         {
             var candidates = _entities.Values
                 .Where(e => e.Removable
-                    && (anyOwner || e.Inherited || e.IsOrphaned))
+                    && (anyOwner
+                        // Discovered ones came with the level and synthetic ones
+                        // are not spawnables, so despawning either tells clients
+                        // about something they cannot act on.
+                        ? !e.Discovered && !e.Synthetic && e.LastUpdate < cutoff
+                        : e.Inherited || e.IsOrphaned))
                 .OrderBy(e => e.LastUpdate)
                 .Take(count)
                 .ToList();

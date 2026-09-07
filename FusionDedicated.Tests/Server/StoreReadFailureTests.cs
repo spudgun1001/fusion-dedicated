@@ -103,4 +103,48 @@ public class StoreReadFailureTests : IDisposable
 
         Assert.Equal(PermissionLevel.Owner, store.Get(76561198000000001));
     }
+
+    [Fact]
+    public void A_read_that_failed_is_tried_again_rather_than_lost()
+    {
+        // The stamp used to move before the read. Once the read was allowed to
+        // fail quietly, that meant an edit made while the file was busy was
+        // marked as seen and never looked at again: silently discarded until
+        // somebody touched the file a second time.
+        string path = Path.Combine(_dir, "retry.json");
+
+        var writer = new RankStore(path);
+        writer.Set(76561198000000001, "Terminator", PermissionLevel.Owner);
+        writer.Save();
+
+        var reader = new RankStore(path);
+        reader.Load();
+
+        // Somebody edits the file, and the read collides with a write.
+        writer.Set(76561198000000002, "Kanzaaa", PermissionLevel.Operator);
+        writer.Save();
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None))
+        {
+            Assert.False(reader.ReloadIfChanged());
+        }
+
+        // The file is free again, so the change is still waiting to be read.
+        Assert.True(reader.ReloadIfChanged());
+        Assert.Equal(PermissionLevel.Operator, reader.Get(76561198000000002));
+    }
+
+    [Fact]
+    public void A_file_that_has_not_changed_is_not_read_twice()
+    {
+        string path = Path.Combine(_dir, "steady.json");
+
+        var store = new RankStore(path);
+        store.Set(76561198000000001, "Terminator", PermissionLevel.Owner);
+        store.Save();
+
+        store.ReloadIfChanged();
+
+        Assert.False(store.ReloadIfChanged());
+    }
 }

@@ -49,6 +49,7 @@ public sealed class FusionServer : IDisposable
     {
         Config = config;
         Players.MaxPlayers = config.MaxPlayers;
+        Entities.Capacity = config.MaxEntities;
         Guard = new SpawnGuard(config);
     }
 
@@ -276,10 +277,12 @@ public sealed class FusionServer : IDisposable
     /// then they are already out of the register, so this does not run again.
     /// </summary>
     /// <param name="announce">
-    /// What the other clients are told. The reason a socket closed is a Steam
-    /// string like "Closing Connection", which is useful in the log and no use on
-    /// somebody's screen, so an ordinary leave is announced plainly and only a
-    /// kick passes its own wording through.
+    /// What the other clients are told, which is never the reason.
+    ///
+    /// The reason a socket closed is a Steam string like "Closing Connection",
+    /// and the reason for a kick is whatever an operator typed: ban reasons name
+    /// alt accounts and other servers and are nobody else's business. Both are
+    /// for the log. Everybody else gets a plain sentence.
     /// </param>
     private void Depart(ConnectedPlayer player, string reason, string? announce = null)
     {
@@ -471,6 +474,18 @@ public sealed class FusionServer : IDisposable
         }
 
         byte tag = message[0];
+
+        // Being torn down. Their entry has already gone, so nothing below would
+        // recognise them anyway, and a ConnectionRequest would be taken as a new
+        // arrival. It also keeps their in-flight packets out of the log.
+        lock (_closingLock)
+        {
+            if (_closing.Contains(connection.m_HSteamNetConnection))
+            {
+                return;
+            }
+        }
+
         var sender = Players.GetByConnection(connection);
 
         if (sender != null)
@@ -877,14 +892,19 @@ public sealed class FusionServer : IDisposable
                 // A world that stays full refuses every spawn from every player
                 // until somebody restarts the server, which is a worse outcome
                 // than one stale prop going.
-                var forced = Entities.EvictOldest(Config.EvictBatchSize, anyOwner: true);
+                // Only things that have sat still for two minutes. Anything in
+                // use keeps sending poses, so a player's own work is never taken
+                // out from under them, and somebody adding entities quickly
+                // cannot aim the eviction at anybody else.
+                var forced = Entities.EvictOldest(
+                    Config.EvictBatchSize, anyOwner: true, idleFor: TimeSpan.FromMinutes(2));
 
                 if (forced.Count > 0)
                 {
                     DespawnOnClients(forced);
                     Log("WARN", $"World still at capacity with nothing abandoned, so the " +
-                                $"{forced.Count} least recently touched entities were removed. " +
-                                "Set IdleTimeoutSeconds so it does not come to this.");
+                                $"{forced.Count} entities nobody has touched in two minutes " +
+                                "were removed. Set IdleTimeoutSeconds so it does not come to this.");
                 }
             }
 
@@ -1438,6 +1458,17 @@ public sealed class FusionServer : IDisposable
             return false;
         }
 
+        // The ends of a constraint are tracked under a barcode the server made
+        // up. Writing one to the file would put it back on every restart as a
+        // spawn of something no pallet has, and the entity that came back would
+        // not be marked synthetic, so it would reach the join catch-up too.
+        if (entity.Synthetic)
+        {
+            Log("WARN", $"'{entity.ShortName}' is part of a constraint, not a prop, " +
+                        "so it cannot be kept");
+            return false;
+        }
+
         entity.Persistent = true;
 
         store.Add(new Props.PersistentProp
@@ -1815,6 +1846,16 @@ public sealed class FusionServer : IDisposable
     private readonly HashSet<long> _unknownModules = new();
 
     /// <summary>
+    /// Connections being torn down. Nothing they send is listened to, including a
+    /// fresh ConnectionRequest, which is the only message that does not need a
+    /// known sender and would otherwise let a kicked client back in during the
+    /// quarter second before the socket closes.
+    /// </summary>
+    private readonly HashSet<uint> _closing = new();
+
+    private readonly object _closingLock = new();
+
+    /// <summary>
     /// Module messages carry whatever Fusion's own modules define. The only one the
     /// server has to act on is a constraint, which needs the host to hand out an
     /// entity id for each end before anybody can build it.
@@ -1903,14 +1944,36 @@ public sealed class FusionServer : IDisposable
 
         var payload = ModuleProtocol.TryReadHandlerPayload(message);
 
-        if (payload is { Length: >= 2 })
+        if (payload is not { Length: >= 2 })
         {
-            ushort id = System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(payload);
+            return;
+        }
 
-            if (Entities.Remove(id))
-            {
-                Log("INFO", $"{sender.DisplayName} cleared constraint {id}");
-            }
+        ushort id = System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(payload);
+        var entity = Entities.Get(id);
+
+        // The payload is two bytes an untrusted client chose, so without this the
+        // message is "delete any entity by number": somebody else's build, a prop
+        // marked to survive restarts, anything. Only the ends of a constraint can
+        // be cleared this way, and only by whoever owns them unless they outrank
+        // it, which is the rule the ordinary despawn path already uses.
+        if (entity is not { Synthetic: true })
+        {
+            Log("WARN", $"{sender.DisplayName} tried to clear {id}, which is not a constraint");
+            return;
+        }
+
+        if (Config.ExtendedProtection
+            && !DespawnAuthority.MayDespawn(entity.OwnerSmallId, sender.SmallId, sender.Permission))
+        {
+            Log("WARN", $"{sender.DisplayName} tried to clear a constraint belonging to " +
+                        $"SmallID {entity.OwnerSmallId}");
+            return;
+        }
+
+        if (Entities.Remove(id))
+        {
+            Log("INFO", $"{sender.DisplayName} cleared constraint {id}");
         }
 
         Relay(sender, message);
@@ -2177,14 +2240,29 @@ public sealed class FusionServer : IDisposable
 
         // Then everybody else, here rather than from the disconnect callback,
         // because closing the connection ourselves does not raise one.
+        // Kicked, not why. The reason belongs to them and the log.
         if (Players.Remove(connection) is { } gone)
         {
-            Depart(gone, reason, announce: reason);
+            Depart(gone, reason, announce: "Removed from the server");
+        }
+
+        // Their entry is gone, so nothing downstream can recognise them any more.
+        // ConnectionRequest is the one message with no sender check, and without
+        // this a kicked client could hand in a fresh request inside the window
+        // before the socket closes and be let straight back in.
+        lock (_closingLock)
+        {
+            _closing.Add(connection.m_HSteamNetConnection);
         }
 
         Task.Delay(250).ContinueWith(_ =>
         {
             SteamNetworkingSockets.CloseConnection(connection, 0, reason, false);
+
+            lock (_closingLock)
+            {
+                _closing.Remove(connection.m_HSteamNetConnection);
+            }
         });
     }
 

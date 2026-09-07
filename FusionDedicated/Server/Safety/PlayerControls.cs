@@ -102,11 +102,14 @@ public sealed class Whitelist
     public DateTime LastWriteSeen { get; private set; }
 
     /// <summary>Reads the file, keeping the current list if it will not parse.</summary>
-    public void Load()
+    public void Load() => TryLoad();
+
+    /// <summary>Reads the file, and says whether it managed to.</summary>
+    public bool TryLoad()
     {
         if (!File.Exists(_path))
         {
-            return;
+            return true;
         }
 
         try
@@ -116,7 +119,7 @@ public sealed class Whitelist
 
             if (parsed is null)
             {
-                return;
+                return true;
             }
 
             var rebuilt = new Dictionary<ulong, string>();
@@ -138,11 +141,18 @@ public sealed class Whitelist
             or UnauthorizedAccessException)
         {
             // Keep the list we had. Dropping it would lock everyone out at once.
-        // A file being written at this moment throws IOException from the read,
-        // not JsonException, and this is called from the main loop every ten
-        // seconds. It escaped, nothing above caught it, and the server died: the
-        // panel saving while the reload ran was enough to do it.
+            //
+            // A file being written at this moment throws IOException from the
+            // read, not JsonException, and this is called from the main loop
+            // every ten seconds. It escaped, nothing above caught it, and the
+            // server died: the panel saving while the reload ran did it.
+            //
+            // Reported as a failure so the caller does not mark the file as read
+            // and then never look at it again.
+            return false;
         }
+
+        return true;
     }
 
     public void Save()
@@ -185,9 +195,16 @@ public sealed class Whitelist
             return false;
         }
 
-        LastWriteSeen = stamp;
-        Load();
+        // The stamp only moves once the file has actually been read. Advancing it
+        // first meant a read that failed because the file was busy was never
+        // retried: the edit was swallowed and stayed swallowed until somebody
+        // touched the file again.
+        if (!TryLoad())
+        {
+            return false;
+        }
 
+        LastWriteSeen = stamp;
         return true;
     }
 }

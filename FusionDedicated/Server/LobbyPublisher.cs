@@ -25,9 +25,15 @@ public sealed class LobbyPublisher : IDisposable
 
     private const string GameName = "BONELAB";
 
-    private CallResult<LobbyCreated_t>? _createResult;
+    // One per attempt. A single shared slot meant a callback resolved whichever
+    // attempt happened to be current rather than its own, so an abandoned attempt
+    // that answered late completed the next one's task and left a second live
+    // lobby in the browser that nothing afterwards wrote to or closed.
+    private readonly List<CallResult<LobbyCreated_t>> _outstanding = new();
+    private readonly object _outstandingLock = new();
+
     private CSteamID _lobbyId = CSteamID.Nil;
-    private TaskCompletionSource<bool>? _pending;
+    private long _generation;
 
     public bool IsPublished => _lobbyId != CSteamID.Nil;
     public ulong LobbyId => _lobbyId.m_SteamID;
@@ -39,29 +45,53 @@ public sealed class LobbyPublisher : IDisposable
     /// </summary>
     public Task<bool> PublishAsync(int maxPlayers)
     {
-        _pending = new TaskCompletionSource<bool>();
+        var pending = new TaskCompletionSource<bool>();
+        var handle = CallResult<LobbyCreated_t>.Create();
 
-        _createResult = CallResult<LobbyCreated_t>.Create(OnLobbyCreated);
+        long generation = Interlocked.Increment(ref _generation);
 
-        var call = SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePublic, maxPlayers);
-        _createResult.Set(call);
-
-        return _pending.Task;
-    }
-
-    private void OnLobbyCreated(LobbyCreated_t result, bool failure)
-    {
-        if (failure || result.m_eResult != EResult.k_EResultOK)
+        lock (_outstandingLock)
         {
-            _pending?.TrySetResult(false);
-            return;
+            _outstanding.Add(handle);
         }
 
-        _lobbyId = new CSteamID(result.m_ulSteamIDLobby);
+        handle.Set(
+            SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypePublic, maxPlayers),
+            (result, failure) =>
+            {
+                lock (_outstandingLock)
+                {
+                    _outstanding.Remove(handle);
+                }
 
-        SteamMatchmaking.SetLobbyJoinable(_lobbyId, true);
+                handle.Dispose();
 
-        _pending?.TrySetResult(true);
+                if (failure || result.m_eResult != EResult.k_EResultOK)
+                {
+                    pending.TrySetResult(false);
+                    return;
+                }
+
+                var lobby = new CSteamID(result.m_ulSteamIDLobby);
+
+                // Answered after somebody gave up on it. Steam made the lobby
+                // anyway, so it is left rather than abandoned, or it would sit in
+                // the browser as an entry nobody can join.
+                if (Interlocked.Read(ref _generation) != generation)
+                {
+                    try { SteamMatchmaking.LeaveLobby(lobby); } catch { }
+
+                    pending.TrySetResult(false);
+                    return;
+                }
+
+                _lobbyId = lobby;
+                SteamMatchmaking.SetLobbyJoinable(lobby, true);
+
+                pending.TrySetResult(true);
+            });
+
+        return pending.Task;
     }
 
     /// <summary>
@@ -88,10 +118,14 @@ public sealed class LobbyPublisher : IDisposable
 
         var info = LobbyInfoBuilder.Build(config, players, hostSteamId);
 
-        if (!SteamMatchmaking.SetLobbyData(_lobbyId, IdentifierKey, bool.TrueString))
+        if (!SetLobbyDataChecked(IdentifierKey, bool.TrueString))
         {
-            // Forgotten rather than closed: there is nothing left to leave, and
-            // holding the id would stop the retry ever trying again.
+            // A failed write is not proof the lobby has gone: it is also what a
+            // transient fault looks like. Left rather than merely forgotten, so a
+            // lobby that does still exist does not stay in the browser as an
+            // entry nobody can join once the replacement is published.
+            try { SteamMatchmaking.LeaveLobby(_lobbyId); } catch { }
+
             _lobbyId = CSteamID.Nil;
             return false;
         }
@@ -116,6 +150,9 @@ public sealed class LobbyPublisher : IDisposable
         return true;
     }
 
+    private bool SetLobbyDataChecked(string key, string value)
+        => SteamMatchmaking.SetLobbyData(_lobbyId, key, value);
+
     public void Close()
     {
         if (IsPublished)
@@ -128,7 +165,16 @@ public sealed class LobbyPublisher : IDisposable
 
     public void Dispose()
     {
-        _createResult?.Dispose();
+        // Anything still waiting on Steam, so no registration outlives us.
+        lock (_outstandingLock)
+        {
+            foreach (var handle in _outstanding)
+            {
+                try { handle.Dispose(); } catch { }
+            }
+
+            _outstanding.Clear();
+        }
     }
 
     public static string GenerateCode()

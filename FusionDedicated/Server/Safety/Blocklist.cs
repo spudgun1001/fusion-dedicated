@@ -77,12 +77,15 @@ public sealed class BlocklistStore
 
     public DateTime LastWriteSeen { get; private set; }
 
-    public void Load()
+    public void Load() => TryLoad();
+
+    /// <summary>Reads the file, and says whether it managed to.</summary>
+    public bool TryLoad()
     {
         if (!File.Exists(_path))
         {
             Current = null;
-            return;
+            return true;
         }
 
         try
@@ -98,11 +101,18 @@ public sealed class BlocklistStore
             or UnauthorizedAccessException)
         {
             // Keep the list we already had rather than dropping every rule.
-        // A file being written at this moment throws IOException from the read,
-        // not JsonException, and this is called from the main loop every ten
-        // seconds. It escaped, nothing above caught it, and the server died: the
-        // panel saving while the reload ran was enough to do it.
+            //
+            // A file being written at this moment throws IOException from the
+            // read, not JsonException, and this is called from the main loop
+            // every ten seconds. It escaped, nothing above caught it, and the
+            // server died: the panel saving while the reload ran did it.
+            //
+            // Reported as a failure so the caller does not mark the file as read
+            // and then never look at it again.
+            return false;
         }
+
+        return true;
     }
 
     public bool ReloadIfChanged()
@@ -123,9 +133,16 @@ public sealed class BlocklistStore
             return false;
         }
 
-        LastWriteSeen = stamp;
-        Load();
+        // The stamp only moves once the file has actually been read. Advancing it
+        // first meant a read that failed because the file was busy was never
+        // retried: the edit was swallowed and stayed swallowed until somebody
+        // touched the file again.
+        if (!TryLoad())
+        {
+            return false;
+        }
 
+        LastWriteSeen = stamp;
         return true;
     }
 }
