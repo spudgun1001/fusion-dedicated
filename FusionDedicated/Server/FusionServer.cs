@@ -300,6 +300,15 @@ public sealed class FusionServer : IDisposable
         _rateLimiter.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
 
+        // Small ids are reused, so the next holder of this one is a different
+        // person with a different set of mods and has never been asked anything.
+        _askedFor.RemoveWhere(a => a.Holder == player.SmallId);
+
+        foreach (var holders in _barcodeHolders.Values)
+        {
+            holders.Remove(player.SmallId);
+        }
+
         // Their entities lost the only machine simulating them. Hand them to another
         // player if anyone is left, otherwise they hang frozen until culled.
         byte? heir = Players.Players.FirstOrDefault()?.SmallId;
@@ -652,6 +661,9 @@ public sealed class FusionServer : IDisposable
                 if (worn.Length > 0)
                 {
                     sender.AvatarBarcode = worn;
+
+                    RememberHolder(worn, sender.SmallId);
+                    AskWhereItComesFrom(sender, worn);
                 }
 
                 break;
@@ -1424,6 +1436,10 @@ public sealed class FusionServer : IDisposable
 
         RememberHolder(request.Value.Barcode, sender.SmallId);
 
+        // While the spawner is still here to answer. Everyone else is about to be
+        // told about this thing, and the ones who have not got it will go asking.
+        AskWhereItComesFrom(sender, request.Value.Barcode);
+
         ushort entityId = Entities.AllocateId();
 
         var spawned = Entities.Register(entityId, request.Value.Barcode, sender.SmallId,
@@ -1683,7 +1699,89 @@ public sealed class FusionServer : IDisposable
     private readonly Dictionary<string, HashSet<byte>> _barcodeHolders = new();
 
     /// <summary>Forwarded requests, so the reply can be matched back to its barcode.</summary>
-    private readonly Dictionary<(byte Requester, uint Tracker), string> _pendingModInfo = new();
+    private readonly Dictionary<(byte Requester, uint Tracker), (string Barcode, DateTime Asked)>
+        _pendingModInfo = new();
+
+    /// <summary>Who has already been asked about a barcode, so nobody is asked twice.</summary>
+    private readonly HashSet<(string Barcode, byte Holder)> _askedFor = new();
+
+    /// <summary>Tracker ids for the server's own questions. Counts from one.</summary>
+    private uint _modInfoTracker = 1;
+
+    private const int MaxPendingModInfo = 512;
+    private const int MaxAskedFor = 4096;
+    private static readonly TimeSpan ModInfoPatience = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// A question nobody answers is never removed, so this drops the ones whose
+    /// asker gave up long ago. Fusion waits five seconds; thirty is generous.
+    /// </summary>
+    private void PruneModInfo()
+    {
+        var cutoff = DateTime.UtcNow - ModInfoPatience;
+
+        foreach (var key in _pendingModInfo
+                     .Where(p => p.Value.Asked < cutoff)
+                     .Select(p => p.Key)
+                     .ToList())
+        {
+            _pendingModInfo.Remove(key);
+        }
+
+        if (_pendingModInfo.Count > MaxPendingModInfo)
+        {
+            foreach (var key in _pendingModInfo
+                         .OrderBy(p => p.Value.Asked)
+                         .Take(_pendingModInfo.Count - MaxPendingModInfo)
+                         .Select(p => p.Key)
+                         .ToList())
+            {
+                _pendingModInfo.Remove(key);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Asks a player where a barcode comes from, so the server can hand the answer
+    /// to anybody else who needs it.
+    ///
+    /// A client that meets something it has not got asks whoever owns it, never the
+    /// server, so none of that traffic taught the server anything. It then had
+    /// nothing to say when somebody joined after the owner left, or when the owner
+    /// installed the mod by hand and so had no mod.io listing to quote. Asking once,
+    /// when a barcode first appears, fills the catalogue while the owner is still
+    /// here.
+    /// </summary>
+    private void AskWhereItComesFrom(ConnectedPlayer holder, string barcode)
+    {
+        if (string.IsNullOrWhiteSpace(barcode) ||
+            IsBaseGame(barcode) ||
+            Config.FindMod(barcode) != null ||
+            _askedFor.Count >= MaxAskedFor ||
+            !_askedFor.Add((barcode, holder.SmallId)))
+        {
+            return;
+        }
+
+        PruneModInfo();
+
+        uint tracker = _modInfoTracker++;
+        _pendingModInfo[(PlayerRegistry.ServerSmallId, tracker)] = (barcode, DateTime.UtcNow);
+
+        SendTo(holder.Connection,
+            ServerProtocol.WriteModInfoRequest(holder.SmallId, barcode, tracker),
+            reliable: true);
+    }
+
+    /// <summary>
+    /// Content that ships with the game. Everybody already has it, and a client
+    /// asked about one answers nothing because there is no mod.io listing behind
+    /// it, so asking would fill the asked list with questions that never resolve.
+    /// </summary>
+    private static bool IsBaseGame(string barcode)
+        => barcode.StartsWith("SLZ.", StringComparison.OrdinalIgnoreCase) ||
+           barcode.StartsWith("fa534c5a868247138f50c62e424c4144.", StringComparison.OrdinalIgnoreCase) ||
+           barcode.StartsWith("c3534c5a", StringComparison.OrdinalIgnoreCase);
 
     private void RememberHolder(string barcode, byte smallId)
     {
@@ -1712,11 +1810,39 @@ public sealed class FusionServer : IDisposable
 
         var (target, barcode, trackerId) = request.Value;
 
-        // Only requests aimed at the host are ours to answer. One client asking
-        // another must still be passed along untouched.
+        // A client asking another client, which is what a missing spawnable or
+        // avatar produces. It still goes to whoever was asked, but the server
+        // answers too when it knows: the owner returns in silence if the mod was
+        // installed by hand rather than from mod.io, and the asker then waits out
+        // its five second fuse with nothing to show. Fusion keeps only the first
+        // reply, so a second one costs nothing.
         if (target.HasValue && target.Value != PlayerRegistry.ServerSmallId)
         {
             Relay(sender, message);
+
+            if (Config.FindMod(barcode) is { } known)
+            {
+                SendTo(sender.Connection,
+                    ServerProtocol.WriteModInfoResponse(sender.SmallId, known.ModId, known.ModFileId,
+                        Config.ModPlatform, trackerId),
+                    reliable: true);
+
+                Log("INFO", $"{sender.DisplayName} asked {target.Value} about '{barcode}'; " +
+                            $"answered from the catalogue as mod.io {known.ModId}");
+            }
+            else
+            {
+                Log("INFO", $"{sender.DisplayName} asked {target.Value} about '{barcode}', " +
+                            "which the server has no id for");
+
+                // Ask as well, so the next person who needs it is not left waiting
+                // on somebody who may have gone by then.
+                if (Players.Get(target.Value) is { } owner)
+                {
+                    AskWhereItComesFrom(owner, barcode);
+                }
+            }
+
             return;
         }
 
@@ -1759,7 +1885,8 @@ public sealed class FusionServer : IDisposable
                 is { } forwarded &&
             Players.Get(holder.Value) is { } holderPlayer)
         {
-            _pendingModInfo[(sender.SmallId, trackerId)] = barcode;
+            PruneModInfo();
+            _pendingModInfo[(sender.SmallId, trackerId)] = (barcode, DateTime.UtcNow);
 
             SendTo(holderPlayer.Connection, forwarded, reliable: true);
 
@@ -1803,15 +1930,22 @@ public sealed class FusionServer : IDisposable
         var response = ServerProtocol.TryReadModInfoResponse(message);
 
         if (response is { } r && r.Target.HasValue &&
-            _pendingModInfo.Remove((r.Target.Value, r.TrackerId), out string? barcode) &&
+            _pendingModInfo.Remove((r.Target.Value, r.TrackerId), out var pending) &&
             r.ModId > 0)
         {
-            RememberHolder(barcode, sender.SmallId);
+            RememberHolder(pending.Barcode, sender.SmallId);
 
-            if (Config.LearnMod(barcode, r.ModId, r.ModFileId))
+            if (Config.LearnMod(pending.Barcode, r.ModId, r.ModFileId))
             {
                 Config.Save(Program.ConfigPath);
-                Log("INFO", $"Learned '{barcode}' is mod.io {r.ModId}, the server can serve it from now on");
+                Log("INFO", $"Learned '{pending.Barcode}' is mod.io {r.ModId}, " +
+                            "the server can serve it from now on");
+            }
+
+            // The server asked this one itself, so there is nobody to pass it to.
+            if (r.Target.Value == PlayerRegistry.ServerSmallId)
+            {
+                return;
             }
         }
 

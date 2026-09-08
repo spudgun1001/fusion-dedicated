@@ -365,6 +365,34 @@ public static class ServerProtocol
     /// a has-file flag and the platform the files were built for, then the tracker
     /// id the request came in with.
     /// </summary>
+    /// <summary>
+    /// Asks one player where a barcode comes from.
+    ///
+    /// The server owns no mods, so the only way it can ever answer somebody
+    /// else's question about a barcode is to have asked a player who has it. It
+    /// only ever did that when a request came to it directly, which for a
+    /// spawnable it never does: that goes to whoever spawned the thing. So the
+    /// catalogue stayed empty and the server could help nobody.
+    /// </summary>
+    public static byte[] WriteModInfoRequest(byte targetSmallId, string barcode, uint trackerId)
+    {
+        var payload = new FusionNetWriter(barcode.Length + 32);
+
+        payload.Write(barcode);
+        payload.WriteUInt32(trackerId);
+
+        var message = new FusionNetWriter(payload.Position + 32);
+
+        message.Write(TagModInfoRequest);
+        message.Write((byte)4);                 // ToTarget
+        message.Write(ChannelReliable);
+        message.WriteNullable(targetSmallId);   // the player being asked
+        message.WriteNullable((byte)0);         // sender: the server
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
     public static byte[] WriteModInfoResponse(byte targetSmallId, int modId, int? modFileId,
         string platform, uint trackerId)
     {
