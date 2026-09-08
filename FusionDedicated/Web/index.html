@@ -317,6 +317,9 @@
   tbody td {
     padding: 11px 15px; vertical-align: middle;
     border-bottom: 1px solid hsl(var(--border) / .65);
+    /* A name with no spaces in it used to push the table wider than the window,
+       and took the header and the whole page sideways with it. */
+    overflow-wrap: anywhere;
   }
   tbody tr:last-child td { border-bottom: 0; }
   tbody tr { transition: background .1s var(--ease); }
@@ -946,6 +949,38 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/**
+ * A name fit to put in a table.
+ *
+ * A player picks their own, and BONELAB lets them colour it, so what arrives is
+ * often a rope of colour tags around one letter each. Escaped, that is safe but
+ * unreadable, and it was wide enough to push the whole page sideways.
+ *
+ * Whole tags go first, so their contents go with them, then any bracket or
+ * control character left over, the way LabRP cleans a name for the same reason.
+ */
+const NameLimit = 40;
+
+function plain(value, limit) {
+  const text = String(value == null ? '' : value)
+    .replace(/<[^>]*>/g, '')
+    .replace(/[<>]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const cap = limit || NameLimit;
+
+  return text.length > cap ? text.slice(0, cap - 1) + '…' : text;
+}
+
+/** The cleaned name, with the whole of it on hover when it had to be cut. */
+function nameCell(value) {
+  const short = plain(value);
+
+  return '<span title="' + esc(plain(value, 4000)) + '">' + esc(short || '-') + '</span>';
+}
+
 let state = null;
 let history = [];
 let dirty = false;
@@ -1311,7 +1346,7 @@ function playerTable(d, actions) {
     '</tr></thead><tbody>' +
     d.players.map(p => '<tr>' +
       '<td class="m dim" data-label="ID">' + p.smallId + '</td>' +
-      '<td data-label="Player"><div class="name">' + esc(p.name) + '</div>' +
+      '<td data-label="Player"><div class="name">' + nameCell(p.name) + '</div>' +
         '<div class="sub">' + esc(p.platformId) + ' · v' + p.version + '</div></td>' +
       '<td data-label="Rank">' + (actions ? rankPicker(p) : levelChip(p.permission)) + '</td>' +
       '<td class="dim" data-label="Avatar" style="font-size:12px">' +
@@ -1320,10 +1355,10 @@ function playerTable(d, actions) {
       '<td class="m right dim" data-label="Online">' + duration(p.onlineSeconds) + '</td>' +
       '<td class="m right dim" data-label="Traffic">' + bytes(p.bytesIn + p.bytesOut) + '</td>' +
       (actions ? '<td class="right" data-label="Actions"><div class="acts">' +
-        '<button onclick="gather(' + p.smallId + ', \'' + esc(p.name) + '\')">Gather</button>' +
-        '<button onclick="purge(' + p.smallId + ', \'' + esc(p.name) + '\')">Purge</button>' +
-        '<button class="warn" onclick="kick(' + p.smallId + ', \'' + esc(p.name) + '\')">Kick</button>' +
-        '<button class="bad" onclick="ban(' + p.smallId + ', \'' + esc(p.name) + '\')">Ban</button>' +
+        '<button onclick="gather(' + p.smallId + ', \'' + esc(plain(p.name)) + '\')">Gather</button>' +
+        '<button onclick="purge(' + p.smallId + ', \'' + esc(plain(p.name)) + '\')">Purge</button>' +
+        '<button class="warn" onclick="kick(' + p.smallId + ', \'' + esc(plain(p.name)) + '\')">Kick</button>' +
+        '<button class="bad" onclick="ban(' + p.smallId + ', \'' + esc(plain(p.name)) + '\')">Ban</button>' +
         '</div></td>' : '') +
       '</tr>').join('') + '</tbody></table>';
 }
@@ -2046,21 +2081,33 @@ let pluginDrawn = '';
 async function loadPlugins() {
   let names = [];
 
+  const versions = {};
+
   try {
     const r = await (await fetch('/api/plugins')).json();
     names = r.plugins || [];
+
+    (r.loaded || []).forEach(p => { versions[String(p.name).toLowerCase()] = p.version; });
   } catch { return; }
 
   const nav = $('pluginNav');
 
-  if (nav.dataset.names === names.join(',')) return;
-  nav.dataset.names = names.join(',');
+  // The version is part of the key, so reloading a plugin redraws the tab and
+  // the number beside it changes. That is the quickest way to see whether the
+  // build you just uploaded is the one running.
+  const key = names.map(n => n + '@' + (versions[n.toLowerCase()] || '?')).join(',');
+
+  if (nav.dataset.names === key) return;
+  nav.dataset.names = key;
 
   nav.innerHTML = names.map(name =>
     '<a data-plugin="' + esc(name) + '">' +
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M4 7h16M4 12h16M4 17h10"/></svg>' + esc(name) + '</a>').join('');
+    '<path d="M4 7h16M4 12h16M4 17h10"/></svg>' + esc(plain(name, 24)) +
+    (versions[name.toLowerCase()]
+      ? '<i class="c">' + esc(plain(versions[name.toLowerCase()], 12)) + '</i>'
+      : '') + '</a>').join('');
 
   [...nav.children].forEach(a => a.onclick = () => {
     pluginTab = a.dataset.plugin;
@@ -2162,7 +2209,7 @@ function pluginField(f, at) {
   const input = (f.options || []).length
     ? '<select id="' + id + '">' +
       f.options.map(o =>
-        '<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>').join('') +
+        '<option value="' + esc(o.value) + '">' + esc(plain(o.label, 60)) + '</option>').join('') +
       '</select>'
     : '<input id="' + id + '" placeholder="' + esc(f.placeholder) + '">';
 
@@ -2184,7 +2231,7 @@ function pluginTable(section) {
     '</tr></thead><tbody>' +
     section.rows.map(row => '<tr>' +
       row.cells.map((cell, i) => '<td data-label="' +
-        esc(section.columns[i] || '') + '">' + esc(cell) + '</td>').join('') +
+        esc(section.columns[i] || '') + '">' + nameCell(cell) + '</td>').join('') +
       (hasActions
         ? '<td class="right" data-label="Actions"><div class="acts">' +
           row.actions.map(b => pluginButton(b)).join('') + '</div></td>'

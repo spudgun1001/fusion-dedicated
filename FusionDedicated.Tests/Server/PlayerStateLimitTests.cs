@@ -190,3 +190,55 @@ public class AmplificationTests
         Assert.Contains("&#39;", helper);
     }
 }
+
+/// <summary>
+/// A player picks their own name and BONELAB lets them colour it, so what reaches
+/// the panel is often a rope of colour tags wrapped around one letter each. The
+/// panel escaped it, which is safe, but it was drawn in full and a name with no
+/// spaces in it pushed the table wider than the window and took the header and
+/// the whole page sideways with it.
+/// </summary>
+public class PanelNameTests
+{
+    private static string Page() => File.ReadAllText(Path.Combine(
+        AppContext.BaseDirectory, "..", "..", "..", "..",
+        "FusionDedicated", "Web", "index.html"));
+
+    [Fact]
+    public void Rich_text_is_taken_out_of_a_name_before_it_is_drawn()
+    {
+        string page = Page();
+
+        Assert.Contains("function plain(value, limit)", page);
+        Assert.Contains("replace(/<[^>]*>/g, '')", page);
+    }
+
+    [Fact]
+    public void Every_place_a_name_is_drawn_goes_through_it()
+    {
+        // Escaping alone was what let the tags through as text.
+        string page = Page();
+
+        Assert.DoesNotContain("esc(p.name)", page);
+        Assert.DoesNotContain("esc(cell)", page);
+        Assert.DoesNotContain("esc(o.label)", page);
+    }
+
+    [Fact]
+    public void Nothing_long_can_widen_a_table()
+    {
+        Assert.Contains("overflow-wrap: anywhere", Page());
+    }
+
+    [Fact]
+    public void The_page_holds_no_control_characters_of_its_own()
+    {
+        // A regex written as an escape has to reach the browser as an escape. One
+        // built in the wrong place put a real NUL in the file instead.
+        var bytes = File.ReadAllBytes(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..",
+            "FusionDedicated", "Web", "index.html"));
+
+        Assert.DoesNotContain(bytes, b => b < 9 || (b > 13 && b < 32) || b == 127);
+    }
+}

@@ -29,6 +29,15 @@ public sealed class Dashboard
     /// <summary>Pages offered by plugins, when a host is running.</summary>
     public Plugins.PluginPanel? PluginPanel { get; set; }
 
+    /// <summary>
+    /// Set so the panel can say which build of a plugin is loaded.
+    ///
+    /// Without it, an operator who uploads a new build and reloads has no way to
+    /// tell whether the server picked it up, short of reading the startup log.
+    /// That has cost more than one round of "it did not change".
+    /// </summary>
+    public Plugins.PluginHost? PluginHost { get; set; }
+
     private string ActorFor(HttpListenerContext context)
     {
         var parsed = DashboardAuth.TryParseBasic(context.Request.Headers["Authorization"]);
@@ -251,12 +260,20 @@ public sealed class Dashboard
             }
 
             case "/api/plugins":
+            {
+                var visible = VisiblePlugins();
+
                 ServeJson(context, new
                 {
                     ok = true,
-                    plugins = VisiblePlugins(),
+                    plugins = visible,
+                    loaded = (PluginHost?.Loaded ?? Array.Empty<Plugins.LoadedPlugin>())
+                        .Where(p => visible.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
+                        .Select(p => new { name = p.Name, version = p.Manifest.Version })
+                        .ToArray(),
                 });
                 return;
+            }
 
             case "/api/plugins/page":
             {
