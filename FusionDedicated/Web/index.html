@@ -600,6 +600,13 @@
   body[data-role="viewer"] button.danger,
   body[data-role="viewer"] .bar { display: none; }
 
+  /* A banker has one job. Everything the panel is otherwise about is refused
+     by the server for them and comes back empty, so there is nothing behind
+     these tabs to look at. */
+  body[data-role="banker"] nav a[data-tab],
+  body[data-role="banker"] .readout,
+  body[data-role="banker"] .navfoot div:not(:last-child) { display: none; }
+
   @media (prefers-reduced-motion: reduce) {
     *, .view.on { transition: none !important; animation: none !important; }
   }
@@ -864,6 +871,7 @@
         <div><label>Max entities</label><input id="fMaxEnt" type="number" min="1" max="100000" data-s></div>
         <div><label>Orphan timeout (s)</label><input id="fOrphan" type="number" min="5" max="86400" data-s></div>
         <div><label>Idle timeout (s)</label><input id="fIdle" type="number" min="0" max="86400" data-s></div>
+        <div><label>Ammo timeout (s)</label><input id="fAmmo" type="number" min="0" max="86400" data-s></div>
       </div>
       <div class="panel" style="margin-top:14px">
         <div class="rows">
@@ -892,6 +900,7 @@
           <select id="acRole">
             <option value="moderator">Moderator</option>
             <option value="viewer">Viewer</option>
+            <option value="banker">Banker</option>
             <option value="owner">Owner</option>
           </select>
         </div>
@@ -1619,8 +1628,27 @@ function renderWorld(d) {
 /* A viewer sees the server without the controls that would only refuse them.
    The stylesheet does the hiding, so a redraw cannot undo it. */
 function applyRole(you) {
-  if (you && you.role) document.body.dataset.role = you.role;
+  if (!you || !you.role) return;
+
+  document.body.dataset.role = you.role;
+
+  // Their own tabs are hidden and the overview behind them is empty, so send
+  // them to the one page they came here for. Once only, so they can still move
+  // between plugin pages afterwards.
+  if (you.role === 'banker' && !bankerLanded) {
+    const first = document.querySelector('#pluginNav a');
+
+    // The nav is built by its own request, so on the first poll it may not be
+    // there yet. Marking it done before there is anything to click would leave
+    // them on a blank overview with no way back.
+    if (first) {
+      bankerLanded = true;
+      first.click();
+    }
+  }
 }
+
+let bankerLanded = false;
 
 function renderAccounts(list) {
   const el = $('accounts');
@@ -1736,6 +1764,7 @@ function revert() {
   $('fMaxEnt').value = d.limits.maxEntities;
   $('fOrphan').value = d.limits.orphanTimeoutSeconds;
   $('fIdle').value = d.limits.idleTimeoutSeconds;
+  $('fAmmo').value = d.limits.ammoTimeoutSeconds;
 
   $('fBurst').value = g.burstLimit;
   $('fWindow').value = g.windowSeconds;
@@ -1771,6 +1800,7 @@ async function saveSettings() {
     maxEntities: $('fMaxEnt').value,
     orphanTimeoutSeconds: $('fOrphan').value,
     idleTimeoutSeconds: $('fIdle').value,
+    ammoTimeoutSeconds: $('fAmmo').value,
     cullOrphans: !!draft.cullOrphans,
 
     antiSpam: !!draft.antiSpam,
@@ -2009,6 +2039,9 @@ function toggleModules() {
 
 let pluginTab = '';
 
+/** What is on screen, so an unchanged page is not rebuilt under somebody. */
+let pluginDrawn = '';
+
 /** Builds one nav tab per plugin that offers a page. */
 async function loadPlugins() {
   let names = [];
@@ -2031,15 +2064,25 @@ async function loadPlugins() {
 
   [...nav.children].forEach(a => a.onclick = () => {
     pluginTab = a.dataset.plugin;
+    pluginDrawn = '';
     tab = 'plugin';
     document.querySelectorAll('nav a').forEach(x => x.classList.toggle('on', x === a));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-plugin'));
     window.scrollTo(0, 0);
-    renderPluginPage();
+    renderPluginPage(true);
   });
 }
 
-async function renderPluginPage() {
+/**
+ * The whole page is replaced, and the poll asks for it once a second, so
+ * anything on screen was being taken away between one keystroke and the next.
+ * A box lost its focus, a half typed amount vanished, and a picked player
+ * reset to the top of the list.
+ *
+ * @param force Redraw whatever is on screen. Used after an action, where the
+ *              fields have done their job and the result is what matters.
+ */
+async function renderPluginPage(force) {
   if (!pluginTab) return;
 
   let page;
@@ -2049,15 +2092,53 @@ async function renderPluginPage() {
       encodeURIComponent(pluginTab))).json();
   } catch { return; }
 
+  const box = $('pluginPage');
+
   if (page.ok === false) {
-    $('pluginPage').innerHTML = empty('That page is not available');
+    box.innerHTML = empty('That page is not available');
+    pluginDrawn = '';
     return;
   }
 
-  $('pluginPage').innerHTML = (page.sections || []).map(pluginSection).join('');
+  const drawn = pluginTab + JSON.stringify(page.sections || []);
+
+  // Nothing came back different, so a redraw could only take things away.
+  if (!force && drawn === pluginDrawn) return;
+
+  // Somebody is in one of the boxes. Rebuilding takes the box, the caret and
+  // the selection with it, so this waits for a poll after they have moved on.
+  if (!force && box.contains(document.activeElement)) return;
+
+  const held = {};
+
+  box.querySelectorAll('[id^="pf-"]').forEach(el => { held[el.id] = el.value; });
+
+  pluginDrawn = drawn;
+  box.innerHTML = (page.sections || []).map(pluginSection).join('');
+
+  // A real change still redraws, so what was already filled in is put back.
+  if (!force) {
+    Object.keys(held).forEach(id => {
+      const el = $(id);
+
+      if (!el) return;
+
+      el.value = held[id];
+
+      // The player who was picked may have left, so fall back to the prompt
+      // rather than leaving the list on nothing.
+      if (el.tagName === 'SELECT' && el.selectedIndex < 0) el.selectedIndex = 0;
+    });
+  }
 }
 
-function pluginSection(section) {
+/**
+ * @param at Where the section sits on the page. It is part of every field's id,
+ *           because two sections are free to use the same key and did: with a
+ *           bare key the salary section read the player picked in the balance
+ *           section above it, since both boxes answered to the same id.
+ */
+function pluginSection(section, at) {
   if (section.kind === 'note') {
     return '<h2>' + esc(section.title) + '</h2>' +
       '<div class="panel"><div class="pad">' + esc(section.text) + '</div></div>';
@@ -2066,20 +2147,24 @@ function pluginSection(section) {
   if (section.kind === 'table') return pluginTable(section);
 
   return '<h2>' + esc(section.title) + '</h2><div class="fields">' +
-    section.fields.map(pluginField).join('') +
+    section.fields.map(f => pluginField(f, at)).join('') +
     '</div><div class="bar flat">' +
-    section.buttons.map(b => pluginButton(b, section.fields)).join('') +
+    section.buttons.map(b => pluginButton(b, section.fields, at)).join('') +
     '</div>';
 }
 
+const fieldId = (at, key) => 'pf-' + at + '-' + key;
+
 /** A field with options is a list to pick from, anything else is a text box. */
-function pluginField(f) {
+function pluginField(f, at) {
+  const id = esc(fieldId(at, f.key));
+
   const input = (f.options || []).length
-    ? '<select id="pf-' + esc(f.key) + '">' +
+    ? '<select id="' + id + '">' +
       f.options.map(o =>
         '<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>').join('') +
       '</select>'
-    : '<input id="pf-' + esc(f.key) + '" placeholder="' + esc(f.placeholder) + '">';
+    : '<input id="' + id + '" placeholder="' + esc(f.placeholder) + '">';
 
   return '<div class="full"><label>' + esc(f.label) + '</label>' + input + '</div>';
 }
@@ -2109,11 +2194,12 @@ function pluginTable(section) {
 }
 
 /** A button carries its own arguments, which is how a row's button knows its row. */
-function pluginButton(button, fields) {
+function pluginButton(button, fields, at) {
   const spec = JSON.stringify({
     action: button.action,
     args: button.arguments || {},
     fields: (fields || []).map(f => f.key),
+    at: at,
   });
 
   const style = button.danger ? 'bad' : (fields ? 'go' : '');
@@ -2130,7 +2216,7 @@ async function pluginAction(el) {
   Object.keys(spec.args).forEach(k => q.set(k, spec.args[k]));
 
   (spec.fields || []).forEach(key => {
-    const field = $('pf-' + key);
+    const field = $(fieldId(spec.at, key));
     if (field) q.set(key, field.value.trim());
   });
 
@@ -2141,7 +2227,7 @@ async function pluginAction(el) {
     return;
   }
 
-  renderPluginPage();
+  renderPluginPage(true);
 }
 
 /* ---------- boot ---------- */

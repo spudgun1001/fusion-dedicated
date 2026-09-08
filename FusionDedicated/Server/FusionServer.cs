@@ -2567,6 +2567,9 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Watched, not acted on: these still go on to everybody afterwards.
+        NoteAttachment(handler.Value, message);
+
         if (handler != ModuleProtocol.ConstraintCreateTag)
         {
             if (_unknownModules.Add(handler.Value))
@@ -2590,6 +2593,66 @@ public sealed class FusionServer : IDisposable
 
         HandleConstraintCreate(sender, message);
     }
+
+    /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
+    private readonly Dictionary<(ushort Slot, byte Index), ushort> _slotted = new();
+
+    /// <summary>Ten slots a player, so this is a great many players' worth.</summary>
+    private const int MaxSlotsTracked = 2048;
+
+    /// <summary>
+    /// Follows a magazine into a gun and a weapon into a holster, so the ammo
+    /// clock can tell one in use from one abandoned.
+    ///
+    /// Reading only. These belong to the clients and are passed on untouched.
+    /// </summary>
+    private void NoteAttachment(long handler, byte[] message)
+    {
+        var payload = ModuleProtocol.TryReadHandlerPayload(message);
+
+        if (payload == null)
+        {
+            return;
+        }
+
+        var change = ModuleProtocol.ReadAttachment(handler, payload);
+
+        switch (change.Kind)
+        {
+            case ModuleProtocol.AttachmentKind.Attach:
+                Entities.SetAttached(change.Entity, true);
+                return;
+
+            case ModuleProtocol.AttachmentKind.Detach:
+                Entities.SetAttached(change.Entity, false);
+                return;
+
+            case ModuleProtocol.AttachmentKind.SlotInsert:
+                Entities.SetAttached(change.Entity, true);
+
+                lock (_cacheLock)
+                {
+                    if (_slotted.Count < MaxSlotsTracked)
+                    {
+                        _slotted[(change.Slot, change.SlotIndex)] = change.Entity;
+                    }
+                }
+
+                return;
+
+            case ModuleProtocol.AttachmentKind.SlotDrop:
+                lock (_cacheLock)
+                {
+                    if (_slotted.Remove((change.Slot, change.SlotIndex), out ushort weapon))
+                    {
+                        Entities.SetAttached(weapon, false);
+                    }
+                }
+
+                return;
+        }
+    }
+
 
     /// <summary>
     /// Clears a constraint, and takes it off our books.
@@ -3106,7 +3169,8 @@ public sealed class FusionServer : IDisposable
         var removed = Entities.CullStale(
             TimeSpan.FromSeconds(Config.OrphanTimeoutSeconds),
             TimeSpan.FromSeconds(Config.InheritedTimeoutSeconds),
-            TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)));
+            TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)),
+            TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)));
 
         if (removed.Count > 0)
         {

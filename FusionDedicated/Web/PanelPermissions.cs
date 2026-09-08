@@ -42,11 +42,57 @@ public static class PanelPermissions
         ["/api/plugins/action"] = PanelRole.Moderator,
     };
 
+    /// <summary>
+    /// Everything a banker may reach. Listed rather than implied by a rank,
+    /// because a banker is not above or below anybody: they open the panel to
+    /// move money and there is nothing else they are meant to be able to do.
+    ///
+    /// The page and the state behind it are here because the panel will not draw
+    /// at all without them. What comes back on that state is cut down to almost
+    /// nothing for a banker, so this is not a way in to the rest of it.
+    /// </summary>
+    private static readonly HashSet<string> BankerRoutes = new(StringComparer.Ordinal)
+    {
+        "/",
+        "/index.html",
+        "/api/state",
+        "/api/plugins",
+        "/api/plugins/page",
+        "/api/plugins/action",
+    };
+
     public static bool Allows(PanelRole role, string path)
     {
         string route = path.Split('?')[0];
 
-        return Required.TryGetValue(route, out var needed) && role >= needed;
+        if (!Required.ContainsKey(route))
+        {
+            return false;
+        }
+
+        if (role == PanelRole.Banker)
+        {
+            return BankerRoutes.Contains(route);
+        }
+
+        return role >= Required[route];
+    }
+
+    /// <summary>
+    /// Whether one role may see something marked for another.
+    ///
+    /// A banker sees only what is marked for a banker. Everybody else keeps the
+    /// ordinary ladder, and a block put aside for bankers counts as moderation
+    /// to them, so a moderator and an owner still see the whole page.
+    /// </summary>
+    public static bool CanSee(PanelRole actor, PanelRole required)
+    {
+        if (actor == PanelRole.Banker)
+        {
+            return required == PanelRole.Banker;
+        }
+
+        return actor >= (required == PanelRole.Banker ? PanelRole.Moderator : required);
     }
 
     /// <summary>
@@ -59,6 +105,7 @@ public static class PanelPermissions
         {
             "owner" => PanelRole.Owner,
             "moderator" => PanelRole.Moderator,
+            "banker" => PanelRole.Banker,
             _ => PanelRole.Viewer,
         };
     }

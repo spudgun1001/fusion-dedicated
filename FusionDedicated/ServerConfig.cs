@@ -273,6 +273,18 @@ public sealed class ServerConfig
     public int IdleTimeoutSeconds { get; set; } = 0;
 
     /// <summary>
+    /// Seconds before a dropped magazine is removed, counted from the last time it
+    /// moved. Zero leaves ammunition to the idle timeout above.
+    ///
+    /// Separate from that timeout because the two want opposite numbers. Spent
+    /// magazines are the single biggest source of props on a busy server and
+    /// nobody misses one, while a build somebody spent an hour on sits perfectly
+    /// still and must not go. Turning the idle timeout down far enough to catch
+    /// the magazines would take the build with it.
+    /// </summary>
+    public int AmmoTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>
     /// When the world is at <see cref="MaxEntities"/>, drop this many of the oldest
     /// abandoned props to make room rather than refusing the spawn. Refusing looks
     /// like a broken server to the player pressing the trigger.

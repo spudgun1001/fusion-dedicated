@@ -74,6 +74,121 @@ public static class ModuleProtocol
     public static readonly long ConstraintDeleteTag =
         TagFor("LabFusion", "LabFusion.Marrow.Messages.ConstraintDeleteMessage");
 
+    /// <summary>
+    /// A magazine going into a gun, and coming back out. Payload is the magazine's
+    /// entity id then the gun's, two bytes each.
+    ///
+    /// Read so the server knows a magazine is in a gun rather than lying on the
+    /// floor. One in a gun is kinematic, so it sleeps, stops sending poses and
+    /// looks abandoned to any clock counting from the last time it moved.
+    /// </summary>
+    public static readonly long MagazineInsertTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.MagazineInsertMessage");
+
+    /// <summary>Payload is the player, the magazine, the gun, then the hand.</summary>
+    public static readonly long MagazineEjectTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.MagazineEjectMessage");
+
+    /// <summary>Somebody taking hold of a magazine. Owner, entity, hand.</summary>
+    public static readonly long MagazineClaimTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.MagazineClaimMessage");
+
+    /// <summary>
+    /// A weapon going into a body slot, which is what holstering is. Payload is
+    /// the slot's entity id, the weapon's entity id, then which slot.
+    /// </summary>
+    public static readonly long InventorySlotInsertTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.InventorySlotInsertMessage");
+
+    /// <summary>
+    /// A weapon coming back out of a slot. The payload names the slot rather than
+    /// the weapon, so which weapon left has to be remembered from the insert.
+    /// </summary>
+    public static readonly long InventorySlotDropTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.InventorySlotDropMessage");
+
+    /// <summary>A magazine pulled out of the ammo pouch. Payload is its entity id.</summary>
+    public static readonly long AmmoReceiverDropTag =
+        TagFor("LabFusion", "LabFusion.Marrow.Messages.InventoryAmmoReceiverDropMessage");
+
+    /// <summary>What one of the attachment messages says happened.</summary>
+    public enum AttachmentKind
+    {
+        /// <summary>Not one of them.</summary>
+        None,
+
+        /// <summary>Entity is now inside something.</summary>
+        Attach,
+
+        /// <summary>Entity is loose again.</summary>
+        Detach,
+
+        /// <summary>Entity went into Slot at SlotIndex.</summary>
+        SlotInsert,
+
+        /// <summary>Whatever was in Slot at SlotIndex came out. Entity is not named.</summary>
+        SlotDrop,
+    }
+
+    public readonly record struct AttachmentChange(
+        AttachmentKind Kind, ushort Entity, ushort Slot, byte SlotIndex);
+
+    /// <summary>
+    /// Reads one of Fusion's attachment messages.
+    ///
+    /// The server neither sends nor changes these, it only listens: a magazine in
+    /// a gun is kinematic, so it sleeps, stops sending pose updates, and to any
+    /// clock counting from the last one it is indistinguishable from a magazine
+    /// dropped on the floor an hour ago.
+    /// </summary>
+    /// <param name="payload">The handler payload, without the eight tag bytes.</param>
+    public static AttachmentChange ReadAttachment(long handlerTag, ReadOnlySpan<byte> payload)
+    {
+        // MagazineInsertData: magazine, gun.
+        if (handlerTag == MagazineInsertTag && payload.Length >= 4)
+        {
+            return new AttachmentChange(AttachmentKind.Attach, Id(payload, 0), 0, 0);
+        }
+
+        // MagazineEjectData: player, magazine, gun, hand.
+        if (handlerTag == MagazineEjectTag && payload.Length >= 6)
+        {
+            return new AttachmentChange(AttachmentKind.Detach, Id(payload, 1), 0, 0);
+        }
+
+        // MagazineClaimData: owner, entity, hand. In a hand is not in a gun.
+        if (handlerTag == MagazineClaimTag && payload.Length >= 4)
+        {
+            return new AttachmentChange(AttachmentKind.Detach, Id(payload, 1), 0, 0);
+        }
+
+        // InventoryAmmoReceiverDropData: entity.
+        if (handlerTag == AmmoReceiverDropTag && payload.Length >= 2)
+        {
+            return new AttachmentChange(AttachmentKind.Detach, Id(payload, 0), 0, 0);
+        }
+
+        // InventorySlotInsertData: slot, weapon, index.
+        if (handlerTag == InventorySlotInsertTag && payload.Length >= 5)
+        {
+            return new AttachmentChange(
+                AttachmentKind.SlotInsert, Id(payload, 2), Id(payload, 0), payload[4]);
+        }
+
+        // InventorySlotDropData: slot, grabber, index, hand. The weapon that left
+        // is not named, so the caller has to remember what the insert put there.
+        if (handlerTag == InventorySlotDropTag && payload.Length >= 5)
+        {
+            return new AttachmentChange(
+                AttachmentKind.SlotDrop, 0, Id(payload, 0), payload[3]);
+        }
+
+        return default;
+    }
+
+    private static ushort Id(ReadOnlySpan<byte> payload, int at)
+        => (ushort)((payload[at] << 8) | payload[at + 1]);
+
     /// <summary>Which handler a module message belongs to, or null if it is not one.</summary>
     public static long? TryReadHandlerTag(ReadOnlySpan<byte> message)
     {

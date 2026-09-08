@@ -141,6 +141,14 @@ public sealed class PluginSection
 
     [JsonPropertyName("text")]
     public string Text { get; set; } = "";
+
+    /// <summary>
+    /// Who this block is for. Moderator is the page's own floor and what almost
+    /// every section wants; naming a role here is for a page that shows one part
+    /// of itself to somebody who has no business seeing the rest.
+    /// </summary>
+    [JsonPropertyName("required")]
+    public PanelRole Required { get; set; } = PanelRole.Moderator;
 }
 
 /// <summary>
@@ -192,6 +200,23 @@ public sealed class PluginPage
     public PluginPage Note(string title, string text)
     {
         Sections.Add(new PluginSection { Kind = "note", Title = title, Text = text });
+        return this;
+    }
+
+    /// <summary>
+    /// Restricts the block just added to one role.
+    ///
+    /// A separate call rather than another argument on Table, Fields and Note,
+    /// because changing the shape of those would stop every plugin already
+    /// compiled against them from loading.
+    /// </summary>
+    public PluginPage OnlyFor(PanelRole role)
+    {
+        if (Sections.Count > 0)
+        {
+            Sections[^1].Required = role;
+        }
+
         return this;
     }
 }

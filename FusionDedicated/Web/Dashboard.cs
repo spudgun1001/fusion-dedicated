@@ -151,7 +151,12 @@ public sealed class Dashboard
                 return;
 
             case "/api/state":
-                ServeJson(context, BuildState());
+                // A banker is given the shell and nothing to put in it. They need
+                // this to draw the panel at all, and hiding the rest in the page
+                // would only be hiding it: the answer would still have been sent.
+                ServeJson(context, _actingRole == PanelRole.Banker
+                    ? BuildBankerState()
+                    : BuildState());
                 return;
 
             case "/api/kick":
@@ -249,22 +254,15 @@ public sealed class Dashboard
                 ServeJson(context, new
                 {
                     ok = true,
-                    plugins = PluginPanel?.Pages ?? (IReadOnlyList<string>)Array.Empty<string>(),
+                    plugins = VisiblePlugins(),
                 });
                 return;
 
             case "/api/plugins/page":
             {
-                var page = PluginPanel?.Build(query["plugin"] ?? "");
+                var page = VisiblePage(query["plugin"] ?? "");
 
                 if (page == null)
-                {
-                    ServeJson(context, new { ok = false, error = "no such page" });
-                    return;
-                }
-
-                // A page may ask for more than the endpoint's own floor.
-                if (_actingRole < page.Required)
                 {
                     context.Response.StatusCode = 403;
                     ServeJson(context, new { ok = false, error = "not allowed" });
@@ -277,12 +275,24 @@ public sealed class Dashboard
 
             case "/api/plugins/action":
             {
+                string plugin = query["plugin"] ?? "";
+                string action = query["action"] ?? "";
+
+                // The buttons somebody can see are the buttons they may press.
+                // Without this a banker, who is shown one block of one page, could
+                // still ask for any action any plugin has registered.
+                if (!MayInvoke(plugin, action))
+                {
+                    context.Response.StatusCode = 403;
+                    ServeJson(context, new { ok = false, error = "not allowed" });
+                    return;
+                }
+
                 var values = query.AllKeys
                     .Where(k => k != null && k != "plugin" && k != "action")
                     .ToDictionary(k => k!, k => query[k] ?? "");
 
-                var result = PluginPanel?.Invoke(
-                        query["plugin"] ?? "", query["action"] ?? "", values)
+                var result = PluginPanel?.Invoke(plugin, action, values)
                     ?? Plugins.PanelActionResult.Failed("plugins are off");
 
                 ServeJson(context, new { ok = result.Handled, error = result.Error });
@@ -302,6 +312,69 @@ public sealed class Dashboard
                 context.Response.Close();
                 return;
         }
+    }
+
+    /// <summary>
+    /// A plugin page with the blocks this account may not see taken out, or null
+    /// when there is nothing left for them.
+    ///
+    /// Filtered here rather than when the page is built, so a plugin describes
+    /// its page once and the panel decides who sees which part of it.
+    /// </summary>
+    private Plugins.PluginPage? VisiblePage(string plugin)
+    {
+        var page = PluginPanel?.Build(plugin);
+
+        if (page == null)
+        {
+            return null;
+        }
+
+        page.Sections = page.Sections
+            .Where(section => PanelPermissions.CanSee(_actingRole, section.Required))
+            .ToList();
+
+        if (page.Sections.Count == 0)
+        {
+            return null;
+        }
+
+        // A banker is allowed a page by the blocks marked for them, not by the
+        // page's own floor, which every page sets to moderator.
+        return _actingRole == PanelRole.Banker || PanelPermissions.CanSee(_actingRole, page.Required)
+            ? page
+            : null;
+    }
+
+    /// <summary>Plugins with at least one block this account may see.</summary>
+    private IReadOnlyList<string> VisiblePlugins()
+    {
+        var names = PluginPanel?.Pages ?? (IReadOnlyList<string>)Array.Empty<string>();
+
+        return names.Where(name => VisiblePage(name) != null).ToList();
+    }
+
+    /// <summary>
+    /// Whether an action is one of the buttons this account is shown. Row buttons
+    /// count as well as a block's own, since a table's rows carry their own.
+    /// </summary>
+    private bool MayInvoke(string plugin, string action)
+    {
+        if (VisiblePage(plugin) is not { } page)
+        {
+            return false;
+        }
+
+        foreach (var section in page.Sections)
+        {
+            if (section.Buttons.Any(b => b.Action == action)
+                || section.Rows.Any(r => r.Actions.Any(b => b.Action == action)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ServePage(HttpListenerContext context)
@@ -339,6 +412,37 @@ public sealed class Dashboard
 
         Write(context, "text/html; charset=utf-8", page);
     }
+
+    /// <summary>
+    /// Enough for the panel to draw its frame, and no more. Every count is zero
+    /// and every list is empty, because a banker is not being shown the server.
+    /// </summary>
+    private object BuildBankerState() => new
+    {
+        server = new
+        {
+            name = _config.ServerName,
+            description = "",
+            level = "",
+            levelBarcode = "",
+            version = _config.Version,
+            code = "",
+            privacy = "",
+            maxPlayers = 0,
+            lobbyId = 0UL,
+            published = _lobby.IsPublished,
+            uptimeSeconds = 0,
+            levelModId = -1,
+            levelModFileId = (int?)null,
+        },
+        players = Array.Empty<object>(),
+        bans = Array.Empty<object>(),
+        log = Array.Empty<object>(),
+        entities = new { total = 0, orphaned = 0 },
+        traffic = new { packetsIn = 0L, packetsOut = 0L, bytesIn = 0L, bytesOut = 0L },
+        limits = new { maxEntities = 0 },
+        you = new { role = _actingRole.ToString().ToLowerInvariant() },
+    };
 
     private object BuildState()
     {
@@ -419,6 +523,7 @@ public sealed class Dashboard
                 maxEntities = _config.MaxEntities,
                 cullOrphans = _config.CullOrphanedEntities,
                 idleTimeoutSeconds = _config.IdleTimeoutSeconds,
+                ammoTimeoutSeconds = _config.AmmoTimeoutSeconds,
                 orphanTimeoutSeconds = _config.OrphanTimeoutSeconds,
             },
             traffic = new
@@ -1023,6 +1128,11 @@ public sealed class Dashboard
         }
 
         // Zero is the off switch, so the floor is zero rather than a usable timeout.
+        if (int.TryParse(query["ammoTimeoutSeconds"], out var ammo) && ammo is >= 0 and <= 86400)
+        {
+            _config.AmmoTimeoutSeconds = ammo;
+        }
+
         if (int.TryParse(query["idleTimeoutSeconds"], out var idle) && idle is >= 0 and <= 86400)
         {
             _config.IdleTimeoutSeconds = idle;

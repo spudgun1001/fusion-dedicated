@@ -48,6 +48,15 @@ public sealed class TrackedEntity
     public bool Synthetic { get; set; }
 
     /// <summary>
+    /// In a gun, or in a body slot, rather than lying loose.
+    ///
+    /// A magazine inside a gun is kinematic, so it sleeps, stops sending pose
+    /// updates and from the outside is indistinguishable from one dropped on the
+    /// floor an hour ago. Without this the ammo clock emptied holstered guns.
+    /// </summary>
+    public bool Attached { get; set; }
+
+    /// <summary>
     /// Fusion's EntitySource, as the spawn carried it. Repeated to a newcomer so
     /// their copy agrees with everybody else's about what the thing is.
     /// </summary>
@@ -238,6 +247,18 @@ public sealed class EntityRegistry
         }
     }
 
+    /// <summary>Marks an entity as being in a gun or a slot, or no longer in one.</summary>
+    public void SetAttached(ushort id, bool attached)
+    {
+        lock (_lock)
+        {
+            if (_entities.TryGetValue(id, out var entity))
+            {
+                entity.Attached = attached;
+            }
+        }
+    }
+
     public void SetOwner(ushort id, byte? owner)
     {
         lock (_lock)
@@ -382,8 +403,15 @@ public sealed class EntityRegistry
     /// still playing is neither orphaned nor inherited, so nothing else removes it.
     /// </summary>
     /// <param name="idleTimeout">Zero to leave a connected player's props alone.</param>
+    /// <param name="ammoTimeout">
+    /// A shorter clock for magazines, which are the bulk of what a busy server
+    /// accumulates and the only props nobody misses. Applied to whichever branch
+    /// the magazine falls in, so one dropped by somebody still here goes at the
+    /// same age as one left behind. Zero leaves ammunition to the ordinary rules.
+    /// </param>
     public List<ushort> CullStale(
-        TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default)
+        TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
+        TimeSpan ammoTimeout = default)
     {
         var removed = new List<ushort>();
         var now = DateTime.UtcNow;
@@ -410,21 +438,43 @@ public sealed class EntityRegistry
                     continue;
                 }
 
-                bool stale;
+                TimeSpan timeout;
+
+                // Only the idle clock treats zero as "leave them alone". An
+                // orphan or an inherited prop is culled on the number given,
+                // whatever it is, which is how both have always behaved.
+                bool zeroMeansNever = false;
 
                 if (entity.IsOrphaned)
                 {
-                    stale = now - entity.LastUpdate > orphanTimeout;
+                    timeout = orphanTimeout;
                 }
                 else if (entity.Inherited)
                 {
-                    stale = now - entity.LastUpdate > inheritedTimeout;
+                    timeout = inheritedTimeout;
                 }
                 else
                 {
-                    stale = idleTimeout > TimeSpan.Zero
-                        && now - entity.LastUpdate > idleTimeout;
+                    timeout = idleTimeout;
+                    zeroMeansNever = true;
                 }
+
+                // Never longer than the branch would have allowed, so switching
+                // this on can only ever remove a magazine sooner.
+                // Attached is checked first and costs nothing: a magazine in a
+                // gun, or a gun in a holster, is in use however long it has been
+                // since it moved, so the shorter clock must never reach it.
+                if (ammoTimeout > TimeSpan.Zero
+                    && !entity.Attached
+                    && (timeout <= TimeSpan.Zero || ammoTimeout < timeout)
+                    && Safety.Ammunition.IsAmmo(entity.Barcode))
+                {
+                    timeout = ammoTimeout;
+                    zeroMeansNever = false;
+                }
+
+                bool stale = (!zeroMeansNever || timeout > TimeSpan.Zero)
+                    && now - entity.LastUpdate > timeout;
 
                 if (stale)
                 {
