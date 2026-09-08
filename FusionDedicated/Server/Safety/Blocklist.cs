@@ -24,7 +24,12 @@ public sealed class BlocklistFile
     [JsonPropertyName("keywords")]
     public List<string> Keywords { get; set; } = new();
 
-    /// <summary>Barcodes allowed even when a barcode or keyword rule would block them.</summary>
+    /// <summary>
+    /// Barcodes allowed whatever any list says, including Fusion's global one.
+    ///
+    /// The way to get one mod back when a list the operator did not write refuses
+    /// it, without turning that whole list off for everything else.
+    /// </summary>
     [JsonPropertyName("whitelist")]
     public List<string> Whitelist { get; set; } = new();
 

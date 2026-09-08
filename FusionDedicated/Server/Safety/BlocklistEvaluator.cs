@@ -6,9 +6,14 @@ public sealed record BlockVerdict(bool Blocked, string Layer, string Reason)
 }
 
 /// <summary>
-/// Decides whether a barcode may be spawned. The owner's whitelist wins over their
-/// own rules but not over Fusion's community list, which covers mods that are
-/// malicious rather than merely unwanted.
+/// Decides whether a barcode may be spawned.
+///
+/// The owner's whitelist wins over every list, their own and Fusion's community
+/// one. It used to stop short of the community list, on the grounds that it
+/// covers mods that are malicious rather than merely unwanted, which left an
+/// operator with one refused gun no lever but turning that whole list off. A
+/// barcode written into a file by hand is a deliberate act, and a narrower one
+/// than disabling the protection for everything else.
 /// </summary>
 public sealed class BlocklistEvaluator
 {
@@ -74,7 +79,13 @@ public sealed class BlocklistEvaluator
             }
         }
 
-        if (_global != null && MatchesGlobal(barcode, out string reason))
+        // The whitelist covers this too.
+        //
+        // It did not, so a mod on Fusion's global list could not be allowed here
+        // at all: an operator's only lever was turning the whole global list off.
+        // The lists are advice to a server owner, and the owner naming a barcode
+        // is a more specific answer than a list they did not write.
+        if (!whitelisted && _global != null && MatchesGlobal(barcode, out string reason))
         {
             return new BlockVerdict(true, "global", reason);
         }

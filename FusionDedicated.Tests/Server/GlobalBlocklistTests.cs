@@ -129,3 +129,80 @@ public class SafetyListStoreTests : IDisposable
         Assert.Null(store.Mods);
     }
 }
+
+/// <summary>
+/// Getting one mod back when a list the operator did not write refuses it.
+///
+/// Fusion's global list is advice to a server owner, and the whitelist did not
+/// cover it, so the only lever was turning the whole global list off for
+/// everything. That matters more now the server learns mod.io ids from its own
+/// players: the catalogue is what lets a mod id be matched at all, so as it
+/// fills, the global list starts refusing barcodes it could not match before.
+/// </summary>
+public class GlobalWhitelistTests
+{
+    private static GlobalModBlacklist Global() => new()
+    {
+        Mods = { new GlobalModEntry { NameId = "gun-gun", ModId = 4457523 } },
+    };
+
+    private static BlocklistEvaluator Evaluator(BlocklistFile? file, IReadOnlyDictionary<string, int>? catalogue = null)
+        => new(new HashSet<string>(StringComparer.Ordinal), Global(), catalogue, file);
+
+    [Fact]
+    public void A_globally_listed_barcode_is_still_refused_by_default()
+    {
+        var verdict = Evaluator(new BlocklistFile()).Check("gun-gun.Spawnable.Rifle");
+
+        Assert.True(verdict.Blocked);
+        Assert.Equal("global", verdict.Layer);
+    }
+
+    [Fact]
+    public void Naming_it_in_the_whitelist_allows_it()
+    {
+        var file = new BlocklistFile();
+        file.Whitelist.Add("gun-gun.Spawnable.Rifle");
+
+        Assert.False(Evaluator(file).Check("gun-gun.Spawnable.Rifle").Blocked);
+    }
+
+    [Fact]
+    public void The_rest_of_that_mod_is_still_refused()
+    {
+        // One barcode back, not the whole mod.
+        var file = new BlocklistFile();
+        file.Whitelist.Add("gun-gun.Spawnable.Rifle");
+
+        Assert.True(Evaluator(file).Check("gun-gun.Spawnable.Launcher").Blocked);
+    }
+
+    [Fact]
+    public void A_mod_matched_by_its_learned_mod_io_id_can_be_whitelisted_too()
+    {
+        // The catalogue is how a mod id is matched at all, and it now fills
+        // itself from the players on the server.
+        var catalogue = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["SomePack.Spawnable.Rifle"] = 4457523,
+        };
+
+        Assert.True(Evaluator(new BlocklistFile(), catalogue).Check("SomePack.Spawnable.Rifle").Blocked);
+
+        var file = new BlocklistFile();
+        file.Whitelist.Add("SomePack.Spawnable.Rifle");
+
+        Assert.False(Evaluator(file, catalogue).Check("SomePack.Spawnable.Rifle").Blocked);
+    }
+
+    [Fact]
+    public void A_disabled_blocklist_file_carries_no_whitelist_either()
+    {
+        // Turning the file off turns all of it off, the whitelist included, which
+        // is what Enabled has always meant.
+        var file = new BlocklistFile { Enabled = false };
+        file.Whitelist.Add("gun-gun.Spawnable.Rifle");
+
+        Assert.True(Evaluator(file).Check("gun-gun.Spawnable.Rifle").Blocked);
+    }
+}
