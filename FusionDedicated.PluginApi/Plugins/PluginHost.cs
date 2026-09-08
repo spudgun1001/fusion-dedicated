@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.Loader;
 
 namespace FusionDedicated.Plugins;
@@ -130,6 +131,26 @@ public sealed class PluginHost
         return LoadAll();
     }
 
+    /// <summary>
+    /// Loads an assembly from its bytes, with its symbols when they are beside it
+    /// so a stack trace out of a plugin still names lines.
+    /// </summary>
+    private static Assembly LoadFrom(AssemblyLoadContext context, string path)
+    {
+        using var assembly = new MemoryStream(File.ReadAllBytes(path));
+
+        string symbols = Path.ChangeExtension(path, ".pdb");
+
+        if (!File.Exists(symbols))
+        {
+            return context.LoadFromStream(assembly);
+        }
+
+        using var pdb = new MemoryStream(File.ReadAllBytes(symbols));
+
+        return context.LoadFromStream(assembly, pdb);
+    }
+
     private bool LoadFolder(string folder)
     {
         string name = Path.GetFileName(folder);
@@ -161,7 +182,15 @@ public sealed class PluginHost
 
         try
         {
-            var assembly = context.LoadFromAssemblyPath(Path.GetFullPath(assemblyPath));
+            // Read, not mapped.
+            //
+            // LoadFromAssemblyPath holds the file open for as long as the plugin
+            // is loaded, so uploading a new build over a running one fails or
+            // half-writes, and a reload then loads the file that is still there.
+            // That is a plugin that will not update however many times you reload
+            // it, with nothing in the log to say so. Reading the bytes once means
+            // the file is free the moment it has been read.
+            var assembly = LoadFrom(context, Path.GetFullPath(assemblyPath));
 
             var type = assembly.GetTypes().FirstOrDefault(t =>
                 typeof(IFusionPlugin).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface);

@@ -176,3 +176,54 @@ public sealed class PluginDataLocationTests : IDisposable
         Assert.Contains(_log, l => l.Contains("Nothing can be saved"));
     }
 }
+
+/// <summary>
+/// Replacing a plugin while the server is running.
+///
+/// The assembly used to be mapped from its path, which held the file open for as
+/// long as the plugin was loaded. Uploading a new build over a running one then
+/// failed or half-wrote, and a reload loaded the file that was still there: a
+/// plugin that would not update however many times you reloaded it, with nothing
+/// in the log to say why.
+/// </summary>
+public sealed class PluginReplacementTests : IDisposable
+{
+    private readonly string _root = Path.Combine(
+        Path.GetTempPath(), "fusion-replace-" + Guid.NewGuid().ToString("N"));
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { /* a test temp dir */ }
+    }
+
+    [Fact]
+    public void The_file_is_free_to_be_overwritten_while_the_plugin_runs()
+    {
+        // The API assembly stands in for a plugin: any managed assembly loads,
+        // and what is being tested is whether the file stays locked.
+        string folder = Path.Combine(_root, "plugins", "labrp");
+        Directory.CreateDirectory(folder);
+
+        string source = typeof(PluginHost).Assembly.Location;
+        string copy = Path.Combine(folder, "Plugin.dll");
+
+        File.Copy(source, copy);
+
+        var context = new System.Runtime.Loader.AssemblyLoadContext("test", isCollectible: true);
+
+        try
+        {
+            using var bytes = new MemoryStream(File.ReadAllBytes(copy));
+            context.LoadFromStream(bytes);
+
+            // The upload, while it is loaded. This threw before.
+            File.Copy(source, copy, overwrite: true);
+
+            Assert.True(File.Exists(copy));
+        }
+        finally
+        {
+            context.Unload();
+        }
+    }
+}
