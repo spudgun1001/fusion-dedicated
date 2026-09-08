@@ -263,6 +263,9 @@ public static class Program
 
         var plugins = new PluginHost(
             Path.Combine(AppContext.BaseDirectory, "plugins"),
+            // Beside bans.json and ranks.json rather than inside the plugin, so
+            // replacing a plugin no longer takes its saved data with it.
+            Path.Combine(AppContext.BaseDirectory, "plugin-data"),
             pluginEvents, pluginHealth, pluginPanel, pluginModules, pluginActions,
             () => server.Players.Players
                 .Select(p => new PluginPlayer(p.PlatformId, p.SmallId, p.DisplayName, p.Permission))

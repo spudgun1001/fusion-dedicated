@@ -356,8 +356,10 @@ picked up and fail. `plugins` on its own lists what is loaded.
 
 A plugin that throws is logged against its name and disabled after three faults,
 so a bad plugin degrades the feature it owns instead of taking the server with it.
-Anything it stores lives under `plugins/<name>/`, which is worth keeping when you
-update one.
+Anything it stores lives in `plugin-data/<name>.json`, beside `bans.json`, so
+replacing a plugin folder does not take its saved data with it. A plugin that
+still has a `data.json` inside its own folder has it copied across on the next
+start, once, and the old file is left alone.
 
 Ready-made plugins and the API to build your own are at
 [fusion-server-mods](https://github.com/spudgun1001/fusion-server-mods).

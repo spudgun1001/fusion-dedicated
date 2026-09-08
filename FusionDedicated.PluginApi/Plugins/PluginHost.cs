@@ -35,6 +35,7 @@ public sealed class LoadedPlugin
 public sealed class PluginHost
 {
     private readonly string _directory;
+    private readonly string _dataDirectory;
     private readonly PluginEvents _events;
     private readonly PluginHealth _health;
     private readonly PluginPanel _panel;
@@ -49,9 +50,27 @@ public sealed class PluginHost
     public PluginHost(string directory, PluginEvents events, PluginHealth health,
         PluginPanel panel, PluginModules modules, IPluginActions actions,
         Func<IReadOnlyList<PluginPlayer>> players, Action<string, string> log)
+        : this(directory,
+            Path.GetFullPath(Path.Combine(directory, "..", "plugin-data")),
+            events, health, panel, modules, actions, players, log)
+    {
+    }
+
+    /// <param name="dataDirectory">
+    /// Where a plugin's saved state is kept.
+    ///
+    /// Deliberately outside the plugin folder. Replacing a plugin means replacing
+    /// that folder, which took everybody's balances with it, and a folder uploaded
+    /// through a panel is often not writable by the account the server runs as, so
+    /// nothing could be saved at all.
+    /// </param>
+    public PluginHost(string directory, string dataDirectory, PluginEvents events,
+        PluginHealth health, PluginPanel panel, PluginModules modules, IPluginActions actions,
+        Func<IReadOnlyList<PluginPlayer>> players, Action<string, string> log)
     {
         _players = players;
         _directory = directory;
+        _dataDirectory = dataDirectory;
         _events = events;
         _health = health;
         _panel = panel;
@@ -185,10 +204,49 @@ public sealed class PluginHost
         return Start(manifest, instance, null, Path.Combine(_directory, name));
     }
 
+    /// <summary>
+    /// Where a plugin's state lives, moving it out of the plugin folder the first
+    /// time this runs.
+    ///
+    /// Copied rather than moved: the old folder is often the very thing that could
+    /// not be written to, and refusing to migrate because the source is read only
+    /// would leave the data stranded where it already is. The old file is left
+    /// alone and never read again once the new one exists.
+    /// </summary>
+    private string DataPathFor(string name, string folder)
+    {
+        string moved = Path.Combine(_dataDirectory, name + ".json");
+        string original = Path.Combine(folder, "data.json");
+
+        if (File.Exists(moved) || !File.Exists(original))
+        {
+            return moved;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(_dataDirectory);
+            File.Copy(original, moved);
+
+            _log("INFO", $"Moved {name}'s saved data to '{moved}'. " +
+                         "It now survives the plugin being replaced.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+            or System.Security.SecurityException or NotSupportedException)
+        {
+            _log("WARN", $"{name}'s saved data could not be moved out of its plugin " +
+                         $"folder ({e.Message}). Starting from what is there now.");
+
+            return original;
+        }
+
+        return moved;
+    }
+
     private bool Start(PluginManifest manifest, IFusionPlugin instance,
         AssemblyLoadContext? context, string folder)
     {
-        var store = new PluginStore(Path.Combine(folder, "data.json"), _log);
+        var store = new PluginStore(DataPathFor(manifest.Name, folder), _log);
         store.Load();
 
         var pluginContext = new PluginContext(

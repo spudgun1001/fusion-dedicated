@@ -42,7 +42,11 @@ public class PluginReloadResilienceTests
         void Write(string level, string message) => log.Add($"{level} {message}");
 
         var health = new PluginHealth();
-        string dir = Path.Combine(Path.GetTempPath(), "fusion-plugins-" + Guid.NewGuid().ToString("N"));
+        // A root of its own, because saved data now sits beside the plugins folder
+        // rather than inside it, and two tests sharing that would leak into each
+        // other.
+        string dir = Path.Combine(
+            Path.GetTempPath(), "fusion-plugins-" + Guid.NewGuid().ToString("N"), "plugins");
 
         var host = new PluginHost(
             dir,
@@ -53,9 +57,14 @@ public class PluginReloadResilienceTests
         return (host, log, dir);
     }
 
-    /// <summary>Makes a plugin's data.json unwritable, the way the live one was.</summary>
+    /// <summary>
+    /// Makes a plugin's saved data unwritable, the way the live one was. A
+    /// directory where the file should be is refused the same way a permission
+    /// is, and needs no privileges to set up.
+    /// </summary>
     private static void BlockTheStore(string dir, string plugin)
-        => Directory.CreateDirectory(Path.Combine(dir, plugin, "data.json"));
+        => Directory.CreateDirectory(
+            Path.Combine(Path.GetFullPath(Path.Combine(dir, "..", "plugin-data")), plugin + ".json"));
 
     [Fact]
     public void A_plugin_that_throws_on_the_way_out_is_still_unloaded()

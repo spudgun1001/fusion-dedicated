@@ -6,7 +6,7 @@ namespace FusionDedicated.Tests.Plugins;
 public class PluginHostTests : IDisposable
 {
     private readonly string _dir = Path.Combine(
-        Path.GetTempPath(), "fusion-pluginhost-" + Guid.NewGuid().ToString("N"));
+        Path.GetTempPath(), "fusion-pluginhost-" + Guid.NewGuid().ToString("N"), "plugins");
 
     private readonly List<string> _log = new();
     private readonly PluginHealth _health = new();
