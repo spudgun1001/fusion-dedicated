@@ -422,6 +422,70 @@ public static class FusionProtocol
     /// <summary>A SerializedQuaternion on the wire: three shorts and a byte.</summary>
     public const int RotationBytes = 7;
 
+    /// <summary>EntityCullStatus, which says the owner has stopped simulating something.</summary>
+    public const byte TagEntityCullStatus = 80;
+
+    /// <summary>
+    /// Reads an EntityCullStatus. The payload is the entity then a flag, and
+    /// nothing else.
+    /// </summary>
+    public static (ushort EntityId, bool Culled)? TryReadCullStatus(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            reader.ReadByte();                  // tag
+            byte relayType = reader.ReadByte();
+            reader.ReadByte();                  // channel
+
+            if (relayType == 4)
+            {
+                reader.ReadNullableByte();      // target
+            }
+
+            if (relayType != RelayTypeNone)
+            {
+                reader.ReadNullableByte();      // sender
+            }
+
+            reader.ReadInt32();                 // payload length
+
+            return (reader.ReadUInt16(), reader.ReadBool());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Writes an EntityCullStatus as the owner would.
+    ///
+    /// Stamped as coming from the owner rather than from the server, because a
+    /// client only believes one that comes from the entity's current owner. The
+    /// server is repeating what that owner already said, to somebody who was not
+    /// there to hear it.
+    /// </summary>
+    public static byte[] BuildCullStatus(byte owner, byte target, ushort entityId, bool culled)
+    {
+        var payload = new FusionNetWriter(8);
+
+        payload.WriteUInt16(entityId);
+        payload.Write(culled);
+
+        var message = new FusionNetWriter(32);
+
+        message.Write(TagEntityCullStatus);
+        message.Write((byte)4);          // ToTarget
+        message.Write(ChannelReliable);
+        message.WriteNullable(target);
+        message.WriteNullable(owner);
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
     public readonly record struct SpawnRequestInfo(
         string Barcode, Vec3 Position, byte[] Rotation, uint TrackerId, bool SpawnEffect,
         byte Source);

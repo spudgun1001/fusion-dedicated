@@ -304,6 +304,19 @@ public sealed class FusionServer : IDisposable
         // person with a different set of mods and has never been asked anything.
         _askedFor.RemoveWhere(a => a.Holder == player.SmallId);
 
+        // Their body slots go with them, so nobody is told to holster anything on
+        // a rig that no longer exists.
+        lock (_cacheLock)
+        {
+            foreach (var key in _slotted
+                         .Where(sl => Entities.Get(sl.Key.Slot)?.OwnerSmallId == player.SmallId)
+                         .Select(sl => sl.Key)
+                         .ToList())
+            {
+                _slotted.Remove(key);
+            }
+        }
+
         foreach (var holders in _barcodeHolders.Values)
         {
             holders.Remove(player.SmallId);
@@ -602,6 +615,17 @@ public sealed class FusionServer : IDisposable
                 TrackEntityPose(sender, message);
                 break;
 
+            case FusionProtocol.TagEntityCullStatus when sender != null:
+                // Watched, then passed on like anything else. Only the owner's
+                // word counts, which is the same rule the clients apply.
+                if (FusionProtocol.TryReadCullStatus(message) is var (culledId, culled)
+                    && Entities.Get(culledId)?.OwnerSmallId == sender.SmallId)
+                {
+                    Entities.SetCulledForOwner(culledId, culled);
+                }
+
+                break;
+
             case FusionProtocol.TagPlayerVoiceChat when sender != null:
                 if (Mutes.IsMuted(sender.PlatformId))
                 {
@@ -818,8 +842,6 @@ public sealed class FusionServer : IDisposable
         // what counts, so overwrite it before anyone else sees the metadata.
         player.Permission = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
 
-        Plugins?.Joined.Raise(new Plugins.JoinEvent(
-            platformId, player.DisplayName, player.Permission));
         player.SetMetadata(PermissionMetadataKey, player.Permission.ToFusionString());
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
@@ -873,6 +895,21 @@ public sealed class FusionServer : IDisposable
 
         // Everyone's copy of LobbyInfo now has a stale player list.
         PushSettings();
+
+        // Holsters and loaded magazines, once their entities have had time to
+        // exist on the newcomer's machine.
+        ReseatAttachments(player);
+
+        // Last, and after the newcomer has been registered and told it is in.
+        //
+        // This used to fire before Players.Add, which meant a plugin answering it
+        // could neither see the person who had just joined nor send them
+        // anything: a broadcast walks the register, and they were not in it yet.
+        // LabRP's balance is sent that way, so a joining player was the one
+        // person who never received it and their wrist HUD stayed empty until
+        // somebody else joined behind them.
+        Plugins?.Joined.Raise(new Plugins.JoinEvent(
+            platformId, player.DisplayName, player.Permission));
     }
 
     // ---- world bookkeeping ----
@@ -2597,8 +2634,173 @@ public sealed class FusionServer : IDisposable
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly Dictionary<(ushort Slot, byte Index), ushort> _slotted = new();
 
+    /// <summary>Which gun each magazine is in, so a newcomer can be told.</summary>
+    private readonly Dictionary<ushort, ushort> _loaded = new();
+
     /// <summary>Ten slots a player, so this is a great many players' worth.</summary>
     private const int MaxSlotsTracked = 2048;
+
+    /// <summary>Work waiting on a clock, drained by the main loop.</summary>
+    private readonly List<(DateTime Due, Action Work)> _deferred = new();
+
+    private readonly object _deferredLock = new();
+
+    private void Defer(TimeSpan delay, Action work)
+    {
+        lock (_deferredLock)
+        {
+            _deferred.Add((DateTime.UtcNow + delay, work));
+        }
+    }
+
+    /// <summary>
+    /// Runs anything whose time has come. Called every pass of the main loop, so
+    /// this is the only place with a clock finer than the ten second tick.
+    /// </summary>
+    public void PumpDeferred()
+    {
+        List<Action> due;
+
+        lock (_deferredLock)
+        {
+            if (_deferred.Count == 0)
+            {
+                return;
+            }
+
+            var now = DateTime.UtcNow;
+
+            due = _deferred.Where(d => d.Due <= now).Select(d => d.Work).ToList();
+            _deferred.RemoveAll(d => d.Due <= now);
+        }
+
+        foreach (var work in due)
+        {
+            try
+            {
+                work();
+            }
+            catch (Exception e)
+            {
+                Log("ERROR", $"Deferred work failed: {e.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Everything the catch-up spawn could not say, for somebody who has just
+    /// joined: holstered guns back on hips, magazines back in guns, and which
+    /// props their owner has stopped simulating.
+    ///
+    /// All three are things that stopped sending pose updates, so the catch-up
+    /// can only place them where they were last simulated, which is usually
+    /// mid-air, and nothing moves them afterwards either. The cull status is the
+    /// one that lets the newcomer fix it themselves: told that nobody is
+    /// simulating a prop, their client takes it over when they walk up to it and
+    /// it falls. Announced once when it happens, so anybody arriving later never
+    /// hears it.
+    ///
+    /// A real host replays all of this through its own entity catch-up, which
+    /// runs on the host alone and so never runs here.
+    ///
+    /// Sent late rather than with the rest of the catch-up: the client builds its
+    /// entities from the spawn responses asynchronously, and a message naming an
+    /// entity it has not finished making is dropped without a word. Twice, because
+    /// how long that takes depends on the machine.
+    /// </summary>
+    private void ReseatAttachments(ConnectedPlayer player)
+    {
+        foreach (var delay in new[] { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) })
+        {
+            Defer(delay, () =>
+            {
+                if (Players.Get(player.SmallId) != player)
+                {
+                    return;
+                }
+
+                int sent = SendAttachments(player);
+
+                if (sent > 0)
+                {
+                    Log("INFO", $"Re-seated {sent} attachment(s) for {player.DisplayName}");
+                }
+            });
+        }
+    }
+
+    /// <returns>How many were sent.</returns>
+    private int SendAttachments(ConnectedPlayer player)
+    {
+        List<(ushort Magazine, ushort Gun)> magazines;
+        List<(ushort Slot, byte Index, ushort Weapon)> holsters;
+
+        lock (_cacheLock)
+        {
+            magazines = _loaded.Select(m => (m.Key, m.Value)).ToList();
+            holsters = _slotted.Select(h => (h.Key.Slot, h.Key.Index, h.Value)).ToList();
+        }
+
+        int sent = 0;
+
+        // Anything its owner has stopped simulating. Without this the newcomer
+        // believes somebody is still moving it, so it never takes it over when it
+        // walks up to it, and the thing hangs in the air for the whole session.
+        foreach (var entity in Entities.Entities)
+        {
+            if (!entity.CulledForOwner || entity.OwnerSmallId is not { } owner
+                || owner == player.SmallId || Players.Get(owner) == null)
+            {
+                continue;
+            }
+
+            SendTo(player.Connection,
+                FusionProtocol.BuildCullStatus(owner, player.SmallId, entity.Id, true),
+                reliable: true);
+
+            sent++;
+        }
+
+        foreach (var (magazine, gun) in magazines)
+        {
+            if (Entities.Get(magazine) == null || Entities.Get(gun) == null)
+            {
+                lock (_cacheLock)
+                {
+                    _loaded.Remove(magazine);
+                }
+
+                continue;
+            }
+
+            SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
+                ModuleProtocol.MagazineInsertTag, PlayerRegistry.ServerSmallId,
+                ModuleProtocol.WriteMagazineInsert(magazine, gun)), reliable: true);
+
+            sent++;
+        }
+
+        foreach (var (slot, index, weapon) in holsters)
+        {
+            if (Entities.Get(weapon) == null)
+            {
+                lock (_cacheLock)
+                {
+                    _slotted.Remove((slot, index));
+                }
+
+                continue;
+            }
+
+            SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
+                ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
+                ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index)), reliable: true);
+
+            sent++;
+        }
+
+        return sent;
+    }
 
     /// <summary>
     /// Follows a magazine into a gun and a weapon into a holster, so the ammo
@@ -2621,10 +2823,25 @@ public sealed class FusionServer : IDisposable
         {
             case ModuleProtocol.AttachmentKind.Attach:
                 Entities.SetAttached(change.Entity, true);
+
+                lock (_cacheLock)
+                {
+                    if (_loaded.Count < MaxSlotsTracked)
+                    {
+                        _loaded[change.Entity] = change.Holder;
+                    }
+                }
+
                 return;
 
             case ModuleProtocol.AttachmentKind.Detach:
                 Entities.SetAttached(change.Entity, false);
+
+                lock (_cacheLock)
+                {
+                    _loaded.Remove(change.Entity);
+                }
+
                 return;
 
             case ModuleProtocol.AttachmentKind.SlotInsert:
@@ -2736,11 +2953,21 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void HandleConstraintCreate(ConnectedPlayer sender, byte[] message)
     {
+        // Said on arrival, before any of the gates below.
+        //
+        // A client deletes its own constraint before sending this and waits for
+        // the server to send it back, so anything refused here looks in game like
+        // the constrainer doing nothing at all, for everybody including the person
+        // holding it. Without this line there is no way to tell that apart from
+        // the message never arriving.
+        Log("INFO", $"Constraint request from {sender.DisplayName}");
+
         if (!sender.Permission.IsAtLeast(Config.Constrainer))
         {
             Log("WARN", $"{sender.DisplayName} tried to constrain but is " +
                         $"{sender.Permission.ToFusionString()}, not " +
-                        $"{Config.Constrainer.ToFusionString()}, dropped");
+                        $"{Config.Constrainer.ToFusionString()}, dropped. " +
+                        "Lower the Constrainer rank in the panel to allow it.");
             return;
         }
 
@@ -2766,7 +2993,9 @@ public sealed class FusionServer : IDisposable
         // well or constraint spam walks straight past it.
         if (Entities.SpawnedCount + 2 > Config.MaxEntities)
         {
-            Log("WARN", $"Constraint by {sender.DisplayName} denied: entity limit reached");
+            Log("WARN", $"Constraint by {sender.DisplayName} denied: the world is full " +
+                        $"({Entities.SpawnedCount}/{Config.MaxEntities}). Clear some props " +
+                        "or raise Max entities.");
             return;
         }
 
@@ -2800,7 +3029,8 @@ public sealed class FusionServer : IDisposable
         Broadcast(ModuleProtocol.WriteModuleToClients(
             ModuleProtocol.ConstraintCreateTag, sender.SmallId, rewritten), reliable: true);
 
-        Log("INFO", $"Constraint by {sender.DisplayName}, ends {point1} and {point2}");
+        Log("INFO", $"Constraint by {sender.DisplayName}, ends {point1} and {point2}, " +
+                    $"sent to {Players.Count} player(s)");
     }
 
     /// <summary>Stands in for a barcode so the panel and the culls can see these.</summary>
@@ -2818,6 +3048,10 @@ public sealed class FusionServer : IDisposable
 
         if (request == null)
         {
+            // Silence here is a gun that stays where it was for everybody else
+            // while the person holding it sees it in their hand: they asked to
+            // own it, nothing answered, so they never start simulating it.
+            Log("WARN", $"EntityOwnershipRequest from {sender.DisplayName} did not parse");
             return;
         }
 

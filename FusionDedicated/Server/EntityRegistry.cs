@@ -57,6 +57,17 @@ public sealed class TrackedEntity
     public bool Attached { get; set; }
 
     /// <summary>
+    /// True when the owner's own game has stopped simulating this, because it is
+    /// too far away or in a zone they have left.
+    ///
+    /// Nothing moves it while that is true, so it hangs wherever it was. A client
+    /// standing next to it takes it over and it falls, but only if it has been
+    /// told the owner is not simulating it, and that is announced once when it
+    /// happens. Anybody who joins afterwards never hears it.
+    /// </summary>
+    public bool CulledForOwner { get; set; }
+
+    /// <summary>
     /// Fusion's EntitySource, as the spawn carried it. Repeated to a newcomer so
     /// their copy agrees with everybody else's about what the thing is.
     /// </summary>
@@ -244,6 +255,18 @@ public sealed class EntityRegistry
         lock (_lock)
         {
             return _entities.GetValueOrDefault(id);
+        }
+    }
+
+    /// <summary>Records that an entity's owner has stopped simulating it, or resumed.</summary>
+    public void SetCulledForOwner(ushort id, bool culled)
+    {
+        lock (_lock)
+        {
+            if (_entities.TryGetValue(id, out var entity))
+            {
+                entity.CulledForOwner = culled;
+            }
         }
     }
 

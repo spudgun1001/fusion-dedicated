@@ -328,6 +328,7 @@ public static class Program
             // walk over empty channels, and the panel shows no plugin tabs.
             server.Plugins = pluginEvents;
             dashboard.PluginPanel = pluginPanel;
+            dashboard.PluginHost = plugins;
             server.PluginModules = pluginModules;
 
             int loadedPlugins = plugins.LoadAll();
@@ -417,6 +418,9 @@ public static class Program
                     wasPublished = true;
                     server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
                 }
+
+                // Anything waiting on a shorter clock than the tick below.
+                server.PumpDeferred();
 
                 if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
                 {

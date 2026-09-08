@@ -89,7 +89,15 @@ public static class ModuleProtocol
     public static readonly long MagazineEjectTag =
         TagFor("LabFusion", "LabFusion.Marrow.Messages.MagazineEjectMessage");
 
-    /// <summary>Somebody taking hold of a magazine. Owner, entity, hand.</summary>
+    /// <summary>
+    /// Somebody taking hold of a magazine. Owner, entity, hand.
+    ///
+    /// Read for nothing, and listed so it stays that way. It says who is holding a
+    /// magazine, not whether one is in a gun, and Fusion sends it for every
+    /// magazine on catch-up including the ones locked into guns. Treating it as a
+    /// magazine leaving a gun is what emptied guns two minutes after somebody
+    /// joined.
+    /// </summary>
     public static readonly long MagazineClaimTag =
         TagFor("LabFusion", "LabFusion.Marrow.Messages.MagazineClaimMessage");
 
@@ -107,7 +115,12 @@ public static class ModuleProtocol
     public static readonly long InventorySlotDropTag =
         TagFor("LabFusion", "LabFusion.Marrow.Messages.InventorySlotDropMessage");
 
-    /// <summary>A magazine pulled out of the ammo pouch. Payload is its entity id.</summary>
+    /// <summary>
+    /// A magazine taken from the ammo pouch. Also read for nothing.
+    ///
+    /// The id in it is the pouch, not the magazine, so acting on it marked the
+    /// wrong thing entirely.
+    /// </summary>
     public static readonly long AmmoReceiverDropTag =
         TagFor("LabFusion", "LabFusion.Marrow.Messages.InventoryAmmoReceiverDropMessage");
 
@@ -130,8 +143,9 @@ public static class ModuleProtocol
         SlotDrop,
     }
 
+    /// <param name="Holder">The gun a magazine went into. Zero when there is none.</param>
     public readonly record struct AttachmentChange(
-        AttachmentKind Kind, ushort Entity, ushort Slot, byte SlotIndex);
+        AttachmentKind Kind, ushort Entity, ushort Slot, byte SlotIndex, ushort Holder = 0);
 
     /// <summary>
     /// Reads one of Fusion's attachment messages.
@@ -147,7 +161,8 @@ public static class ModuleProtocol
         // MagazineInsertData: magazine, gun.
         if (handlerTag == MagazineInsertTag && payload.Length >= 4)
         {
-            return new AttachmentChange(AttachmentKind.Attach, Id(payload, 0), 0, 0);
+            return new AttachmentChange(
+                AttachmentKind.Attach, Id(payload, 0), 0, 0, Id(payload, 2));
         }
 
         // MagazineEjectData: player, magazine, gun, hand.
@@ -156,17 +171,12 @@ public static class ModuleProtocol
             return new AttachmentChange(AttachmentKind.Detach, Id(payload, 1), 0, 0);
         }
 
-        // MagazineClaimData: owner, entity, hand. In a hand is not in a gun.
-        if (handlerTag == MagazineClaimTag && payload.Length >= 4)
-        {
-            return new AttachmentChange(AttachmentKind.Detach, Id(payload, 1), 0, 0);
-        }
-
-        // InventoryAmmoReceiverDropData: entity.
-        if (handlerTag == AmmoReceiverDropTag && payload.Length >= 2)
-        {
-            return new AttachmentChange(AttachmentKind.Detach, Id(payload, 0), 0, 0);
-        }
+        // Nothing else says a magazine left a gun. A claim says who is holding
+        // one, which Fusion announces for every magazine on catch-up, guns
+        // included, and the ammo pouch message names the pouch rather than the
+        // magazine. Both were read as a magazine coming out, and a gun that had
+        // been loaded for an hour lost its magazine two minutes after the next
+        // person joined.
 
         // InventorySlotInsertData: slot, weapon, index.
         if (handlerTag == InventorySlotInsertTag && payload.Length >= 5)
@@ -188,6 +198,44 @@ public static class ModuleProtocol
 
     private static ushort Id(ReadOnlySpan<byte> payload, int at)
         => (ushort)((payload[at] << 8) | payload[at + 1]);
+
+    /// <summary>
+    /// A magazine sitting in a gun, as MagazineInsertData writes it: the magazine
+    /// then the gun.
+    ///
+    /// Sent to somebody who has just joined. A magazine in a gun is kinematic and
+    /// asleep, so it sends no pose updates, and the catch-up puts it wherever it
+    /// was last simulated. That is usually mid-air, and it never moves again
+    /// because nothing is simulating it.
+    /// </summary>
+    public static byte[] WriteMagazineInsert(ushort magazine, ushort gun)
+    {
+        var writer = new FusionNetWriter(8);
+
+        writer.WriteUInt16(magazine);
+        writer.WriteUInt16(gun);
+
+        return writer.ToArray();
+    }
+
+    /// <summary>
+    /// A weapon in a body slot, as InventorySlotInsertData writes it: the slot,
+    /// the weapon, then which slot of that receiver.
+    ///
+    /// The same problem as a magazine. A holstered gun is attached to somebody's
+    /// hip and asleep, so a newcomer is told to put it where it was last seen
+    /// loose, and it hangs there.
+    /// </summary>
+    public static byte[] WriteInventorySlotInsert(ushort slot, ushort weapon, byte index)
+    {
+        var writer = new FusionNetWriter(8);
+
+        writer.WriteUInt16(slot);
+        writer.WriteUInt16(weapon);
+        writer.Write(index);
+
+        return writer.ToArray();
+    }
 
     /// <summary>Which handler a module message belongs to, or null if it is not one.</summary>
     public static long? TryReadHandlerTag(ReadOnlySpan<byte> message)
@@ -223,6 +271,25 @@ public static class ModuleProtocol
             reader.ReadByte(); // tag
             byte relayType = reader.ReadByte();
             reader.ReadByte(); // channel
+
+            // The route's own fields come before the sender, and skipping them was
+            // missing here. A module message aimed at one player then had its
+            // handler tag read two bytes early, so the server did not recognise
+            // any of them: Fusion sends a constraint catch-up, a destructible and
+            // a puppet kill this way.
+            if (relayType == 4)
+            {
+                reader.ReadNullableByte();
+            }
+            else if (relayType == 5)
+            {
+                int targets = reader.ReadInt32();
+
+                for (var i = 0; i < targets; i++)
+                {
+                    reader.ReadByte();
+                }
+            }
 
             if (relayType != 0)
             {
