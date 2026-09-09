@@ -35,6 +35,18 @@ public class MortalityCheckTests
     }
 
     [Fact]
+    public void The_knockout_warning_says_a_server_restart_will_not_fix_it()
+    {
+        // The flag that jams is a static in the player's own game, so the usual
+        // reaction to godmode reports, restarting the server, achieves nothing.
+        // Saying so is most of the value of this warning.
+        string why = MortalityCheck.WhyUnkillable(mortality: true, knockout: true)!;
+
+        Assert.Contains("restarting the server does nothing", why, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("restarting BONELAB", why, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Mortality_off_is_named_first_since_it_stops_everything()
     {
         string? why = MortalityCheck.WhyUnkillable(mortality: false, knockout: true);
