@@ -261,12 +261,33 @@ public static class Program
         var pluginModules = new PluginModules(pluginHealth,
             (level, message) => server.Log(level, message));
 
+        // The RPC surface, and the wire it sends down. This is what lets a plugin
+        // answer a prop that was built in Unity and shipped on mod.io, which can
+        // carry no code of its own.
+        var pluginRpc = new PluginRpc(pluginHealth,
+            (level, message) => server.Log(level, message));
+
+        pluginRpc.Sender = (kind, path, value, platformId)
+            => server.SendRpc(kind, path, value, platformId);
+
+        server.PluginRpc = pluginRpc;
+
+        // How one plugin asks another for something. Phones charge a call to a
+        // LabRP balance this way, without either knowing the other exists.
+        var pluginBus = new PluginBus(pluginHealth,
+            (level, message) => server.Log(level, message));
+
+        // What is in the world, to read. A plugin holding something against a
+        // prop that has been kept needs to know where it is, because a kept prop
+        // comes back under a new id after a restart.
+        var pluginWorld = new PluginWorld { Lookup = server.FindEntity };
+
         var plugins = new PluginHost(
             Path.Combine(AppContext.BaseDirectory, "plugins"),
             // Beside bans.json and ranks.json rather than inside the plugin, so
             // replacing a plugin no longer takes its saved data with it.
             Path.Combine(AppContext.BaseDirectory, "plugin-data"),
-            pluginEvents, pluginHealth, pluginPanel, pluginModules, pluginActions,
+            pluginEvents, pluginHealth, pluginPanel, pluginModules, pluginRpc, pluginBus, pluginWorld, pluginActions,
             () => server.Players.Players
                 .Select(p => new PluginPlayer(p.PlatformId, p.SmallId, p.DisplayName, p.Permission))
                 .ToList(),

@@ -85,6 +85,12 @@ public sealed class FusionServer : IDisposable
     /// <summary>Module tags plugins have claimed, when a host is running.</summary>
     public Plugins.PluginModules? PluginModules { get; set; }
 
+    /// <summary>
+    /// The RPC surface plugins read and write through. Set by the host, along with
+    /// the sender that turns a plugin's call into a message.
+    /// </summary>
+    public FusionDedicated.Plugins.PluginRpc? PluginRpc { get; set; }
+
     /// <summary>Records module messages nothing handled, for writing a plugin against.</summary>
     public Plugins.ModuleInspector ModuleInspector { get; } = new();
 
@@ -565,13 +571,29 @@ public sealed class FusionServer : IDisposable
                 NotePropCreate(sender, message);
                 break;
 
+            case 209 when sender != null:
             case 210 when sender != null:
             case 211 when sender != null:
             case 212 when sender != null:
             case 213 when sender != null:
             case 214 when sender != null:
-                NoteRpcVariable(tag, sender.SmallId, message);
+            {
+                // A variable is kept so a joiner can be told what it is now. An
+                // event is a one-shot and there is nothing to keep.
+                if (tag != 209)
+                {
+                    NoteRpcVariable(tag, sender.SmallId, message);
+                }
+
+                // A plugin gets it before anybody else, which is what lets a prop
+                // built in Unity and shipped on mod.io be answered by the server.
+                if (OfferRpcToPlugins(sender, tag, message) == FusionDedicated.Plugins.RpcActionKind.Drop)
+                {
+                    return;
+                }
+
                 break;
+            }
 
             case GateProtocol.TagPointItemEquipState when sender != null:
                 // Kept as it changes. The join catch-up sends each player's
@@ -2629,6 +2651,92 @@ public sealed class FusionServer : IDisposable
         }
 
         HandleConstraintCreate(sender, message);
+    }
+
+    /// <summary>
+    /// Shows an RPC to whatever plugins are watching, and says whether it should
+    /// still go on to the other clients.
+    /// </summary>
+    private FusionDedicated.Plugins.RpcActionKind OfferRpcToPlugins(ConnectedPlayer sender, byte tag, byte[] message)
+    {
+        if (PluginRpc is not { Watched: true } rpc)
+        {
+            return FusionDedicated.Plugins.RpcActionKind.Pass;
+        }
+
+        byte[]? body = GateProtocol.TryReadBody(message, tag);
+
+        if (body == null || RpcProtocol.TryReadPath(body) is not { } path)
+        {
+            return FusionDedicated.Plugins.RpcActionKind.Pass;
+        }
+
+        var kind = RpcProtocol.KindOf(tag);
+
+        return rpc.Dispatch(new FusionDedicated.Plugins.RpcRequest(
+            sender.PlatformId, sender.DisplayName, sender.Permission, kind,
+            path.Key, path.HasEntity, path.EntityId, path.ComponentIndex,
+            RpcProtocol.ReadValue(kind, body))).Kind;
+    }
+
+    /// <summary>
+    /// Sends an RPC as a plugin asked, to one player or to everybody.
+    ///
+    /// Stamped as coming from the server. Nothing on the receiving side checks who
+    /// sent an RPC, so this is honest rather than necessary: the value really is
+    /// the server's, unlike the ones replayed from the cache.
+    /// </summary>
+    public void SendRpc(BonelabServerBrowser.Fusion.RpcKind kind, string path,
+        BonelabServerBrowser.Fusion.RpcValue value, ulong? platformId)
+    {
+        byte[] pathBytes;
+
+        try
+        {
+            pathBytes = Convert.FromHexString(path);
+        }
+        catch (FormatException)
+        {
+            Log("WARN", $"A plugin asked to set an RPC on '{path}', which is not a path");
+            return;
+        }
+
+        byte[] payload = RpcProtocol.WriteValue(kind, pathBytes, value);
+
+        if (platformId is { } who)
+        {
+            if (Players.GetByPlatformId(who) is { } target)
+            {
+                SendTo(target.Connection, GateProtocol.BuildRpcVariable(
+                    (byte)kind, target.SmallId, PlayerRegistry.ServerSmallId, payload), reliable: true);
+            }
+
+            return;
+        }
+
+        foreach (var player in Players.Players)
+        {
+            SendTo(player.Connection, GateProtocol.BuildRpcVariable(
+                (byte)kind, player.SmallId, PlayerRegistry.ServerSmallId, payload), reliable: true);
+        }
+    }
+
+    /// <summary>
+    /// One entity, for a plugin that needs to look one up. Null when it has gone.
+    /// </summary>
+    public FusionDedicated.Plugins.PluginEntity? FindEntity(ushort entityId)
+    {
+        if (Entities.Get(entityId) is not { } entity)
+        {
+            return null;
+        }
+
+        ulong owner = entity.OwnerSmallId is { } small
+            ? Players.Get(small)?.PlatformId ?? 0UL
+            : 0UL;
+
+        return new FusionDedicated.Plugins.PluginEntity(
+            entity.Id, entity.Barcode, owner, entity.X, entity.Y, entity.Z, entity.Persistent);
     }
 
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>

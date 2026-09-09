@@ -16,13 +16,29 @@ public sealed class PluginContext
     public PluginContext(string name, PluginEvents events, PluginStore store,
         PluginPanel panel, PluginModules modules, IPluginActions actions,
         Func<IReadOnlyList<PluginPlayer>> players, Action<string, string> log)
+        : this(name, events, store, panel, modules, new PluginRpc(new PluginHealth(), log),
+            new PluginBus(new PluginHealth(), log), new PluginWorld(), actions, players, log)
     {
+    }
+
+    /// <summary>
+    /// The one the server uses. Kept apart from the shorter form above so a
+    /// plugin already compiled against that one still loads.
+    /// </summary>
+    public PluginContext(string name, PluginEvents events, PluginStore store,
+        PluginPanel panel, PluginModules modules, PluginRpc rpc, PluginBus bus,
+        PluginWorld world, IPluginActions actions, Func<IReadOnlyList<PluginPlayer>> players,
+        Action<string, string> log)
+    {
+        Bus = bus;
+        World = world;
         _players = players;
         Name = name;
         Events = events;
         Store = store;
         Panel = panel;
         Modules = modules;
+        Rpc = rpc;
         Actions = actions;
         _log = log;
     }
@@ -38,6 +54,31 @@ public sealed class PluginContext
 
     /// <summary>Module message tags this plugin has claimed, if any.</summary>
     public PluginModules Modules { get; }
+
+    /// <summary>
+    /// The RPC components of whatever pallets are loaded, to read and to write.
+    ///
+    /// How a plugin talks to a prop built in Unity and shipped on mod.io, which
+    /// cannot carry code of its own.
+    /// </summary>
+    public PluginRpc Rpc { get; }
+
+    /// <summary>
+    /// The other plugins on this server, by name and verb.
+    ///
+    /// Plugins cannot call each other, so they agree a verb and some strings. A
+    /// verb nobody offers is answered rather than thrown, so a plugin that would
+    /// like an economy still works on a server that has none.
+    /// </summary>
+    public PluginBus Bus { get; }
+
+    /// <summary>
+    /// What is in the world, to read: where a prop is, and whether it has been
+    /// kept. A kept prop comes back after a restart at the same place under a new
+    /// id, so a plugin that wants to remember something about one holds it against
+    /// the place.
+    /// </summary>
+    public PluginWorld World { get; }
 
     /// <summary>Who is connected, read afresh each time it is asked for.</summary>
     public IReadOnlyList<PluginPlayer> Players => _players();

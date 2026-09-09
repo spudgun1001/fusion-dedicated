@@ -41,6 +41,9 @@ public sealed class PluginHost
     private readonly PluginHealth _health;
     private readonly PluginPanel _panel;
     private readonly PluginModules _modules;
+    private readonly PluginRpc _rpc = null!;
+    private readonly PluginBus _bus = null!;
+    private readonly PluginWorld _world = null!;
     private readonly Func<IReadOnlyList<PluginPlayer>> _players;
     private readonly IPluginActions _actions;
     private readonly Action<string, string> _log;
@@ -55,6 +58,18 @@ public sealed class PluginHost
             Path.GetFullPath(Path.Combine(directory, "..", "plugin-data")),
             events, health, panel, modules, actions, players, log)
     {
+    }
+
+    /// <summary>The one the server uses, which also passes the RPC surface through.</summary>
+    public PluginHost(string directory, string dataDirectory, PluginEvents events,
+        PluginHealth health, PluginPanel panel, PluginModules modules, PluginRpc rpc,
+        PluginBus bus, PluginWorld world, IPluginActions actions,
+        Func<IReadOnlyList<PluginPlayer>> players, Action<string, string> log)
+        : this(directory, dataDirectory, events, health, panel, modules, actions, players, log)
+    {
+        _rpc = rpc;
+        _bus = bus;
+        _world = world;
     }
 
     /// <param name="dataDirectory">
@@ -78,6 +93,9 @@ public sealed class PluginHost
         _modules = modules;
         _actions = actions;
         _log = log;
+        _rpc ??= new PluginRpc(health, log);
+        _bus ??= new PluginBus(health, log);
+        _world ??= new PluginWorld();
     }
 
     public IReadOnlyList<LoadedPlugin> Loaded
@@ -279,7 +297,7 @@ public sealed class PluginHost
         store.Load();
 
         var pluginContext = new PluginContext(
-            manifest.Name, _events, store, _panel, _modules, _actions, _players, _log);
+            manifest.Name, _events, store, _panel, _modules, _rpc, _bus, _world, _actions, _players, _log);
 
         try
         {
@@ -292,6 +310,8 @@ public sealed class PluginHost
             _events.RemoveAll(manifest.Name);
             _panel.RemoveAll(manifest.Name);
             _modules.RemoveAll(manifest.Name);
+            _rpc.RemoveAll(manifest.Name);
+            _bus.RemoveAll(manifest.Name);
             _log("ERROR", $"Plugin '{manifest.Name}' threw while starting and was not loaded: {e.Message}");
             pluginContext.StopTimers();
             context?.Unload();
@@ -345,6 +365,8 @@ public sealed class PluginHost
         _events.RemoveAll(plugin.Name);
         _panel.RemoveAll(plugin.Name);
         _modules.RemoveAll(plugin.Name);
+        _rpc.RemoveAll(plugin.Name);
+        _bus.RemoveAll(plugin.Name);
         _health.Forget(plugin.Name);
 
         // Everything from here has to happen even if one part of it fails. An
