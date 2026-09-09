@@ -1221,6 +1221,16 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        CacheRpcVariable(tag, from, body, path);
+    }
+
+    /// <summary>
+    /// Holds an RPC variable's latest value, so somebody who joins later is told
+    /// it. Split out because the server sets variables of its own, on behalf of
+    /// plugins, and those have to be replayed the same way a client's are.
+    /// </summary>
+    private void CacheRpcVariable(byte tag, byte from, byte[] body, byte[] path)
+    {
         var key = (tag, Convert.ToHexString(path));
 
         lock (_cacheLock)
@@ -2703,6 +2713,15 @@ public sealed class FusionServer : IDisposable
 
         byte[] payload = RpcProtocol.WriteValue(kind, pathBytes, value);
 
+        // Held so somebody who joins afterwards is told it too. Without this a
+        // value the server set was only ever heard by whoever was already here.
+        if (platformId == null
+            && kind != BonelabServerBrowser.Fusion.RpcKind.Event
+            && payload.Length <= MaxCachedBody)
+        {
+            CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
+        }
+
         if (platformId is { } who)
         {
             if (Players.GetByPlatformId(who) is { } target)
@@ -2738,6 +2757,23 @@ public sealed class FusionServer : IDisposable
         return new FusionDedicated.Plugins.PluginEntity(
             entity.Id, entity.Barcode, owner, entity.X, entity.Y, entity.Z, entity.Persistent);
     }
+
+    /// <summary>
+    /// Everything in the world, for a plugin that has to find its own props.
+    ///
+    /// A prop cannot announce itself reliably. Anything it fires as it comes into
+    /// the world leaves before Fusion has given it a network entity, so it
+    /// arrives naming no entity and cannot be answered. Reading the world instead
+    /// is the only way a plugin can find what it owns.
+    /// </summary>
+    public IReadOnlyList<FusionDedicated.Plugins.PluginEntity> AllEntities()
+        => Entities.Entities
+            .Select(e => new FusionDedicated.Plugins.PluginEntity(
+                e.Id,
+                e.Barcode,
+                e.OwnerSmallId is { } small ? Players.Get(small)?.PlatformId ?? 0UL : 0UL,
+                e.X, e.Y, e.Z, e.Persistent))
+            .ToList();
 
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly Dictionary<(ushort Slot, byte Index), ushort> _slotted = new();

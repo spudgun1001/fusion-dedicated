@@ -31,7 +31,29 @@ public sealed class PluginWorld
     /// </summary>
     public Func<ushort, PluginEntity?>? Lookup { get; set; }
 
+    /// <summary>
+    /// How the server lists everything, for a plugin that has to find its own
+    /// props rather than wait to be told about them.
+    /// </summary>
+    public Func<IReadOnlyList<PluginEntity>>? Everything { get; set; }
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
+
+    /// <summary>Everything in the world, empty when there is no server.</summary>
+    public IReadOnlyList<PluginEntity> All()
+        => Everything?.Invoke() ?? Array.Empty<PluginEntity>();
+
+    /// <summary>
+    /// Everything spawned from one crate.
+    ///
+    /// This is how a plugin finds its own props. A prop cannot announce itself:
+    /// anything it fires as it comes into the world leaves before Fusion has
+    /// given it a network entity, so it names no entity and cannot be replied to.
+    /// </summary>
+    public IReadOnlyList<PluginEntity> OfBarcode(string barcode)
+        => barcode.Length == 0
+            ? Array.Empty<PluginEntity>()
+            : All().Where(e => string.Equals(e.Barcode, barcode, StringComparison.OrdinalIgnoreCase)).ToList();
 
     /// <summary>
     /// A place, rounded, as a key something can be remembered against.
