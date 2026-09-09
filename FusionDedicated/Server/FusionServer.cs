@@ -314,13 +314,7 @@ public sealed class FusionServer : IDisposable
         // a rig that no longer exists.
         lock (_cacheLock)
         {
-            foreach (var key in _slotted
-                         .Where(sl => Entities.Get(sl.Key.Slot)?.OwnerSmallId == player.SmallId)
-                         .Select(sl => sl.Key)
-                         .ToList())
-            {
-                _slotted.Remove(key);
-            }
+            _slotted.ForgetSlots(slot => Entities.Get(slot)?.OwnerSmallId == player.SmallId);
         }
 
         foreach (var holders in _barcodeHolders.Values)
@@ -2781,12 +2775,12 @@ public sealed class FusionServer : IDisposable
             .ToList();
 
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
-    private readonly Dictionary<(ushort Slot, byte Index), ushort> _slotted = new();
+    private readonly HolsterSlots _slotted = new();
 
     /// <summary>Which gun each magazine is in, so a newcomer can be told.</summary>
     private readonly Dictionary<ushort, ushort> _loaded = new();
 
-    /// <summary>Ten slots a player, so this is a great many players' worth.</summary>
+    /// <summary>A magazine each for a great many guns.</summary>
     private const int MaxSlotsTracked = 2048;
 
     /// <summary>Work waiting on a clock, drained by the main loop.</summary>
@@ -2882,12 +2876,12 @@ public sealed class FusionServer : IDisposable
     private int SendAttachments(ConnectedPlayer player)
     {
         List<(ushort Magazine, ushort Gun)> magazines;
-        List<(ushort Slot, byte Index, ushort Weapon)> holsters;
+        IReadOnlyList<(ushort Slot, byte Index, ushort Weapon)> holsters;
 
         lock (_cacheLock)
         {
             magazines = _loaded.Select(m => (m.Key, m.Value)).ToList();
-            holsters = _slotted.Select(h => (h.Key.Slot, h.Key.Index, h.Value)).ToList();
+            holsters = _slotted.All();
         }
 
         int sent = 0;
@@ -2935,7 +2929,7 @@ public sealed class FusionServer : IDisposable
             {
                 lock (_cacheLock)
                 {
-                    _slotted.Remove((slot, index));
+                    _slotted.Forget(slot, index);
                 }
 
                 continue;
@@ -2998,10 +2992,7 @@ public sealed class FusionServer : IDisposable
 
                 lock (_cacheLock)
                 {
-                    if (_slotted.Count < MaxSlotsTracked)
-                    {
-                        _slotted[(change.Slot, change.SlotIndex)] = change.Entity;
-                    }
+                    _slotted.Insert(change.Slot, change.SlotIndex, change.Entity);
                 }
 
                 return;
@@ -3009,7 +3000,7 @@ public sealed class FusionServer : IDisposable
             case ModuleProtocol.AttachmentKind.SlotDrop:
                 lock (_cacheLock)
                 {
-                    if (_slotted.Remove((change.Slot, change.SlotIndex), out ushort weapon))
+                    if (_slotted.Drop(change.Slot, change.SlotIndex) is { } weapon)
                     {
                         Entities.SetAttached(weapon, false);
                     }
