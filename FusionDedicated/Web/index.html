@@ -1644,7 +1644,11 @@ function renderWorld(d) {
           '<div class="sub">' + esc(e.barcode) + '</div></td>' +
         '<td data-label="Owner">' + (e.orphaned
           ? '<span class="chip orphan">orphan</span>'
-          : '<span class="chip">' + e.owner + '</span>') + '</td>' +
+          : '<span class="chip">' + e.owner + '</span>') +
+          /* A magazine in a gun sleeps where it was last simulated, so its
+             position is no guide to whether the ammo cull can reach it. This is. */
+          (e.attached ? ' <span class="chip kept">in use</span>'
+            : e.ammo ? ' <span class="chip orphan">loose</span>' : '') + '</td>' +
         '<td class="m right dim" data-label="Position">' + e.x + ', ' + e.y + ', ' + e.z + '</td>' +
         '<td class="right" data-label="Actions"><div class="acts">' +
           (e.persistent

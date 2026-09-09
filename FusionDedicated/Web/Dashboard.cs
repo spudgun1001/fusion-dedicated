@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using FusionDedicated.Server;
+using FusionDedicated.Server.Safety;
 
 namespace FusionDedicated.Web;
 
@@ -633,6 +634,13 @@ public sealed class Dashboard
                         owner = e.OwnerSmallId,
                         orphaned = e.IsOrphaned,
                         persistent = e.Persistent,
+
+                        // A magazine in a gun sleeps where it was last simulated,
+                        // so its position says nothing about where it now is. This
+                        // is the only thing that says whether the ammo cull can
+                        // take it.
+                        attached = e.Attached,
+                        ammo = Ammunition.IsAmmo(e.Barcode),
                         x = MathF.Round(e.X, 1),
                         y = MathF.Round(e.Y, 1),
                         z = MathF.Round(e.Z, 1),
