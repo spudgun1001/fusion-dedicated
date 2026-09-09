@@ -2722,12 +2722,17 @@ public sealed class FusionServer : IDisposable
             CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
         }
 
+        // Stamped as the player being told rather than as the server, which is
+        // what the level variable replay does and what clients are known to
+        // accept. The server has no player of its own on a relay, and a small ID
+        // naming nobody is the one difference between this and the path that
+        // works.
         if (platformId is { } who)
         {
             if (Players.GetByPlatformId(who) is { } target)
             {
                 SendTo(target.Connection, GateProtocol.BuildRpcVariable(
-                    (byte)kind, target.SmallId, PlayerRegistry.ServerSmallId, payload), reliable: true);
+                    (byte)kind, target.SmallId, target.SmallId, payload), reliable: true);
             }
 
             return;
@@ -2736,7 +2741,7 @@ public sealed class FusionServer : IDisposable
         foreach (var player in Players.Players)
         {
             SendTo(player.Connection, GateProtocol.BuildRpcVariable(
-                (byte)kind, player.SmallId, PlayerRegistry.ServerSmallId, payload), reliable: true);
+                (byte)kind, player.SmallId, player.SmallId, payload), reliable: true);
         }
     }
 
