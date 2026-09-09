@@ -164,6 +164,10 @@ public static class GateProtocol
     {
         var message = new FusionNetWriter(body.Length + 32);
 
+        // ToTarget, which is what Fusion itself uses to tell one player the value
+        // of a variable. NativeMessageHandler.Handle only acts on a route when it
+        // is the server, so on a client every route falls through to the handler
+        // alike, and this is the one that names who it is for.
         message.Write(tag);
         message.Write((byte)4);                 // ToTarget
         message.Write((byte)0);                 // Reliable
