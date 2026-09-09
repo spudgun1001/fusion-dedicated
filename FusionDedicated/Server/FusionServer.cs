@@ -1312,8 +1312,16 @@ public sealed class FusionServer : IDisposable
 
             if (!verdict.Allowed)
             {
-                Log("WARN", $"{named.DisplayName} tried the nickname " +
-                            $"'{request.Value.Value}': {verdict.Reason}");
+                if (verdict.Report)
+                {
+                    string more = verdict.Silenced > 0
+                        ? $", and {verdict.Silenced} more since the last of these"
+                        : "";
+
+                    Log("WARN", $"{named.DisplayName} tried the nickname " +
+                                $"'{request.Value.Value}': {verdict.Reason}{more}");
+                }
+
                 return;
             }
 

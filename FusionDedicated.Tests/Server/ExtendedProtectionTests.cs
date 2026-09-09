@@ -139,6 +139,99 @@ public class NicknameGuardTests
 
         Assert.False(guard.Allow(1, "Admin", _t0).Allowed);
     }
+
+    // A nickname changer retries several times a second for as long as it is on,
+    // and one line per refusal buried everything else in the console.
+
+    [Fact]
+    public void Being_allowed_is_never_worth_saying()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 3, Array.Empty<string>());
+
+        Assert.False(guard.Allow(1, "Spudgun", _t0).Report);
+    }
+
+    [Fact]
+    public void The_first_refusal_is_worth_saying()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 1, Array.Empty<string>());
+        guard.Allow(1, "one", _t0);
+
+        var verdict = guard.Allow(1, "two", _t0);
+
+        Assert.False(verdict.Allowed);
+        Assert.True(verdict.Report);
+        Assert.Equal(0, verdict.Silenced);
+    }
+
+    [Fact]
+    public void The_rest_of_the_flood_is_not()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 1, Array.Empty<string>());
+        guard.Allow(1, "one", _t0);
+        guard.Allow(1, "two", _t0);
+
+        for (var i = 0; i < 500; i++)
+        {
+            Assert.False(guard.Allow(1, $"n{i}", _t0.AddSeconds(i % 50)).Report);
+        }
+    }
+
+    [Fact]
+    public void The_ones_left_unsaid_are_counted_for_the_next_one()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 1, Array.Empty<string>());
+        guard.Allow(1, "one", _t0);
+        guard.Allow(1, "two", _t0);
+
+        for (var i = 0; i < 20; i++)
+        {
+            guard.Allow(1, "again", _t0.AddSeconds(1));
+        }
+
+        // A minute on, the rate window has slid and one change gets through, so
+        // it takes two calls to be refused again.
+        guard.Allow(1, "allowed now", _t0.AddSeconds(61));
+        var verdict = guard.Allow(1, "again", _t0.AddSeconds(61));
+
+        Assert.False(verdict.Allowed);
+        Assert.True(verdict.Report);
+        Assert.Equal(20, verdict.Silenced);
+    }
+
+    [Fact]
+    public void One_players_flood_does_not_quieten_another()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 1, Array.Empty<string>());
+        guard.Allow(1, "one", _t0);
+        guard.Allow(1, "two", _t0);
+        guard.Allow(2, "one", _t0);
+
+        Assert.True(guard.Allow(2, "two", _t0).Report);
+    }
+
+    [Fact]
+    public void A_reserved_name_is_quietened_the_same_way()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 0, new[] { "Admin" });
+
+        Assert.True(guard.Allow(1, "Admin", _t0).Report);
+        Assert.False(guard.Allow(1, "Admin", _t0).Report);
+    }
+
+    [Fact]
+    public void A_player_who_leaves_is_heard_afresh_when_they_return()
+    {
+        var guard = new NicknameGuard(maxChangesPerMinute: 1, Array.Empty<string>());
+        guard.Allow(1, "one", _t0);
+        guard.Allow(1, "two", _t0);
+        guard.Allow(1, "three", _t0);
+
+        guard.Forget(1);
+
+        guard.Allow(1, "one", _t0);
+        Assert.True(guard.Allow(1, "two", _t0).Report);
+    }
 }
 
 public class DespawnAuthorityTests

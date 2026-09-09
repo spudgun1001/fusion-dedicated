@@ -69,7 +69,14 @@ public sealed class SpawnRateLimiter
     }
 }
 
-public readonly record struct NicknameVerdict(bool Allowed, string Reason);
+/// <param name="Report">
+/// Whether this refusal is worth saying out loud. A nickname changer retries
+/// several times a second for as long as it is switched on, and one line each
+/// buried everything else in the console.
+/// </param>
+/// <param name="Silenced">How many refusals went unsaid since the last one that was.</param>
+public readonly record struct NicknameVerdict(
+    bool Allowed, string Reason, bool Report = false, int Silenced = 0);
 
 /// <summary>
 /// Refuses reserved nicknames and rapid renaming, which are how impersonation and
@@ -78,7 +85,11 @@ public readonly record struct NicknameVerdict(bool Allowed, string Reason);
 public sealed class NicknameGuard
 {
     private readonly Dictionary<byte, List<DateTime>> _changes = new();
+    private readonly Dictionary<byte, (DateTime Said, int Since)> _refusals = new();
     private readonly object _lock = new();
+
+    /// <summary>How long a player's refusals stay quiet after one is reported.</summary>
+    private static readonly TimeSpan SayAgainAfter = TimeSpan.FromSeconds(60);
 
     private int _maxPerMinute;
     private HashSet<string> _reserved;
@@ -112,7 +123,7 @@ public sealed class NicknameGuard
         {
             if (_reserved.Contains(Normalise(nickname)))
             {
-                return new NicknameVerdict(false, $"'{nickname.Trim()}' is a reserved name");
+                return Refuse(smallId, $"'{nickname.Trim()}' is a reserved name", now);
             }
 
             if (_maxPerMinute <= 0)
@@ -130,7 +141,7 @@ public sealed class NicknameGuard
 
             if (times.Count >= _maxPerMinute)
             {
-                return new NicknameVerdict(false, "changing nickname too often");
+                return Refuse(smallId, "changing nickname too often", now);
             }
 
             times.Add(now);
@@ -138,11 +149,31 @@ public sealed class NicknameGuard
         }
     }
 
+    /// <summary>
+    /// Turns a refusal down, so a player who keeps trying is heard once a minute
+    /// rather than on every attempt.
+    /// </summary>
+    private NicknameVerdict Refuse(byte smallId, string reason, DateTime now)
+    {
+        _refusals.TryGetValue(smallId, out var last);
+
+        if (last.Said != default && now - last.Said < SayAgainAfter)
+        {
+            _refusals[smallId] = (last.Said, last.Since + 1);
+            return new NicknameVerdict(false, reason);
+        }
+
+        _refusals[smallId] = (now, 0);
+
+        return new NicknameVerdict(false, reason, Report: true, Silenced: last.Since);
+    }
+
     public void Forget(byte smallId)
     {
         lock (_lock)
         {
             _changes.Remove(smallId);
+            _refusals.Remove(smallId);
         }
     }
 }
