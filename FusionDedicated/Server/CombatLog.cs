@@ -10,7 +10,11 @@ public static class CombatLog
 
     public static bool IsWorthLogging(float damage) => damage > 0f;
 
+    /// <summary>
+    /// Two decimal places, and no trailing zeros. BONELAB's damage figures are
+    /// small, so rounding to whole numbers made every real hit read "for 0".
+    /// </summary>
     public static string Describe(string attacker, string? target, float damage)
         => $"{attacker} hit {(string.IsNullOrWhiteSpace(target) ? "someone" : target)} " +
-           $"for {damage:0}";
+           $"for {damage:0.##}";
 }
