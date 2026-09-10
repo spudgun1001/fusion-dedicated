@@ -289,7 +289,7 @@ public static class Program
             Path.Combine(AppContext.BaseDirectory, "plugin-data"),
             pluginEvents, pluginHealth, pluginPanel, pluginModules, pluginRpc, pluginBus, pluginWorld, pluginActions,
             () => server.Players.Players
-                .Select(p => new PluginPlayer(p.PlatformId, p.SmallId, p.DisplayName, p.Permission))
+                .Select(PluginPlayers.Snapshot)
                 .ToList(),
             (level, message) => server.Log(level, message));
 
