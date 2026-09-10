@@ -31,4 +31,75 @@ public class PluginActionsTests
             new[] { "kick 1 afk", "ban 2 nuke", "rank 3 Operator", "despawn 400" },
             made);
     }
+
+    [Fact]
+    public void Spawn_keep_and_forget_reach_the_server_calls_behind_them()
+    {
+        var made = new List<string>();
+
+        var actions = new ServerPluginActions(
+            (id, reason) => { },
+            (id, reason) => { },
+            (id, level) => { },
+            id => { },
+            (id, tag, payload) => { },
+            (tag, payload) => { },
+            (barcode, x, y, z, rotation) =>
+            {
+                made.Add($"spawn {barcode} {x} {y} {z} {rotation.Length}");
+                return 512;
+            },
+            (id, note) =>
+            {
+                made.Add($"keep {id} {note}");
+                return true;
+            },
+            id =>
+            {
+                made.Add($"forget {id}");
+                return true;
+            });
+
+        Assert.Equal((ushort)512, actions.Spawn("a.b.Door", 1f, 2f, 3f, new byte[7]));
+        Assert.True(actions.Keep(512, "D1"));
+        Assert.True(actions.Forget(400));
+
+        Assert.Equal(new[] { "spawn a.b.Door 1 2 3 7", "keep 512 D1", "forget 400" }, made);
+    }
+
+    [Fact]
+    public void Actions_built_without_them_refuse_spawn_keep_and_forget()
+    {
+        var actions = new ServerPluginActions(
+            (id, reason) => { },
+            (id, reason) => { },
+            (id, level) => { },
+            id => { },
+            (id, tag, payload) => { },
+            (tag, payload) => { });
+
+        Assert.Equal((ushort)0, actions.Spawn("a.b.Door", 0f, 0f, 0f, new byte[7]));
+        Assert.False(actions.Keep(300, ""));
+        Assert.False(actions.Forget(300));
+    }
+
+    [Fact]
+    public void An_older_actions_class_gets_refusals_from_the_interface()
+    {
+        IPluginActions actions = new OlderActions();
+
+        Assert.Equal((ushort)0, actions.Spawn("a.b.Door", 0f, 0f, 0f, new byte[7]));
+        Assert.False(actions.Keep(300, ""));
+        Assert.False(actions.Forget(300));
+    }
+
+    private sealed class OlderActions : IPluginActions
+    {
+        public void Kick(ulong platformId, string reason) { }
+        public void Ban(ulong platformId, string reason) { }
+        public void SetRank(ulong platformId, PermissionLevel level) { }
+        public void Despawn(ushort entityId) { }
+        public void SendModule(ulong platformId, long handlerTag, byte[] payload) { }
+        public void BroadcastModule(long handlerTag, byte[] payload) { }
+    }
 }

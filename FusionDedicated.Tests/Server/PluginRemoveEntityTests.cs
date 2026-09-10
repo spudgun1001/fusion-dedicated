@@ -53,4 +53,17 @@ public class PluginRemoveEntityTests : IDisposable
     [Fact]
     public void A_prop_that_is_not_there_is_not_removed()
         => Assert.False(Server(out _).RemoveEntity(9000));
+
+    [Fact]
+    public void Forgetting_a_prop_that_was_never_kept_leaves_a_kept_one_on_the_same_spot()
+    {
+        var server = Server(out var store);
+        server.Entities.Register(300, "spudgun1001.Doors.Spawnable.Door", 1, 1f, 2f, 3f);
+        server.Entities.Register(301, "spudgun1001.Doors.Spawnable.Door", 1, 1f, 2f, 3f);
+        server.KeepProp(301, "D3 Apartment 3");
+
+        Assert.False(server.ForgetProp(300));
+
+        Assert.Single(store.For("Museum"));
+    }
 }

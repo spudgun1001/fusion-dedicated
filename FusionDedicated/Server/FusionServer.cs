@@ -2209,7 +2209,7 @@ public sealed class FusionServer : IDisposable
     /// <summary>Stops putting a prop back, and lets the culls have it again.</summary>
     public bool ForgetProp(ushort entityId)
     {
-        if (Props is not { } store || Entities.Get(entityId) is not { } entity)
+        if (Props is not { } store || Entities.Get(entityId) is not { Persistent: true } entity)
         {
             return false;
         }
@@ -2292,6 +2292,35 @@ public sealed class FusionServer : IDisposable
 
         DespawnOnClients(new[] { entityId });
         return true;
+    }
+
+    /// <summary>
+    /// Puts a crate into the world for a plugin, announced the way the join catch-up
+    /// announces a kept prop. With nobody connected it is only registered, and the
+    /// catch-up tells whoever joins.
+    /// </summary>
+    /// <returns>The new entity id, or 0 when the barcode is empty.</returns>
+    public ushort SpawnForPlugin(string barcode, float x, float y, float z, byte[] rotation)
+    {
+        if (string.IsNullOrWhiteSpace(barcode))
+        {
+            return 0;
+        }
+
+        ushort id = Entities.AllocateId();
+        byte? owner = Players.Players.FirstOrDefault()?.SmallId;
+
+        Entities.Register(id, barcode, owner ?? 0, x, y, z, rotation);
+        Entities.SetOwner(id, owner);
+
+        if (owner is { } named)
+        {
+            Broadcast(FusionProtocol.BuildSpawnResponse(named, named, id, barcode,
+                new Vec3(x, y, z), rotation, CatchupTracker, spawnEffect: false), reliable: true);
+        }
+
+        Log("SPAWN", $"id={id} '{barcode}' by a plugin");
+        return id;
     }
 
     public int PurgeEntitiesOf(byte smallId)

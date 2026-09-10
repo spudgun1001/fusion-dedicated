@@ -34,4 +34,13 @@ public interface IPluginActions
 
     /// <summary>Sends a module message to everybody, stamped as from the server.</summary>
     void BroadcastModule(long handlerTag, byte[] payload);
+
+    /// <summary>Puts a crate into the world and tells everybody. Returns the new entity id, or 0 when refused.</summary>
+    ushort Spawn(string barcode, float x, float y, float z, byte[] rotation) => 0;
+
+    /// <summary>Marks an entity to be put back after a restart, as the panel's Keep button does.</summary>
+    bool Keep(ushort entityId, string note) => false;
+
+    /// <summary>Stops putting an entity back after a restart.</summary>
+    bool Forget(ushort entityId) => false;
 }
