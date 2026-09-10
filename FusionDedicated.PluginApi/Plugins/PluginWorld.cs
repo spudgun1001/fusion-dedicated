@@ -16,6 +16,18 @@ public readonly record struct PluginEntity(
     float Z,
     bool Persistent);
 
+/// <summary>How a thing is turned and moving, as of its latest pose.</summary>
+/// <param name="Rotation">The seven bytes a spawn carries. Empty when nothing gave one.</param>
+public readonly record struct PluginMotion(
+    byte[] Rotation,
+    float VelocityX,
+    float VelocityY,
+    float VelocityZ,
+    DateTime SeenUtc)
+{
+    public float Speed => MathF.Sqrt(VelocityX * VelocityX + VelocityY * VelocityY + VelocityZ * VelocityZ);
+}
+
 /// <summary>
 /// What is in the world, to read.
 ///
@@ -37,7 +49,12 @@ public sealed class PluginWorld
     /// </summary>
     public Func<IReadOnlyList<PluginEntity>>? Everything { get; set; }
 
+    /// <summary>How the server answers for rotation and velocity. Null outside a server.</summary>
+    public Func<ushort, PluginMotion?>? MotionLookup { get; set; }
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
+
+    public PluginMotion? Motion(ushort entityId) => MotionLookup?.Invoke(entityId);
 
     /// <summary>Everything in the world, empty when there is no server.</summary>
     public IReadOnlyList<PluginEntity> All()

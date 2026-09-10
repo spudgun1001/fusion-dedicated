@@ -2771,6 +2771,13 @@ public sealed class FusionServer : IDisposable
             entity.Id, entity.Barcode, owner, entity.X, entity.Y, entity.Z, entity.Persistent);
     }
 
+    /// <summary>Rotation and velocity of one entity, for a plugin. Null when it has gone.</summary>
+    public FusionDedicated.Plugins.PluginMotion? FindMotion(ushort entityId)
+        => Entities.Get(entityId) is { } entity
+            ? new FusionDedicated.Plugins.PluginMotion(
+                entity.Rotation, entity.VelocityX, entity.VelocityY, entity.VelocityZ, entity.LastUpdate)
+            : null;
+
     /// <summary>
     /// Everything in the world, for a plugin that has to find its own props.
     ///
@@ -3297,7 +3304,8 @@ public sealed class FusionServer : IDisposable
         // without knowing whether it is a scene prop, so that stays opt-in.
         Entities.NotePose(pose.Value.EntityId, sender.SmallId,
             pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
-            pose.Value.Rotation);
+            pose.Value.Rotation,
+            pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z);
     }
 
     // ---- relaying ----

@@ -280,7 +280,12 @@ public static class Program
         // What is in the world, to read. A plugin holding something against a
         // prop that has been kept needs to know where it is, because a kept prop
         // comes back under a new id after a restart.
-        var pluginWorld = new PluginWorld { Lookup = server.FindEntity, Everything = server.AllEntities };
+        var pluginWorld = new PluginWorld
+        {
+            Lookup = server.FindEntity,
+            Everything = server.AllEntities,
+            MotionLookup = server.FindMotion,
+        };
 
         var plugins = new PluginHost(
             Path.Combine(AppContext.BaseDirectory, "plugins"),

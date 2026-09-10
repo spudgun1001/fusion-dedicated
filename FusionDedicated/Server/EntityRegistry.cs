@@ -26,6 +26,11 @@ public sealed class TrackedEntity
     public float Y { get; set; }
     public float Z { get; set; }
 
+    /// <summary>How fast it was moving at its latest pose. Zero for a spawn nobody has moved.</summary>
+    public float VelocityX { get; set; }
+    public float VelocityY { get; set; }
+    public float VelocityZ { get; set; }
+
     /// <summary>
     /// The seven rotation bytes this was spawned with, kept so a prop can be put
     /// back the way round it was. Empty for anything the server only learned about
@@ -324,7 +329,7 @@ public sealed class EntityRegistry
     /// first spawned.
     /// </param>
     public void NotePose(ushort id, byte owner, float x, float y, float z,
-        byte[]? rotation = null)
+        byte[]? rotation = null, float vx = 0f, float vy = 0f, float vz = 0f)
     {
         if (id < FirstEntityId)
         {
@@ -338,6 +343,9 @@ public sealed class EntityRegistry
                 entity.X = x;
                 entity.Y = y;
                 entity.Z = z;
+                entity.VelocityX = vx;
+                entity.VelocityY = vy;
+                entity.VelocityZ = vz;
 
                 if (rotation is { Length: > 0 })
                 {
@@ -366,6 +374,9 @@ public sealed class EntityRegistry
                 X = x,
                 Y = y,
                 Z = z,
+                VelocityX = vx,
+                VelocityY = vy,
+                VelocityZ = vz,
             };
         }
     }
