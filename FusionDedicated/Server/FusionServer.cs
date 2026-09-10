@@ -2159,6 +2159,7 @@ public sealed class FusionServer : IDisposable
                     prop.X, prop.Y, prop.Z, prop.RotationBytes());
 
                 tracked.Persistent = true;
+                tracked.KeptAt = (prop.X, prop.Y, prop.Z);
                 Entities.SetOwner(id, null);
             }
         }
@@ -2184,6 +2185,7 @@ public sealed class FusionServer : IDisposable
         }
 
         entity.Persistent = true;
+        entity.KeptAt = (entity.X, entity.Y, entity.Z);
 
         store.Add(new Props.PersistentProp
         {
@@ -2206,7 +2208,10 @@ public sealed class FusionServer : IDisposable
         return true;
     }
 
-    /// <summary>Stops putting a prop back, and lets the culls have it again.</summary>
+    /// <summary>
+    /// Stops putting a prop back, and lets the culls have it again. Returns false
+    /// for an entity that does not exist or is not kept.
+    /// </summary>
     public bool ForgetProp(ushort entityId)
     {
         if (Props is not { } store || Entities.Get(entityId) is not { Persistent: true } entity)
@@ -2216,7 +2221,14 @@ public sealed class FusionServer : IDisposable
 
         entity.Persistent = false;
 
-        store.Remove(entity.Barcode, Config.LevelBarcode, entity.X, entity.Y, entity.Z);
+        var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
+        entity.KeptAt = null;
+
+        if (!store.Remove(entity.Barcode, Config.LevelBarcode, x, y, z))
+        {
+            Log("WARN", $"'{entity.ShortName}' had no record where it was kept, so none was removed");
+        }
+
         store.Save();
 
         Log("INFO", $"'{entity.ShortName}' will not be put back");

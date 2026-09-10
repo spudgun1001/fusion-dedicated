@@ -66,4 +66,30 @@ public class PluginRemoveEntityTests : IDisposable
 
         Assert.Single(store.For("Museum"));
     }
+
+    [Fact]
+    public void A_kept_prop_that_drifted_is_still_forgotten()
+    {
+        var server = Server(out var store);
+        server.Entities.Register(300, "spudgun1001.Doors.Spawnable.Door", 1, 1f, 2f, 3f);
+        server.KeepProp(300, "D3 Apartment 3");
+        server.Entities.Get(300)!.X = 4f;
+
+        Assert.True(server.ForgetProp(300));
+
+        Assert.Empty(store.For("Museum"));
+    }
+
+    [Fact]
+    public void Forgetting_a_kept_prop_with_no_record_left_warns()
+    {
+        var server = Server(out var store);
+        server.Entities.Register(300, "spudgun1001.Doors.Spawnable.Door", 1, 1f, 2f, 3f);
+        server.KeepProp(300, "D3 Apartment 3");
+        store.Remove("spudgun1001.Doors.Spawnable.Door", "Museum", 1f, 2f, 3f);
+
+        Assert.True(server.ForgetProp(300));
+
+        Assert.Contains(server.RecentLog(), e => e.Level == "WARN" && e.Message.Contains("'Door'"));
+    }
 }

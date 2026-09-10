@@ -44,6 +44,9 @@ public sealed class TrackedEntity
     /// </summary>
     public bool Persistent { get; set; }
 
+    /// <summary>Where a kept prop's record puts it, so forgetting it finds that record after it drifts.</summary>
+    public (float X, float Y, float Z)? KeptAt { get; set; }
+
     /// <summary>
     /// True when this is not a spawnable at all. The ends of a constraint are
     /// tracked so they count against the cap and can be culled, but their barcode
