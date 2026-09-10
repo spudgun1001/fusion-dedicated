@@ -1341,7 +1341,8 @@ function playerTable(d, actions) {
 
   return '<table class="stack"><thead><tr>' +
     '<th>ID</th><th>Player</th><th>Rank</th><th>Avatar</th>' +
-    '<th class="right">Owned</th><th class="right">Online</th><th class="right">Traffic</th>' +
+    '<th class="right">Owned</th><th class="right">Position</th>' +
+    '<th class="right">Online</th><th class="right">Traffic</th>' +
     (actions ? '<th class="right">Actions</th>' : '') +
     '</tr></thead><tbody>' +
     d.players.map(p => '<tr>' +
@@ -1352,6 +1353,8 @@ function playerTable(d, actions) {
       '<td class="dim" data-label="Avatar" style="font-size:12px">' +
         esc(p.avatar.split('.').pop() || '-') + '</td>' +
       '<td class="m right dim" data-label="Owned">' + p.entities + '</td>' +
+      '<td class="m right dim" data-label="Position">' +
+        (p.hasPosition ? p.x + ', ' + p.y + ', ' + p.z : '-') + '</td>' +
       '<td class="m right dim" data-label="Online">' + duration(p.onlineSeconds) + '</td>' +
       '<td class="m right dim" data-label="Traffic">' + bytes(p.bytesIn + p.bytesOut) + '</td>' +
       (actions ? '<td class="right" data-label="Actions"><div class="acts">' +

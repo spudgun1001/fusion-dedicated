@@ -2268,6 +2268,20 @@ public sealed class FusionServer : IDisposable
         return (moved, skipped);
     }
 
+    /// <summary>
+    /// Removes one entity for a plugin, the way the panel's Remove does: a kept prop
+    /// stops being kept first, or the next restart puts it straight back.
+    /// </summary>
+    public bool RemoveEntity(ushort entityId)
+    {
+        if (Entities.Get(entityId) is { Persistent: true })
+        {
+            ForgetProp(entityId);
+        }
+
+        return DespawnEntity(entityId);
+    }
+
     /// <summary>Removes one entity and tells the clients. For plugins.</summary>
     public bool DespawnEntity(ushort entityId)
     {

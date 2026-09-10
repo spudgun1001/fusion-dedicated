@@ -23,6 +23,7 @@ public interface IPluginActions
 
     void SetRank(ulong platformId, PermissionLevel level);
 
+    /// <summary>Removes a prop. A kept one stops being kept, so it does not come back after a restart.</summary>
     void Despawn(ushort entityId);
 
     /// <summary>

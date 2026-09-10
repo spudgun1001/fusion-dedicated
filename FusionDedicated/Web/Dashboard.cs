@@ -564,6 +564,13 @@ public sealed class Dashboard
                 bytesIn = p.BytesIn,
                 bytesOut = p.BytesOut,
                 entities = _server.Entities.Entities.Count(e => e.OwnerSmallId == p.SmallId),
+
+                // Where they are standing, from the pose their game sends, so a prop
+                // can be found by walking to it.
+                x = MathF.Round(p.LastPosition.X, 1),
+                y = MathF.Round(p.LastPosition.Y, 1),
+                z = MathF.Round(p.LastPosition.Z, 1),
+                hasPosition = p.HasPosition,
             }).ToArray(),
 
             // Saved ranks, including people who are not connected right now.
