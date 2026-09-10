@@ -3098,29 +3098,27 @@ public sealed class FusionServer : IDisposable
         ushort id = System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(payload);
         var entity = Entities.Get(id);
 
-        // The payload is two bytes an untrusted client chose, so without this the
-        // message is "delete any entity by number": somebody else's build, a prop
-        // marked to survive restarts, anything. Only the ends of a constraint can
-        // be cleared this way, and only by whoever owns them unless they outrank
-        // it, which is the rule the ordinary despawn path already uses.
-        if (entity is not { Synthetic: true })
+        switch (ConstraintDeleteRule.Decide(entity, sender.SmallId, sender.Permission, Config.ExtendedProtection))
         {
-            Log("WARN", $"{sender.DisplayName} tried to clear {id}, which is not a constraint");
-            return;
-        }
+            case ConstraintDeleteVerdict.PassOn:
+                Log("INFO", $"{sender.DisplayName} cleared constraint {id}, which the server had no record of");
+                Relay(sender, message);
+                return;
 
-        if (Config.ExtendedProtection
-            && !DespawnAuthority.MayDespawn(entity.OwnerSmallId, sender.SmallId, sender.Permission))
-        {
-            Log("WARN", $"{sender.DisplayName} tried to clear a constraint belonging to " +
-                        $"SmallID {entity.OwnerSmallId}");
-            return;
+            case ConstraintDeleteVerdict.NotAConstraint:
+                Log("WARN", $"{sender.DisplayName} tried to clear {id}, which is not a constraint");
+                return;
+
+            case ConstraintDeleteVerdict.NotYours:
+                Log("WARN", $"{sender.DisplayName} tried to clear a constraint belonging to " +
+                            $"SmallID {entity!.OwnerSmallId}");
+                return;
         }
 
         // Both ends. The message names one, the clients drop both, and an end
         // left on our books would count against the cap for the rest of the
         // session with nothing able to remove it.
-        ushort? partner = entity.Partner;
+        ushort? partner = entity!.Partner;
 
         lock (_cacheLock)
         {

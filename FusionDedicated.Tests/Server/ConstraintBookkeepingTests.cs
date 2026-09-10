@@ -97,3 +97,93 @@ public class CatchupOwnershipTests
         Assert.Equal((byte?)5, registry.Get(300)!.OwnerSmallId);
     }
 }
+
+/// <summary>
+/// The ends of a constraint never move, so every cull saw them as idle and took them.
+/// Clients keep a constraint until its delete comes back, so it stayed stuck for them.
+/// </summary>
+public class ConstraintCullTests
+{
+    private static readonly DateTime LongAgo = DateTime.UtcNow.AddHours(-2);
+
+    private const ushort End = 300;
+    private const ushort Crate = 400;
+
+    private static EntityRegistry World()
+    {
+        var registry = new EntityRegistry();
+        registry.Register(End, "fusion.constraint", 1, 0, 0, 0).Synthetic = true;
+        registry.Register(Crate, "Pack.Spawnable.Crate", 1, 0, 0, 0);
+
+        return registry;
+    }
+
+    private static void Age(EntityRegistry registry)
+    {
+        registry.Get(End)!.LastUpdate = LongAgo;
+        registry.Get(Crate)!.LastUpdate = LongAgo;
+    }
+
+    [Fact]
+    public void An_orphaned_end_outlives_the_stale_cull()
+    {
+        var registry = World();
+        registry.Orphan(1, null);
+        Age(registry);
+
+        var removed = registry.CullStale(TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(900));
+
+        Assert.Equal(new[] { Crate }, removed);
+        Assert.NotNull(registry.Get(End));
+    }
+
+    [Fact]
+    public void An_inherited_end_outlives_the_stale_cull()
+    {
+        var registry = World();
+        registry.Orphan(1, 2);
+        Age(registry);
+
+        var removed = registry.CullStale(TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(900));
+
+        Assert.Equal(new[] { Crate }, removed);
+        Assert.NotNull(registry.Get(End));
+    }
+
+    [Fact]
+    public void An_idle_end_outlives_the_stale_cull()
+    {
+        var registry = World();
+        Age(registry);
+
+        var removed = registry.CullStale(
+            TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(900), TimeSpan.FromSeconds(60));
+
+        Assert.Equal(new[] { Crate }, removed);
+        Assert.NotNull(registry.Get(End));
+    }
+
+    [Fact]
+    public void An_orphaned_end_outlives_the_orphan_cull()
+    {
+        var registry = World();
+        registry.Orphan(1, null);
+        Age(registry);
+
+        var removed = registry.CullOrphans(TimeSpan.FromSeconds(120));
+
+        Assert.Equal(new[] { Crate }, removed);
+        Assert.NotNull(registry.Get(End));
+    }
+
+    [Fact]
+    public void Clearing_the_world_leaves_the_ends()
+    {
+        var registry = World();
+
+        var removed = registry.Clear();
+
+        Assert.Equal(new[] { Crate }, removed);
+        Assert.NotNull(registry.Get(End));
+    }
+}

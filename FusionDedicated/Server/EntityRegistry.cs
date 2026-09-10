@@ -443,7 +443,8 @@ public sealed class EntityRegistry
         lock (_lock)
         {
             foreach (var entity in _entities.Values
-                .Where(e => e.Removable && !e.Discovered && e.IsOrphaned && e.LastUpdate < cutoff)
+                .Where(e => e.Removable && !e.Discovered && !e.Synthetic
+                    && e.IsOrphaned && e.LastUpdate < cutoff)
                 .ToList())
             {
                 _entities.Remove(entity.Id);
@@ -496,6 +497,13 @@ public sealed class EntityRegistry
                 // networked and then left behind became inherited, and fifteen
                 // minutes later it went.
                 if (entity.Discovered)
+                {
+                    continue;
+                }
+
+                // A constraint end never moves, so it always looks idle. It goes
+                // when a client deletes the constraint, or the level changes.
+                if (entity.Synthetic)
                 {
                     continue;
                 }
@@ -640,7 +648,8 @@ public sealed class EntityRegistry
             // Surviving a clear is the point of marking something persistent, so
             // Clear all leaves them and removing one is its own deliberate press.
             removed = _entities.Values
-                .Where(e => e.Removable && (includeDiscovered || !e.Discovered))
+                // A constraint end is left for its prop's clients to delete.
+                .Where(e => e.Removable && !e.Synthetic && (includeDiscovered || !e.Discovered))
                 .Select(e => e.Id)
                 .ToList();
 
