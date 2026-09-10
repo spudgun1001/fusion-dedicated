@@ -51,6 +51,10 @@ public sealed class FusionServer : IDisposable
         Players.MaxPlayers = config.MaxPlayers;
         Entities.Capacity = config.MaxEntities;
         Guard = new SpawnGuard(config);
+
+        // A prop's saved variables go with it, or a busy level fills the cache and
+        // newer props stop being replayed to anybody who joins.
+        Entities.Removed += id => _rpcVariables.ForgetEntity(id);
     }
 
     public void Start()
@@ -1071,7 +1075,6 @@ public sealed class FusionServer : IDisposable
     /// carry it. A real level has tens of these, not thousands.
     /// </summary>
     private const int MaxCachedProps = 4096;
-    private const int MaxCachedVariables = 2048;
 
     /// <summary>The most of a message body worth keeping. A real one is tiny.</summary>
     private const int MaxCachedBody = 512;
@@ -1088,9 +1091,9 @@ public sealed class FusionServer : IDisposable
     /// A level's own state lives in these: lights, gates, elevators, anything an
     /// SDK map wires up. A host replays them to a newcomer; nothing did here, so
     /// somebody joining saw the level in its default state while everybody else
-    /// saw the real one.
+    /// saw the real one. A prop's values go when the prop does.
     /// </summary>
-    private readonly Dictionary<(byte Tag, string Path), (byte From, byte[] Body)> _rpcVariables = new();
+    private readonly RpcVariableCache _rpcVariables = new();
 
     /// <summary>Which caches have already said they are full, so it is said once.</summary>
     private readonly HashSet<string> _cacheFull = new();
@@ -1225,22 +1228,13 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void CacheRpcVariable(byte tag, byte from, byte[] body, byte[] path)
     {
-        var key = (tag, Convert.ToHexString(path));
-
         lock (_cacheLock)
         {
-            if (_rpcVariables.Count >= MaxCachedVariables && !_rpcVariables.ContainsKey(key))
+            if (!_rpcVariables.Set(tag, from, body, path) && _cacheFull.Add("variables"))
             {
-                if (_cacheFull.Add("variables"))
-                {
-                    Log("WARN", $"Holding {MaxCachedVariables} level variables and not taking " +
-                                "more. A level does not have this many.");
-                }
-
-                return;
+                Log("WARN", $"Holding {RpcVariableCache.MaxVariables} level variables and not taking " +
+                            "more. A level does not have this many.");
             }
-
-            _rpcVariables[key] = (from, body);
         }
     }
 
@@ -1260,9 +1254,7 @@ public sealed class FusionServer : IDisposable
 
         lock (_cacheLock)
         {
-            variables = _rpcVariables
-                .Select(v => (v.Key.Tag, v.Value.From, v.Value.Body))
-                .ToList();
+            variables = _rpcVariables.All();
         }
 
         foreach (var (tag, from, body) in variables)

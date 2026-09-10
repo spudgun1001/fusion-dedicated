@@ -181,6 +181,12 @@ public sealed class EntityRegistry
     public const ushort FirstEntityId = 256;
 
     /// <summary>
+    /// A prop has left the books, however it left. Raised outside the lock, so a
+    /// listener can read the registry without deadlocking it.
+    /// </summary>
+    public event Action<ushort>? Removed;
+
+    /// <summary>
     /// The most entities to hold, or zero for no limit. Only consulted where an
     /// entity would be created from something a client sent unprompted.
     /// </summary>
@@ -366,9 +372,26 @@ public sealed class EntityRegistry
 
     public bool Remove(ushort id)
     {
+        bool removed;
+
         lock (_lock)
         {
-            return _entities.Remove(id);
+            removed = _entities.Remove(id);
+        }
+
+        if (removed)
+        {
+            Removed?.Invoke(id);
+        }
+
+        return removed;
+    }
+
+    private void Announce(List<ushort> removed)
+    {
+        foreach (ushort id in removed)
+        {
+            Removed?.Invoke(id);
         }
     }
 
@@ -413,6 +436,8 @@ public sealed class EntityRegistry
                 removed.Add(entity.Id);
             }
         }
+
+        Announce(removed);
 
         return removed;
     }
@@ -507,6 +532,8 @@ public sealed class EntityRegistry
             }
         }
 
+        Announce(removed);
+
         return removed;
     }
 
@@ -560,6 +587,8 @@ public sealed class EntityRegistry
             }
         }
 
+        Announce(removed);
+
         return removed;
     }
 
@@ -575,22 +604,28 @@ public sealed class EntityRegistry
     /// </summary>
     public List<ushort> Forget()
     {
+        List<ushort> removed;
+
         lock (_lock)
         {
-            var removed = _entities.Keys.ToList();
+            removed = _entities.Keys.ToList();
             _entities.Clear();
-
-            return removed;
         }
+
+        Announce(removed);
+
+        return removed;
     }
 
     public List<ushort> Clear(bool includeDiscovered = false)
     {
+        List<ushort> removed;
+
         lock (_lock)
         {
             // Surviving a clear is the point of marking something persistent, so
             // Clear all leaves them and removing one is its own deliberate press.
-            var removed = _entities.Values
+            removed = _entities.Values
                 .Where(e => e.Removable && (includeDiscovered || !e.Discovered))
                 .Select(e => e.Id)
                 .ToList();
@@ -599,8 +634,10 @@ public sealed class EntityRegistry
             {
                 _entities.Remove(id);
             }
-
-            return removed;
         }
+
+        Announce(removed);
+
+        return removed;
     }
 }
