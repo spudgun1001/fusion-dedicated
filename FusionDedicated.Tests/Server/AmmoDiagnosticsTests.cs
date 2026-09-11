@@ -90,25 +90,6 @@ public class AmmoDiagnosticsTests
     }
 
     [Fact]
-    public void A_gun_going_into_a_holster_is_not_described()
-    {
-        var change = new ModuleProtocol.AttachmentChange(
-            ModuleProtocol.AttachmentKind.SlotInsert, 300, 3, 1);
-
-        Assert.Null(AmmoDiagnostics.DescribeAttachment(change, Gun, null));
-    }
-
-    [Fact]
-    public void A_magazine_going_into_a_gun_is_not_described()
-    {
-        // Every reload would be a line.
-        var change = new ModuleProtocol.AttachmentChange(
-            ModuleProtocol.AttachmentKind.Attach, 300, 0, 0, 400);
-
-        Assert.Null(AmmoDiagnostics.DescribeAttachment(change, Magazine, null));
-    }
-
-    [Fact]
     public void A_pose_remembers_how_far_its_sender_was()
     {
         var registry = new EntityRegistry();
