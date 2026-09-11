@@ -1463,6 +1463,7 @@ public sealed class FusionServer : IDisposable
         {
             sender.AttachmentsResent = true;
             ReseatAttachments(sender, AfterLoadingDelays);
+            ResendOwnVariables(sender, AfterLoadingDelays);
         }
     }
 
@@ -3095,6 +3096,32 @@ public sealed class FusionServer : IDisposable
                 if (sent > 0)
                 {
                     Log("INFO", $"Re-seated {sent} attachment(s) for {player.DisplayName}");
+                }
+            });
+        }
+    }
+
+    /// <summary>
+    /// Values on props the player owns. After a restart the first player owns every
+    /// kept prop, and their client never asks about those, so a payphone showed no number.
+    /// </summary>
+    private void ResendOwnVariables(ConnectedPlayer player, TimeSpan[] delays)
+    {
+        foreach (var delay in delays)
+        {
+            Defer(delay, () =>
+            {
+                if (Players.Get(player.SmallId) != player)
+                {
+                    return;
+                }
+
+                var owned = WorldCatchup.OwnedBy(
+                    Entities.Entities.Select(e => (e.Id, e.OwnerSmallId)), player.SmallId);
+
+                foreach (ushort entityId in owned)
+                {
+                    ReplayVariables(player, entityId);
                 }
             });
         }

@@ -69,6 +69,10 @@ public static class WorldCatchup
             ? owner
             : null;
 
+    /// <summary>The props a player owns. A client never asks about those, so their values are sent to it unasked.</summary>
+    public static IReadOnlyList<ushort> OwnedBy(IEnumerable<(ushort Id, byte? Owner)> entities, byte player)
+        => entities.Where(e => e.Owner == player).Select(e => e.Id).ToList();
+
     /// <summary>Whether a metadata change is a player saying they have finished loading.</summary>
     public static bool FinishedLoading(string key, string value)
         => string.Equals(key, "Loading", StringComparison.OrdinalIgnoreCase)
