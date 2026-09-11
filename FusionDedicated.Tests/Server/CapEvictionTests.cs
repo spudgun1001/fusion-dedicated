@@ -85,6 +85,39 @@ public class CapEvictionTests
     }
 
     [Fact]
+    public void A_magazine_in_a_gun_survives_the_last_resort()
+    {
+        // It sleeps in the gun and sends no poses, so it looks idle however much
+        // the gun is being used.
+        var registry = Full(3);
+        registry.SetAttached(EntityRegistry.FirstEntityId, true);
+
+        var evicted = registry.EvictOldest(10, anyOwner: true);
+
+        Assert.DoesNotContain(EntityRegistry.FirstEntityId, evicted);
+        Assert.NotNull(registry.Get(EntityRegistry.FirstEntityId));
+    }
+
+    [Fact]
+    public void A_gun_in_a_holster_survives_the_last_resort()
+    {
+        var registry = new EntityRegistry();
+
+        var gun = registry.Register(400, "Rexmeck.GLOCK17.Spawnable.GLOCK17", 1, 0, 0, 0);
+        gun.LastUpdate = DateTime.UtcNow.AddHours(-2);
+        registry.SetAttached(400, true);
+
+        var crate = registry.Register(401, "Pack.Spawnable.Crate", 1, 0, 0, 0);
+        crate.LastUpdate = DateTime.UtcNow.AddHours(-1);
+
+        var evicted = registry.EvictOldest(10, anyOwner: true);
+
+        // The loose crate beside it still goes, so the last resort still frees room.
+        Assert.Equal(new ushort[] { 401 }, evicted);
+        Assert.NotNull(registry.Get(400));
+    }
+
+    [Fact]
     public void Freed_ids_come_back_around()
     {
         // Ids are recycled already: the allocator skips whatever is in use and

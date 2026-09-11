@@ -595,8 +595,10 @@ public sealed class EntityRegistry
                 .Where(e => e.Removable
                     && !e.Discovered
                     && !e.Synthetic
+                    // A magazine in a gun or a gun in a holster sleeps, so it
+                    // looks idle while somebody is carrying it.
                     && (anyOwner
-                        ? e.LastUpdate < cutoff
+                        ? e.LastUpdate < cutoff && !e.Attached
                         : e.Inherited || e.IsOrphaned))
                 .OrderBy(e => e.LastUpdate)
                 .Take(count)
