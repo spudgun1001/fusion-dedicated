@@ -69,6 +69,11 @@ public static class WorldCatchup
             ? owner
             : null;
 
+    /// <summary>Who takes an item its owner let go of: whoever grabbed it first of those still holding it.</summary>
+    /// <returns>Null when the owner still holds it, somebody else let go, or nobody is left holding it.</returns>
+    public static byte? NextHolder(byte releasedBy, byte? owner, IReadOnlyList<byte> holders)
+        => owner == releasedBy && !holders.Contains(releasedBy) && holders.Count > 0 ? holders[0] : null;
+
     /// <summary>Whether a vehicle stays with its owner because they sit in it. Their own request always goes through.</summary>
     public static bool DriverKeeps(byte requester, byte? owner, ushort? ownerSeatEntity, ushort entity)
         => owner is { } driver && driver != requester && ownerSeatEntity == entity;

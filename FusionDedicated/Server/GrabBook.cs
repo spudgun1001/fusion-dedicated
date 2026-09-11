@@ -17,26 +17,43 @@ public sealed class GrabBook
     private readonly object _lock = new();
 
     /// <summary>A new grab on a hand replaces whatever that hand held.</summary>
-    public void Grab(byte player, byte hand, ushort entityId)
+    /// <returns>What the hand let go of to make the grab, or null.</returns>
+    public ushort? Grab(byte player, byte hand, ushort entityId)
     {
         if (hand is not (LeftHand or RightHand))
         {
-            return;
+            return null;
         }
 
         lock (_lock)
         {
+            ushort? before = HeldIn(player, hand);
+
             _held.RemoveAll(h => h.Player == player && h.Hand == hand);
             _held.Add(new HeldItem(player, hand, entityId));
+
+            return before == entityId ? null : before;
         }
     }
 
-    public void Release(byte player, byte hand)
+    /// <returns>What the hand held, or null when it was empty.</returns>
+    public ushort? Release(byte player, byte hand)
     {
         lock (_lock)
         {
+            ushort? before = HeldIn(player, hand);
+
             _held.RemoveAll(h => h.Player == player && h.Hand == hand);
+
+            return before;
         }
+    }
+
+    private ushort? HeldIn(byte player, byte hand)
+    {
+        int index = _held.FindIndex(h => h.Player == player && h.Hand == hand);
+
+        return index >= 0 ? _held[index].EntityId : null;
     }
 
     /// <returns>How many hands were emptied.</returns>

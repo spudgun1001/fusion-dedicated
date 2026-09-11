@@ -714,9 +714,10 @@ public sealed class FusionServer : IDisposable
                 break;
 
             case FusionProtocol.TagPlayerRepRelease when sender != null:
-                if (FusionProtocol.TryReadRelease(message) is { } releasedHand)
+                if (FusionProtocol.TryReadRelease(message) is { } releasedHand
+                    && _grabs.Release(sender.SmallId, releasedHand) is { } released)
                 {
-                    _grabs.Release(sender.SmallId, releasedHand);
+                    PassToHolder(sender, released);
                 }
 
                 break;
@@ -3687,14 +3688,44 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        if (grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed)
+        ushort? letGo = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed
+            ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId)
+            : _grabs.Release(sender.SmallId, grab.Hand);
+
+        if (letGo is { } released)
         {
-            _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId);
+            PassToHolder(sender, released);
         }
-        else
+    }
+
+    /// <summary>
+    /// Gives an item its owner let go of to whoever still holds it. Fusion only takes an
+    /// item back when the last hand on it is the same player's, so nobody asked.
+    /// </summary>
+    private void PassToHolder(ConnectedPlayer releaser, ushort entityId)
+    {
+        if (Entities.Get(entityId) is not { } entity
+            || WorldCatchup.NextHolder(releaser.SmallId, entity.OwnerSmallId, _grabs.HoldersOf(entityId)) is not { } next
+            || Players.Get(next) is not { } holder)
         {
-            _grabs.Release(sender.SmallId, grab.Hand);
+            return;
         }
+
+        // Every client that saw the seat has locked a vehicle to its driver.
+        if (WorldCatchup.DriverKeeps(next, entity.OwnerSmallId, _seats.SeatOf(releaser.SmallId)?.EntityId, entityId))
+        {
+            return;
+        }
+
+        if (!MayHold(holder, entityId))
+        {
+            return;
+        }
+
+        Entities.SetOwner(entityId, next);
+        AnnounceOwner(entityId, next);
+
+        Log("INFO", $"Entity {entityId} passed to {holder.DisplayName}, who is still holding it", console: false);
     }
 
     /// <summary>
