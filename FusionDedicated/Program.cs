@@ -295,7 +295,8 @@ public static class Program
                 smallId => server.Players.Get(smallId) is { HasPosition: true } holder
                     ? (holder.LastPosition.X, holder.LastPosition.Y, holder.LastPosition.Z)
                     : null,
-                server.FindEntity(entityId) is { } entity
+                // One never posed sits at the origin, which would put every holder out of reach.
+                server.Entities.Get(entityId) is { PositionKnown: true } entity
                     ? (entity.X, entity.Y, entity.Z)
                     : ((float X, float Y, float Z)?)null),
         };
