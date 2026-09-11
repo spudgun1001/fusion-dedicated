@@ -3589,10 +3589,12 @@ public sealed class FusionServer : IDisposable
 
         // Only a client that believes it owns a vehicle sends its poses, and
         // Fusion's AtvExtender makes that the driver. So this follows who drives
-        // rather than deciding it.
+        // rather than deciding it. MayHold goes last, so it only runs when the owner
+        // is about to change.
         if (_seats.SeatOf(sender.SmallId) is { } seat
             && Entities.Get(vehicleId) is { } vehicle
-            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId))
+            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId)
+            && MayHold(sender, vehicleId))
         {
             Entities.SetOwner(vehicleId, sender.SmallId);
             AnnounceOwner(vehicleId, sender.SmallId);

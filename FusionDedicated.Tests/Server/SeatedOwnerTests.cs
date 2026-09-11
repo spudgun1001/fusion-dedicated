@@ -70,4 +70,17 @@ public class SeatedOwnerTests
         Assert.True(set > rule && announce > set,
             "the registry owner must be set before the announcement, or every pose announces again");
     }
+
+    [Fact]
+    public void A_rider_only_takes_the_vehicle_when_they_may_hold_it()
+    {
+        // Last, so the rank and plugin checks only run when the owner is about to change.
+        string track = FusionServerSource.Method("private void TrackEntityPose(");
+
+        int rule = track.IndexOf("WorldCatchup.OwnerFromSeatedPose(", StringComparison.Ordinal);
+        int body = track.IndexOf("\n        {", rule, StringComparison.Ordinal);
+
+        Assert.True(rule > 0 && body > rule, "the owner-follows condition is no longer here");
+        Assert.EndsWith("&& MayHold(sender, vehicleId))", track[rule..body].TrimEnd());
+    }
 }
