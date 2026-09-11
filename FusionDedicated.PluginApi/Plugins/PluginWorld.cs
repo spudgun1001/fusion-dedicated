@@ -52,9 +52,15 @@ public sealed class PluginWorld
     /// <summary>How the server answers for rotation and velocity. Null outside a server.</summary>
     public Func<ushort, PluginMotion?>? MotionLookup { get; set; }
 
+    /// <summary>How the server lists who is holding an entity. Null outside a server.</summary>
+    public Func<ushort, IReadOnlyList<ulong>>? HoldersLookup { get; set; }
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
 
     public PluginMotion? Motion(ushort entityId) => MotionLookup?.Invoke(entityId);
+
+    /// <summary>Who is holding an entity, empty when there is no server.</summary>
+    public IReadOnlyList<ulong> Holders(ushort entityId) => HoldersLookup?.Invoke(entityId) ?? Array.Empty<ulong>();
 
     /// <summary>Everything in the world, empty when there is no server.</summary>
     public IReadOnlyList<PluginEntity> All()

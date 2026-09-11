@@ -288,6 +288,15 @@ public static class Program
             Lookup = server.FindEntity,
             Everything = server.AllEntities,
             MotionLookup = server.FindMotion,
+            HoldersLookup = entityId => PluginOccupancy.Holders(
+                server.HoldersOf(entityId),
+                smallId => server.Players.Get(smallId)?.PlatformId,
+                smallId => server.Players.Get(smallId) is { HasPosition: true } holder
+                    ? (holder.LastPosition.X, holder.LastPosition.Y, holder.LastPosition.Z)
+                    : null,
+                server.FindEntity(entityId) is { } entity
+                    ? (entity.X, entity.Y, entity.Z)
+                    : ((float X, float Y, float Z)?)null),
         };
 
         var plugins = new PluginHost(
