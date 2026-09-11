@@ -92,4 +92,14 @@ public static class WorldCatchup
     /// <summary>Whether a seat is kept: an ingress, live, into an entity the server knows.</summary>
     public static bool KeepSeat(byte relayType, bool ingress, bool known)
         => ingress && known && IsLiveSeat(relayType);
+
+    /// <summary>
+    /// The seats to tell a client about when it asks about a vehicle: everyone
+    /// sitting in it who is still here, except the client itself, in sit order.
+    /// </summary>
+    public static IReadOnlyList<SeatRecord> SeatsToReplay(IEnumerable<SeatRecord> records, ushort entityId,
+        byte requester, Func<byte, bool> present)
+        => records
+            .Where(r => r.EntityId == entityId && r.Rider != requester && present(r.Rider))
+            .ToList();
 }

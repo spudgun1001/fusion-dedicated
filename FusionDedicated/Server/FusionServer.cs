@@ -3507,6 +3507,8 @@ public sealed class FusionServer : IDisposable
         {
             Relay(sender, message);
         }
+
+        ReplaySeats(sender, request.EntityId);
     }
 
     // ---- vehicle seats ----
@@ -3559,6 +3561,25 @@ public sealed class FusionServer : IDisposable
         }
 
         Relay(sender, message);
+    }
+
+    /// <summary>
+    /// Tells a client who is sitting in a vehicle it has just asked about.
+    ///
+    /// Fusion's own answer seats whoever answered instead of the rider, so a
+    /// player who arrived after the riders saw them on the hood. Each seat goes
+    /// out as its rider would have sent it.
+    /// </summary>
+    private void ReplaySeats(ConnectedPlayer requester, ushort entityId)
+    {
+        var seats = WorldCatchup.SeatsToReplay(_seats.RidersOf(entityId), entityId, requester.SmallId,
+            id => Players.Get(id) != null);
+
+        foreach (var seat in seats)
+        {
+            SendTo(requester.Connection, FusionProtocol.BuildSeat(seat.Rider, entityId, seat.Index, true),
+                reliable: true);
+        }
     }
 
     // ---- relaying ----
