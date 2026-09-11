@@ -3450,6 +3450,19 @@ public sealed class FusionServer : IDisposable
             pose.Value.Rotation,
             pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z,
             ownerDistance);
+
+        ushort vehicleId = pose.Value.EntityId;
+
+        // Only a client that believes it owns a vehicle sends its poses, and
+        // Fusion's AtvExtender makes that the driver. So this follows who drives
+        // rather than deciding it.
+        if (_seats.SeatOf(sender.SmallId) is { } seat
+            && Entities.Get(vehicleId) is { } vehicle
+            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId))
+        {
+            Entities.SetOwner(vehicleId, sender.SmallId);
+            AnnounceOwner(vehicleId, sender.SmallId);
+        }
     }
 
     /// <summary>

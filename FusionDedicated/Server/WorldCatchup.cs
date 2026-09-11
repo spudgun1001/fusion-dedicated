@@ -102,4 +102,16 @@ public static class WorldCatchup
         => records
             .Where(r => r.EntityId == entityId && r.Rider != requester && present(r.Rider))
             .ToList();
+
+    /// <summary>
+    /// Whether a pose shows a vehicle has a new owner: the sender sits in it and
+    /// the server still has somebody else down as the owner.
+    ///
+    /// Sitting in a driver seat makes the driver the owner on every client that
+    /// saw the seat, and nothing is sent. The server and any client that missed
+    /// the seat keep the old owner and throw the driver's poses away.
+    /// </summary>
+    public static bool OwnerFromSeatedPose(byte sender, byte? registryOwner, ushort? senderSeatEntity,
+        ushort poseEntity)
+        => senderSeatEntity == poseEntity && registryOwner != sender;
 }
