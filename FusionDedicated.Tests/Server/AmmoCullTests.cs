@@ -1,3 +1,4 @@
+using BonelabServerBrowser.Fusion;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Server;
@@ -25,7 +26,23 @@ public class AmmoCullTests
         {
             var entity = registry.Register(id, barcode, 1, 0, 0, 0);
             entity.LastUpdate = DateTime.UtcNow.AddMinutes(-age);
+
+            // Spawned rather than taken from the pouch, so these keep testing the
+            // ammo clock itself rather than the pouch rule.
+            entity.Source = FusionProtocol.SourceNone;
         }
+
+        return registry;
+    }
+
+    /// <summary>A magazine taken from player 1's ammo pouch, aged.</summary>
+    private static EntityRegistry Pouch(int minutesOld)
+    {
+        var registry = new EntityRegistry();
+
+        var entity = registry.Register(300, Magazine, 1, 0, 0, 0);
+        entity.Source = FusionProtocol.SourcePlayer;
+        entity.LastUpdate = DateTime.UtcNow.AddMinutes(-minutesOld);
 
         return registry;
     }
@@ -182,5 +199,62 @@ public class AmmoCullTests
         var registry = World((300, "SomePack.Spawnable.MagAK47", 5));
 
         Assert.Equal(new ushort[] { 300 }, registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
+    }
+
+    [Fact]
+    public void A_pouch_magazine_its_owner_still_has_is_not_on_the_ammo_clock()
+    {
+        // Holstered, it goes kinematic and sends no poses, so the clock ran out
+        // on a magazine sitting on somebody's body.
+        var registry = Pouch(5);
+
+        Assert.Empty(registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
+    }
+
+    [Fact]
+    public void A_spawned_magazine_is_still_on_the_ammo_clock()
+    {
+        var registry = Pouch(5);
+        registry.Get(300)!.Source = FusionProtocol.SourceNone;
+
+        Assert.Equal(new ushort[] { 300 }, registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
+    }
+
+    [Fact]
+    public void An_orphaned_pouch_magazine_goes_on_the_ammo_clock()
+    {
+        // The orphan clock is set longer here, so only the ammo clock can take it.
+        var registry = Pouch(0);
+        registry.SetOwner(300, null);
+        registry.Get(300)!.LastUpdate = DateTime.UtcNow.AddMinutes(-5);
+
+        Assert.Equal(new ushort[] { 300 }, registry.CullStale(FifteenMinutes, FifteenMinutes, Never, TwoMinutes));
+    }
+
+    [Fact]
+    public void A_pouch_magazine_left_behind_for_somebody_else_goes_on_the_ammo_clock()
+    {
+        var registry = Pouch(5);
+        registry.Get(300)!.Inherited = true;
+
+        Assert.Equal(new ushort[] { 300 }, registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
+    }
+
+    [Fact]
+    public void A_pouch_magazine_its_owner_stopped_simulating_goes_on_the_ammo_clock()
+    {
+        var registry = Pouch(5);
+        registry.SetCulledForOwner(300, true);
+
+        Assert.Equal(new ushort[] { 300 }, registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
+    }
+
+    [Fact]
+    public void The_pouch_rule_does_not_hold_off_the_idle_clock()
+    {
+        var registry = Pouch(10);
+
+        Assert.Equal(new ushort[] { 300 },
+            registry.CullStale(TwoMinutes, FifteenMinutes, TimeSpan.FromMinutes(5), TwoMinutes));
     }
 }

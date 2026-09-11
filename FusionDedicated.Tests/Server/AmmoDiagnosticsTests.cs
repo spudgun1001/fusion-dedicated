@@ -177,7 +177,9 @@ public class AmmoDiagnosticsTests
     public void The_detailed_cull_hands_back_what_it_removed()
     {
         var registry = new EntityRegistry();
-        registry.Register(300, Magazine, 1, 0, 0, 0).LastUpdate = DateTime.UtcNow.AddMinutes(-5);
+        var created = registry.Register(300, Magazine, 1, 0, 0, 0);
+        created.Source = FusionProtocol.SourceNone;
+        created.LastUpdate = DateTime.UtcNow.AddMinutes(-5);
 
         var removed = registry.CullStaleDetailed(
             TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(15), TimeSpan.Zero, TimeSpan.FromMinutes(2));
@@ -192,7 +194,9 @@ public class AmmoDiagnosticsTests
     public void The_detailed_cull_still_announces_what_it_removed()
     {
         var registry = new EntityRegistry();
-        registry.Register(300, Magazine, 1, 0, 0, 0).LastUpdate = DateTime.UtcNow.AddMinutes(-5);
+        var entity = registry.Register(300, Magazine, 1, 0, 0, 0);
+        entity.Source = FusionProtocol.SourceNone;
+        entity.LastUpdate = DateTime.UtcNow.AddMinutes(-5);
 
         var announced = new List<ushort>();
         registry.Removed += announced.Add;
