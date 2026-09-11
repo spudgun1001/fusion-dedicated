@@ -86,7 +86,10 @@ public static class WorldCatchup
     public static bool PassSeatMessage(byte relayType, bool ingress, bool seatRecorded)
         => !(relayType == 4 && ingress && seatRecorded);
 
+    /// <summary>Whether a relay type is a live seat message rather than a catch-up reply.</summary>
+    public static bool IsLiveSeat(byte relayType) => relayType is 2 or 3;
+
     /// <summary>Whether a seat is kept: an ingress, live, into an entity the server knows.</summary>
     public static bool KeepSeat(byte relayType, bool ingress, bool known)
-        => ingress && known && relayType is 2 or 3;
+        => ingress && known && IsLiveSeat(relayType);
 }

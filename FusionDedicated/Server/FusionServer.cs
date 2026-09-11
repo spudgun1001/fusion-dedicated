@@ -3544,10 +3544,10 @@ public sealed class FusionServer : IDisposable
             {
                 _seats.Ingress(sender.SmallId, seat.SeatId, seat.Index, DateTime.UtcNow);
             }
-            else
+            else if (WorldCatchup.IsLiveSeat(seat.RelayType))
             {
-                // Not kept, so the sender must not be left recorded in whatever
-                // seat they were in before this one.
+                // Not kept because the entity is unknown, so the sender must not
+                // be left recorded in whatever seat they were in before this one.
                 _seats.Egress(sender.SmallId);
             }
 

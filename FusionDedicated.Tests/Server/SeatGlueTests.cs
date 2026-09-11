@@ -98,4 +98,19 @@ public class SeatGlueTests
     [Fact]
     public void An_unqueued_entity_starts_with_no_known_position()
         => Assert.Contains("PositionKnown = false;", FusionServerSource.Method("private void HandleUnqueueRequest("));
+
+    [Theory]
+    [InlineData((byte)2, true)]
+    [InlineData((byte)3, true)]
+    [InlineData((byte)0, false)]
+    [InlineData((byte)1, false)]
+    [InlineData((byte)4, false)]
+    [InlineData((byte)5, false)]
+    public void Only_relay_types_2_and_3_are_live_seats(byte relayType, bool live)
+        => Assert.Equal(live, WorldCatchup.IsLiveSeat(relayType));
+
+    [Fact]
+    public void HandleSeat_only_egresses_an_unkept_seat_when_it_is_live()
+        => Assert.Contains("else if (WorldCatchup.IsLiveSeat(seat.RelayType))",
+            FusionServerSource.Method("private void HandleSeat("));
 }
