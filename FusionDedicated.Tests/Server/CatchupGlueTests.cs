@@ -92,4 +92,25 @@ public class CatchupGlueTests
         Assert.Contains("Broadcast(FusionProtocol.BuildOwnershipResponse(owner, entityId), reliable: true);", announce);
         Assert.DoesNotContain("new FusionNetWriter", announce);
     }
+
+    [Fact]
+    public void Holsters_and_magazines_are_sent_again_once_a_player_has_loaded()
+    {
+        string handler = Method("private void HandleMetadataRequest(");
+
+        int guard = handler.IndexOf("sender.AttachmentsResent = true;", StringComparison.Ordinal);
+        int send = handler.IndexOf("ReseatAttachments(sender, AfterLoadingDelays);", StringComparison.Ordinal);
+
+        Assert.Contains("WorldCatchup.FinishedLoading(", handler);
+        Assert.Contains("!sender.AttachmentsResent", handler);
+        Assert.True(guard > 0 && send > guard, "the resend is no longer once a load");
+    }
+
+    [Fact]
+    public void A_new_level_owes_everybody_that_resend_again()
+        => Assert.Contains("player.AttachmentsResent = false;", Method("public void SetLevel("));
+
+    [Fact]
+    public void The_join_still_reseats_at_three_and_nine_seconds()
+        => Assert.Contains("AfterJoinDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) }", Source());
 }

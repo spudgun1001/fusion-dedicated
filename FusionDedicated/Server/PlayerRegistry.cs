@@ -116,6 +116,12 @@ public sealed class ConnectedPlayer
     public bool LevelStateSent { get; set; }
 
     /// <summary>
+    /// Whether holsters and magazines have been sent again since they finished
+    /// loading. Once a load, for the same reason as LevelStateSent.
+    /// </summary>
+    public bool AttachmentsResent { get; set; }
+
+    /// <summary>
     /// Level this player joined with. Mirrored into their Fusion metadata so every
     /// client shows the right badge, and re-checked here before honouring a command.
     /// </summary>

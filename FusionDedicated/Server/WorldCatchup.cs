@@ -68,4 +68,10 @@ public static class WorldCatchup
         => current is { } owner && owner != requester && owner != asked && present(owner)
             ? owner
             : null;
+
+    /// <summary>Whether a metadata change is a player saying they have finished loading.</summary>
+    public static bool FinishedLoading(string key, string value)
+        => string.Equals(key, "Loading", StringComparison.OrdinalIgnoreCase)
+            && bool.TryParse(value, out bool loading)
+            && !loading;
 }

@@ -1373,9 +1373,9 @@ public sealed class FusionServer : IDisposable
         // A client says so here when it has finished loading the level, which is
         // the only moment it will accept the level's own state. Anything sent
         // before this was thrown away rather than queued.
-        if (string.Equals(request.Value.Key, "Loading", StringComparison.OrdinalIgnoreCase)
-            && bool.TryParse(request.Value.Value, out bool loading)
-            && !loading
+        bool finishedLoading = WorldCatchup.FinishedLoading(request.Value.Key, request.Value.Value);
+
+        if (finishedLoading
             && !sender.LevelStateSent
             && HasLevelVariables)
         {
@@ -1391,6 +1391,16 @@ public sealed class FusionServer : IDisposable
                 Log("INFO", $"{sender.DisplayName} finished loading, sent {replayed} " +
                             "level variables");
             }
+        }
+
+        // Holsters and magazines again. The sends after joining are thrown away by
+        // a client still loading, and a slow machine is still loading at 9 s.
+        if (finishedLoading
+            && request.Value.PlayerSmallId == sender.SmallId
+            && !sender.AttachmentsResent)
+        {
+            sender.AttachmentsResent = true;
+            ReseatAttachments(sender, AfterLoadingDelays);
         }
     }
 
@@ -2442,6 +2452,7 @@ public sealed class FusionServer : IDisposable
         foreach (var player in Players.Players)
         {
             player.LevelStateSent = false;
+            player.AttachmentsResent = false;
         }
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
@@ -2956,8 +2967,19 @@ public sealed class FusionServer : IDisposable
     /// how long that takes depends on the machine.
     /// </summary>
     private void ReseatAttachments(ConnectedPlayer player)
+        => ReseatAttachments(player, AfterJoinDelays);
+
+    private static readonly TimeSpan[] AfterJoinDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) };
+
+    /// <summary>
+    /// After loading. Spawns wait for the level and are then built over a moment,
+    /// so these are not sent the instant loading ends either.
+    /// </summary>
+    private static readonly TimeSpan[] AfterLoadingDelays = { TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(6) };
+
+    private void ReseatAttachments(ConnectedPlayer player, TimeSpan[] delays)
     {
-        foreach (var delay in new[] { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) })
+        foreach (var delay in delays)
         {
             Defer(delay, () =>
             {

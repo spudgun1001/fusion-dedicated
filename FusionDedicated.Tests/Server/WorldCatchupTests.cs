@@ -193,4 +193,15 @@ public class WorldCatchupTests
     [Fact]
     public void A_player_is_never_sent_their_own_request()
         => Assert.Null(WorldCatchup.DataRequestTarget(asked: 1, current: 3, requester: 3, present: Here));
+
+    [Theory]
+    [InlineData("Loading", "False", true)]
+    [InlineData("Loading", "false", true)]
+    [InlineData("loading", "False", true)]
+    [InlineData("Loading", "True", false)]
+    [InlineData("Loading", "", false)]
+    [InlineData("Loading", "soon", false)]
+    [InlineData("Nickname", "False", false)]
+    public void Only_loading_set_to_false_means_they_have_finished_loading(string key, string value, bool finished)
+        => Assert.Equal(finished, WorldCatchup.FinishedLoading(key, value));
 }
