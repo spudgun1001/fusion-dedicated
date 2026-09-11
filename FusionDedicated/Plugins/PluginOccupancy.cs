@@ -19,7 +19,6 @@ public static class PluginOccupancy
         {
             if (platformOf(smallId) is not { } platformId)
             {
-                // Gone. Whoever was last seen holding it is not holding it now.
                 continue;
             }
 

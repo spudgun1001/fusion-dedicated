@@ -3619,7 +3619,7 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
-    /// Follows what a player holds. Reading only: the grab carries on to the other
+    /// Follows what a player holds, reading only, so the grab carries on to the other
     /// clients as usual. Grabbing anything but an entity empties that hand.
     /// </summary>
     private void NoteGrab(ConnectedPlayer sender, byte[] message)
@@ -3640,11 +3640,10 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
-    /// Sends a client's request for an entity's state to whoever owns it now.
-    ///
-    /// Relayed as it was, a request naming an owner who had left, an old owner, or
-    /// player 0 was never answered, so the gun in the real owner's hand floated for
-    /// the newcomer. The asker is told the owner and the owner is asked instead.
+    /// Sends a client's request for an entity's state to whoever owns it now, and
+    /// tells the asker who that is. Relayed as it was, a request naming an owner who
+    /// had left, an old owner, or player 0 was never answered, so the gun in the real
+    /// owner's hand floated for the newcomer.
     /// </summary>
     private void HandleEntityDataRequest(ConnectedPlayer sender, byte[] message)
     {
