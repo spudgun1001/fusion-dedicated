@@ -69,6 +69,10 @@ public static class WorldCatchup
             ? owner
             : null;
 
+    /// <summary>Whether a vehicle stays with its owner because they sit in it. Their own request always goes through.</summary>
+    public static bool DriverKeeps(byte requester, byte? owner, ushort? ownerSeatEntity, ushort entity)
+        => owner is { } driver && driver != requester && ownerSeatEntity == entity;
+
     /// <summary>The props a player owns. A client never asks about those, so their values are sent to it unasked.</summary>
     public static IReadOnlyList<ushort> OwnedBy(IEnumerable<(ushort Id, byte? Owner)> entities, byte player)
         => entities.Where(e => e.Owner == player).Select(e => e.Id).ToList();

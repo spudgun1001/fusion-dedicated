@@ -3481,6 +3481,15 @@ public sealed class FusionServer : IDisposable
 
         var entity = Entities.Get(entityId);
 
+        // Every client that saw the seat has locked the owner to the driver, so
+        // granting it to somebody who bumped into it only set the owner bouncing.
+        if (entity?.OwnerSmallId is { } driver
+            && WorldCatchup.DriverKeeps(sender.SmallId, driver, _seats.SeatOf(driver)?.EntityId, entityId))
+        {
+            SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(driver, entityId), reliable: true);
+            return;
+        }
+
         ulong ownerPlatformId = entity?.OwnerSmallId is { } ownerSmall
             ? Players.Get(ownerSmall)?.PlatformId ?? 0UL
             : 0UL;
