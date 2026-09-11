@@ -3508,7 +3508,8 @@ public sealed class FusionServer : IDisposable
         // Every client that saw the seat has locked the owner to the driver, so
         // granting it to somebody who bumped into it only set the owner bouncing.
         if (entity?.OwnerSmallId is { } driver
-            && WorldCatchup.DriverKeeps(sender.SmallId, driver, _seats.SeatOf(driver)?.EntityId, entityId))
+            && WorldCatchup.DriverKeeps(sender.SmallId, driver, _seats.SeatOf(driver)?.EntityId,
+                _seats.SeatOf(sender.SmallId)?.EntityId, _grabs.HoldersOf(entityId), entityId))
         {
             SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(driver, entityId), reliable: true);
             return;
@@ -3735,7 +3736,8 @@ public sealed class FusionServer : IDisposable
         }
 
         // Every client that saw the seat has locked a vehicle to its driver.
-        if (WorldCatchup.DriverKeeps(next, entity.OwnerSmallId, _seats.SeatOf(releaser.SmallId)?.EntityId, entityId))
+        if (WorldCatchup.DriverKeeps(next, entity.OwnerSmallId, _seats.SeatOf(releaser.SmallId)?.EntityId,
+                _seats.SeatOf(next)?.EntityId, _grabs.HoldersOf(entityId), entityId))
         {
             return;
         }

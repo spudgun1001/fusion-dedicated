@@ -74,9 +74,16 @@ public static class WorldCatchup
     public static byte? NextHolder(byte releasedBy, byte? owner, IReadOnlyList<byte> holders)
         => owner == releasedBy && !holders.Contains(releasedBy) && holders.Count > 0 ? holders[0] : null;
 
-    /// <summary>Whether a vehicle stays with its owner because they sit in it. Their own request always goes through.</summary>
-    public static bool DriverKeeps(byte requester, byte? owner, ushort? ownerSeatEntity, ushort entity)
-        => owner is { } driver && driver != requester && ownerSeatEntity == entity;
+    /// <summary>
+    /// Whether a vehicle stays with its owner because they sit in it. Their own request goes through, and so
+    /// does a fellow rider holding the car while the owner is not, since that is whoever has the wheel.
+    /// </summary>
+    public static bool DriverKeeps(byte requester, byte? owner, ushort? ownerSeatEntity, ushort? requesterSeatEntity,
+        IReadOnlyList<byte> holders, ushort entity)
+        => owner is { } driver
+           && driver != requester
+           && ownerSeatEntity == entity
+           && !(requesterSeatEntity == entity && holders.Contains(requester) && !holders.Contains(driver));
 
     /// <summary>The props a player owns. A client never asks about those, so their values are sent to it unasked.</summary>
     public static IReadOnlyList<ushort> OwnedBy(IEnumerable<(ushort Id, byte? Owner)> entities, byte player)
