@@ -2496,6 +2496,11 @@ public sealed class FusionServer : IDisposable
         // Everything goes, props included. Anything placed on the new level is put
         // back as players arrive on it.
         Entities.Forget();
+
+        // Clients send no releases as the scene unloads, and a grab on an id the
+        // registry never knew is not cleared when the entities go.
+        _grabs.Clear();
+
         lock (_cacheLock)
         {
             _sceneProps.Clear();

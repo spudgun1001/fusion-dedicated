@@ -119,6 +119,26 @@ public class GrabBookTests
     }
 
     [Fact]
+    public void Clearing_empties_every_hand()
+    {
+        var book = new GrabBook();
+        book.Grab(3, Left, Gun);
+        book.Grab(4, Right, 301);
+
+        book.Clear();
+
+        Assert.Empty(book.All());
+        Assert.Empty(book.HoldersOf(Gun));
+    }
+
+    [Fact]
+    public void A_level_change_empties_every_hand()
+    {
+        // Clients send no releases when the scene unloads.
+        Assert.Contains("_grabs.Clear();", FusionServerSource.Method("public void SetLevel("));
+    }
+
+    [Fact]
     public void Nothing_held_names_nobody()
         => Assert.Empty(new GrabBook().HoldersOf(Gun));
 

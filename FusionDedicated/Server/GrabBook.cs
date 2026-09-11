@@ -57,6 +57,15 @@ public sealed class GrabBook
         }
     }
 
+    /// <summary>Empties every hand, for a level change, where clients send no releases.</summary>
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _held.Clear();
+        }
+    }
+
     /// <summary>Who holds an entity, each player once, earliest grab first.</summary>
     public IReadOnlyList<byte> HoldersOf(ushort entityId)
     {
