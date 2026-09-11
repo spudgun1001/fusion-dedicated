@@ -191,7 +191,11 @@ public static class FusionProtocol
         RIGHT = 2,
     }
 
-    private const byte GrabGroupEntity = 1;
+    /// <summary>GrabGroup.ENTITY, the only group whose grab names an entity.</summary>
+    public const byte GrabGroupEntity = 1;
+
+    /// <summary>SerializedTransform: three floats, then a rotation in seven bytes.</summary>
+    private const int SerializedTransformSize = 19;
 
     /// <summary>
     /// Builds a PlayerRepGrab for a networked entity.
@@ -231,6 +235,72 @@ public static class FusionProtocol
         payload.Write((byte)hand);
 
         return WrapReliableToOtherClients(TagPlayerRepRelease, senderSmallId, payload.ToArray());
+    }
+
+    /// <summary>A grab as read off the wire. EntityId is 0 for any group but an entity.</summary>
+    public readonly record struct GrabInfo(byte Hand, byte Group, bool IsGrabbed, ushort EntityId);
+
+    /// <summary>
+    /// Reads a PlayerRepGrab: hand, group, IsGrabbed, then for an entity the grip
+    /// offset, grip index and entity id.
+    /// </summary>
+    public static GrabInfo? TryReadGrab(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (reader.ReadByte() != TagPlayerRepGrab)
+            {
+                return null;
+            }
+
+            ReadRouteAndSender(ref reader);
+
+            reader.ReadInt32(); // payload length
+
+            byte hand = reader.ReadByte();
+            byte group = reader.ReadByte();
+            bool grabbed = reader.ReadBool();
+
+            if (group != GrabGroupEntity)
+            {
+                return new GrabInfo(hand, group, grabbed, 0);
+            }
+
+            reader.ReadRaw(SerializedTransformSize);
+            reader.ReadUInt16(); // grip index
+
+            return new GrabInfo(hand, group, grabbed, reader.ReadUInt16());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Reads which hand a PlayerRepRelease let go with.</summary>
+    public static byte? TryReadRelease(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (reader.ReadByte() != TagPlayerRepRelease)
+            {
+                return null;
+            }
+
+            ReadRouteAndSender(ref reader);
+
+            reader.ReadInt32(); // payload length
+
+            return reader.ReadByte();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static byte[] WrapReliableToOtherClients(byte tag, byte senderSmallId, byte[] payload)

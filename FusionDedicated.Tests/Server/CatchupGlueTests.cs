@@ -28,4 +28,29 @@ public class CatchupGlueTests
     [Fact]
     public void Scene_props_name_their_owner_through_the_rule()
         => Assert.Contains("WorldCatchup.PropOwner(", Method("private int SendSceneProps("));
+
+    [Theory]
+    [InlineData("case FusionProtocol.TagPlayerRepGrab when sender != null:")]
+    [InlineData("case FusionProtocol.TagPlayerRepRelease when sender != null:")]
+    public void Grabs_and_releases_are_read_and_still_passed_on(string label)
+    {
+        // Other clients move the hand from these, so reading one must never stop it.
+        string handled = Case(label);
+
+        Assert.Contains("break;", handled);
+        Assert.DoesNotContain("return;", handled);
+    }
+
+    [Fact]
+    public void A_player_who_leaves_holds_nothing()
+        => Assert.Contains("_grabs.ForgetPlayer(player.SmallId);", Method("private void Depart("));
+
+    [Fact]
+    public void A_new_avatar_holds_nothing()
+        => Assert.Contains("_grabs.ForgetPlayer(sender.SmallId);",
+            Case("case GateProtocol.TagPlayerRepAvatar when sender != null:"));
+
+    [Fact]
+    public void An_entity_that_leaves_the_books_is_let_go()
+        => Assert.Contains("Entities.Removed += id => _grabs.ForgetEntity(id);", Source());
 }

@@ -55,6 +55,9 @@ public sealed class FusionServer : IDisposable
         // A prop's saved variables go with it, or a busy level fills the cache and
         // newer props stop being replayed to anybody who joins.
         Entities.Removed += id => _rpcVariables.ForgetEntity(id);
+
+        // Nobody holds a prop that has gone.
+        Entities.Removed += id => _grabs.ForgetEntity(id);
     }
 
     public void Start()
@@ -313,6 +316,9 @@ public sealed class FusionServer : IDisposable
         // Small ids are reused, so the next holder of this one is a different
         // person with a different set of mods and has never been asked anything.
         _askedFor.RemoveWhere(a => a.Holder == player.SmallId);
+
+        // The next player given this small id starts with empty hands.
+        _grabs.ForgetPlayer(player.SmallId);
 
         // Their body slots go with them, so nobody is told to holster anything on
         // a rig that no longer exists.
@@ -635,6 +641,18 @@ public sealed class FusionServer : IDisposable
                 TrackEntityPose(sender, message);
                 break;
 
+            case FusionProtocol.TagPlayerRepGrab when sender != null:
+                NoteGrab(sender, message);
+                break;
+
+            case FusionProtocol.TagPlayerRepRelease when sender != null:
+                if (FusionProtocol.TryReadRelease(message) is { } releasedHand)
+                {
+                    _grabs.Release(sender.SmallId, releasedHand);
+                }
+
+                break;
+
             case FusionProtocol.TagEntityCullStatus when sender != null:
                 // Watched, then passed on like anything else. Only the owner's
                 // word counts, which is the same rule the clients apply.
@@ -709,6 +727,9 @@ public sealed class FusionServer : IDisposable
                     RememberHolder(worn, sender.SmallId);
                     AskWhereItComesFrom(sender, worn);
                 }
+
+                // A new avatar is a new rig, with nothing in its hands.
+                _grabs.ForgetPlayer(sender.SmallId);
 
                 break;
             }
@@ -2838,6 +2859,12 @@ public sealed class FusionServer : IDisposable
                 e.X, e.Y, e.Z, e.Persistent))
             .ToList();
 
+    /// <summary>What each player has in their hands.</summary>
+    private readonly GrabBook _grabs = new();
+
+    /// <summary>Who holds an entity, earliest grab first.</summary>
+    public IReadOnlyList<byte> HoldersOf(ushort entityId) => _grabs.HoldersOf(entityId);
+
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly HolsterSlots _slotted = new();
 
@@ -3347,6 +3374,27 @@ public sealed class FusionServer : IDisposable
             pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
             pose.Value.Rotation,
             pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z);
+    }
+
+    /// <summary>
+    /// Follows what a player holds. Reading only: the grab carries on to the other
+    /// clients as usual. Grabbing anything but an entity empties that hand.
+    /// </summary>
+    private void NoteGrab(ConnectedPlayer sender, byte[] message)
+    {
+        if (FusionProtocol.TryReadGrab(message) is not { } grab)
+        {
+            return;
+        }
+
+        if (grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed)
+        {
+            _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId);
+        }
+        else
+        {
+            _grabs.Release(sender.SmallId, grab.Hand);
+        }
     }
 
     // ---- relaying ----
