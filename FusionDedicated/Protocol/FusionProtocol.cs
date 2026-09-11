@@ -183,6 +183,7 @@ public static class FusionProtocol
     public const byte TagPlayerVoiceChat = 67;
     public const byte TagPlayerRepGrab = 9;
     public const byte TagPlayerRepRelease = 10;
+    public const byte TagPlayerRepSeat = 8;
 
     public enum Handedness : byte
     {
@@ -301,6 +302,54 @@ public static class FusionProtocol
         {
             return null;
         }
+    }
+
+    /// <summary>A PlayerRepSeat as read off the wire, with the route it came by.</summary>
+    public readonly record struct SeatInfo(byte RelayType, ushort SeatId, byte Index, bool Ingress);
+
+    /// <summary>
+    /// Reads a PlayerRepSeat: the seat's entity, which seat on it, then in or out.
+    /// The relay type is kept because a live seat arrives ToOtherClients, while
+    /// Fusion's catch-up reply arrives ToTarget and names the wrong rider.
+    /// </summary>
+    public static SeatInfo? TryReadSeat(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (reader.ReadByte() != TagPlayerRepSeat)
+            {
+                return null;
+            }
+
+            byte relayType = message[1];
+
+            ReadRouteAndSender(ref reader);
+
+            reader.ReadInt32(); // payload length
+
+            return new SeatInfo(relayType, reader.ReadUInt16(), reader.ReadByte(), reader.ReadBool());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Writes a PlayerRepSeat as the rider would. A client seats whoever sent it,
+    /// so the rider has to be the sender.
+    /// </summary>
+    public static byte[] BuildSeat(byte rider, ushort seatId, byte index, bool ingress)
+    {
+        var payload = new FusionNetWriter(8);
+
+        payload.WriteUInt16(seatId);
+        payload.Write(index);
+        payload.Write(ingress);
+
+        return WrapReliableToOtherClients(TagPlayerRepSeat, rider, payload.ToArray());
     }
 
     private static byte[] WrapReliableToOtherClients(byte tag, byte senderSmallId, byte[] payload)
