@@ -30,4 +30,25 @@ public static class WorldCatchup
                 && !string.IsNullOrWhiteSpace(e.Barcode))
             .OrderBy(e => e.Id)
             .ToList();
+
+    /// <summary>
+    /// Who a newcomer is told owns a scene prop. They ask that player for its
+    /// state, so a stale name leaves a held gun floating in the air for them.
+    /// </summary>
+    /// <param name="anyoneElse">Somebody present who is not the newcomer, when both owners have gone.</param>
+    public static byte PropOwner(byte? current, byte cached, byte newcomer, Func<byte, bool> present,
+        byte? anyoneElse = null)
+    {
+        if (current is { } owner && owner != newcomer && present(owner))
+        {
+            return owner;
+        }
+
+        if (cached != newcomer && present(cached))
+        {
+            return cached;
+        }
+
+        return anyoneElse ?? newcomer;
+    }
 }

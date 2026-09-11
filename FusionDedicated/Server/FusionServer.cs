@@ -1140,10 +1140,12 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            byte owner = Players.Get(prop.OwnerSmallId) != null
-                ? prop.OwnerSmallId
-                : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
-                    ?? player.SmallId;
+            byte owner = WorldCatchup.PropOwner(
+                Entities.Get(prop.EntityId)?.OwnerSmallId,
+                prop.OwnerSmallId,
+                player.SmallId,
+                id => Players.Get(id) != null,
+                Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId);
 
             SendTo(player.Connection, FusionProtocol.BuildPropCreate(
                 owner, prop.Hash, prop.Index, prop.EntityId), reliable: true);

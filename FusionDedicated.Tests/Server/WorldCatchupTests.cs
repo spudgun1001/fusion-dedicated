@@ -111,4 +111,40 @@ public class WorldCatchupTests
         Assert.DoesNotContain(replay, e => e.Synthetic);
         Assert.Equal(2, replay.Count);
     }
+
+    private static readonly Func<byte, bool> Here = id => id is 1 or 2 or 3;
+
+    [Fact]
+    public void A_scene_prop_names_whoever_owns_it_now()
+    {
+        // The newcomer asks that player what the prop is doing. The first person
+        // to network it may have put it down long ago.
+        Assert.Equal(2, WorldCatchup.PropOwner(current: 2, cached: 1, newcomer: 3, present: Here));
+    }
+
+    [Fact]
+    public void The_first_owner_is_named_when_nobody_owns_it_now()
+        => Assert.Equal(1, WorldCatchup.PropOwner(current: null, cached: 1, newcomer: 3, present: Here));
+
+    [Fact]
+    public void An_owner_who_has_left_is_passed_over()
+        => Assert.Equal(1, WorldCatchup.PropOwner(current: 9, cached: 1, newcomer: 3, present: Here));
+
+    [Fact]
+    public void The_newcomer_is_not_named_because_their_small_id_was_used_before()
+    {
+        // Small ids are reused, so an old record can carry the newcomer's own id.
+        Assert.Equal(1, WorldCatchup.PropOwner(current: 3, cached: 3, newcomer: 3, present: Here,
+            anyoneElse: 1));
+    }
+
+    [Fact]
+    public void Somebody_else_stands_in_when_both_owners_have_gone()
+        => Assert.Equal(2, WorldCatchup.PropOwner(current: 9, cached: 8, newcomer: 3, present: Here,
+            anyoneElse: 2));
+
+    [Fact]
+    public void The_newcomer_is_named_only_when_nobody_else_is_here()
+        => Assert.Equal(3, WorldCatchup.PropOwner(current: null, cached: 8, newcomer: 3,
+            present: id => id == 3, anyoneElse: null));
 }
