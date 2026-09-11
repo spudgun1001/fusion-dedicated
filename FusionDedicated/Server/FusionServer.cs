@@ -321,10 +321,19 @@ public sealed class FusionServer : IDisposable
         _grabs.ForgetPlayer(player.SmallId);
 
         // Their body slots go with them, so nobody is told to holster anything on
-        // a rig that no longer exists.
+        // a rig that no longer exists. A rig's slots are keyed by its small id,
+        // and the next player given that id would inherit them.
+        IReadOnlyList<ushort> unholstered;
+
         lock (_cacheLock)
         {
             _slotted.ForgetSlots(slot => Entities.Get(slot)?.OwnerSmallId == player.SmallId);
+            unholstered = _slotted.ForgetRig(player.SmallId);
+        }
+
+        foreach (ushort weapon in unholstered)
+        {
+            Entities.SetAttached(weapon, false);
         }
 
         foreach (var holders in _barcodeHolders.Values)
@@ -3023,6 +3032,11 @@ public sealed class FusionServer : IDisposable
                     _slotted.Forget(slot, index);
                 }
 
+                continue;
+            }
+
+            if (!WorldCatchup.ShouldReseat(_grabs.HoldersOf(weapon)))
+            {
                 continue;
             }
 

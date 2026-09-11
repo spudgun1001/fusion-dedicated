@@ -53,4 +53,18 @@ public class CatchupGlueTests
     [Fact]
     public void An_entity_that_leaves_the_books_is_let_go()
         => Assert.Contains("Entities.Removed += id => _grabs.ForgetEntity(id);", Source());
+
+    [Fact]
+    public void A_player_who_leaves_takes_their_holsters_with_them()
+    {
+        string depart = Method("private void Depart(");
+
+        Assert.Contains("_slotted.ForgetRig(player.SmallId)", depart);
+        Assert.Contains("Entities.SetAttached(weapon, false)", depart);
+    }
+
+    [Fact]
+    public void A_held_gun_is_not_put_back_in_a_holster()
+        => Assert.Contains("WorldCatchup.ShouldReseat(_grabs.HoldersOf(weapon))",
+            Method("private int SendAttachments("));
 }

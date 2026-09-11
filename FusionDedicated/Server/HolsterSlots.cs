@@ -81,6 +81,23 @@ public sealed class HolsterSlots
         return doomed.Count;
     }
 
+    /// <summary>
+    /// Forgets every slot on a player's body. A rig's slots are keyed by the
+    /// player's small id, which no prop id can be.
+    /// </summary>
+    /// <returns>The weapons that were in them.</returns>
+    public IReadOnlyList<ushort> ForgetRig(byte smallId)
+    {
+        var doomed = _slots.Where(s => s.Key.Slot == smallId).ToList();
+
+        foreach (var slot in doomed)
+        {
+            _slots.Remove(slot.Key);
+        }
+
+        return doomed.Select(s => s.Value).ToList();
+    }
+
     /// <summary>Forgets one slot by name, for a weapon that no longer exists.</summary>
     public bool Forget(ushort slot, byte index) => _slots.Remove((slot, index));
 

@@ -51,4 +51,10 @@ public static class WorldCatchup
 
         return anyoneElse ?? newcomer;
     }
+
+    /// <summary>
+    /// Whether a holstered weapon goes back on the hip for a newcomer. Not while
+    /// somebody holds it: the draw was missed and the slot is really empty.
+    /// </summary>
+    public static bool ShouldReseat(IReadOnlyCollection<byte> holders) => holders.Count == 0;
 }

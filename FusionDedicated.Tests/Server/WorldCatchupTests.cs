@@ -147,4 +147,15 @@ public class WorldCatchupTests
     public void The_newcomer_is_named_only_when_nobody_else_is_here()
         => Assert.Equal(3, WorldCatchup.PropOwner(current: null, cached: 8, newcomer: 3,
             present: id => id == 3, anyoneElse: null));
+
+    [Fact]
+    public void A_holstered_gun_nobody_holds_goes_back_on_the_hip()
+        => Assert.True(WorldCatchup.ShouldReseat(Array.Empty<byte>()));
+
+    [Fact]
+    public void A_holstered_gun_in_somebodys_hand_is_not_put_back()
+    {
+        // The draw was missed, so the record is stale and the hip is empty.
+        Assert.False(WorldCatchup.ShouldReseat(new byte[] { 3 }));
+    }
 }

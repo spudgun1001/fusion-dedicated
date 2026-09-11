@@ -162,4 +162,47 @@ public class HolsterSlotTests
         Assert.True(slots.Insert(1000, 0, 5555));
         Assert.Equal(5555, slots.All().First(s => s.Slot == 1000).Weapon);
     }
+
+    [Fact]
+    public void Leaving_forgets_everything_on_that_players_body()
+    {
+        // A player's rig is registered under their small id, so that is its slot id.
+        var slots = new HolsterSlots();
+        slots.Insert(3, 0, Gun);
+        slots.Insert(3, 1, 301);
+        slots.Insert(4, 0, 302);
+
+        var weapons = slots.ForgetRig(3);
+
+        Assert.Equal(new ushort[] { Gun, 301 }, weapons.OrderBy(w => w));
+        Assert.Equal(4, Assert.Single(slots.All()).Slot);
+    }
+
+    [Fact]
+    public void The_next_player_given_that_small_id_has_nothing_on_their_hip()
+    {
+        var slots = new HolsterSlots();
+        slots.Insert(3, 0, Gun);
+
+        slots.ForgetRig(3);
+
+        Assert.Null(slots.Find(Gun));
+        Assert.Equal(0, slots.Count);
+    }
+
+    [Fact]
+    public void A_player_with_nothing_holstered_forgets_nothing()
+        => Assert.Empty(new HolsterSlots().ForgetRig(3));
+
+    [Fact]
+    public void Slots_on_a_prop_are_left_alone()
+    {
+        // 259 is a prop id whose low byte is 3, which must not read as player 3.
+        var slots = new HolsterSlots();
+        slots.Insert(259, 0, Gun);
+        slots.Insert(TheirHip, 0, 301);
+
+        Assert.Empty(slots.ForgetRig(3));
+        Assert.Equal(2, slots.Count);
+    }
 }
