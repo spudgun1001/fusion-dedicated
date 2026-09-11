@@ -60,6 +60,7 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += id => _grabs.ForgetEntity(id);
 
         Entities.Removed += id => _seats.ForgetEntity(id);
+        Entities.Removed += ForgetAttachments;
     }
 
     public void Start()
@@ -2803,7 +2804,7 @@ public sealed class FusionServer : IDisposable
         }
 
         // Watched, not acted on: these still go on to everybody afterwards.
-        NoteAttachment(handler.Value, message);
+        NoteAttachment(sender, handler.Value, message);
 
         if (handler != ModuleProtocol.ConstraintCreateTag)
         {
@@ -3128,6 +3129,23 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>Takes a removed prop off the holster and magazine books, as a holster or as what was in one.</summary>
+    private void ForgetAttachments(ushort entityId)
+    {
+        lock (_cacheLock)
+        {
+            _slotted.ForgetEntity(entityId);
+
+            foreach (ushort magazine in _loaded
+                         .Where(m => m.Key == entityId || m.Value == entityId)
+                         .Select(m => m.Key)
+                         .ToList())
+            {
+                _loaded.Remove(magazine);
+            }
+        }
+    }
+
     /// <returns>How many were sent.</returns>
     private int SendAttachments(ConnectedPlayer player)
     {
@@ -3200,6 +3218,10 @@ public sealed class FusionServer : IDisposable
                 ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
                 ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index)), reliable: true);
 
+            Log("INFO", HolsterLog.Resent(Entities.Get(weapon)?.ShortName ?? "an untracked item", weapon,
+                    HolsterLog.SlotOwner(slot, smallId => Players.Get(smallId)?.DisplayName), index, player.DisplayName),
+                console: false);
+
             sent++;
         }
 
@@ -3212,7 +3234,7 @@ public sealed class FusionServer : IDisposable
     ///
     /// Reading only. These belong to the clients and are passed on untouched.
     /// </summary>
-    private void NoteAttachment(long handler, byte[] message)
+    private void NoteAttachment(ConnectedPlayer sender, long handler, byte[] message)
     {
         var payload = ModuleProtocol.TryReadHandlerPayload(message);
 
@@ -3256,7 +3278,7 @@ public sealed class FusionServer : IDisposable
                     _slotted.Insert(change.Slot, change.SlotIndex, change.Entity);
                 }
 
-                LogAmmoAttachment(change, change.Entity);
+                LogHolsterChange(sender, change, change.Entity);
 
                 return;
 
@@ -3273,18 +3295,19 @@ public sealed class FusionServer : IDisposable
                     }
                 }
 
-                LogAmmoAttachment(change, dropped);
+                LogHolsterChange(sender, change, dropped);
 
                 return;
         }
     }
 
-    /// <summary>Notes ammunition going into or out of a body slot, for the detailed log.</summary>
-    private void LogAmmoAttachment(ModuleProtocol.AttachmentChange change, ushort? entityId)
+    /// <summary>Notes something going into or out of a slot, for the detailed log.</summary>
+    private void LogHolsterChange(ConnectedPlayer sender, ModuleProtocol.AttachmentChange change, ushort? item)
     {
-        string barcode = entityId is { } id ? Entities.Get(id)?.Barcode ?? "" : "";
+        string itemName = item is { } id ? Entities.Get(id)?.ShortName ?? "an untracked item" : "";
+        string slotOwner = HolsterLog.SlotOwner(change.Slot, smallId => Players.Get(smallId)?.DisplayName);
 
-        if (AmmoDiagnostics.DescribeAttachment(change, barcode, entityId) is { } line)
+        if (HolsterLog.Change(change, item, itemName, slotOwner, sender.DisplayName) is { } line)
         {
             Log("INFO", line, console: false);
         }

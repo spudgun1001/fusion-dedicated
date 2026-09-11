@@ -98,6 +98,20 @@ public sealed class HolsterSlots
         return doomed.Select(s => s.Value).ToList();
     }
 
+    /// <summary>Forgets a removed prop, both as something in a slot and as something with slots.</summary>
+    /// <returns>How many slots were forgotten.</returns>
+    public int ForgetEntity(ushort entityId)
+    {
+        var doomed = _slots.Where(s => s.Value == entityId || s.Key.Slot == entityId).Select(s => s.Key).ToList();
+
+        foreach (var key in doomed)
+        {
+            _slots.Remove(key);
+        }
+
+        return doomed.Count;
+    }
+
     /// <summary>Forgets one slot by name, for a weapon that no longer exists.</summary>
     public bool Forget(ushort slot, byte index) => _slots.Remove((slot, index));
 

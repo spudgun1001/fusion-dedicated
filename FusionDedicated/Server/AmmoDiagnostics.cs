@@ -33,27 +33,6 @@ public static class AmmoDiagnostics
                $"owner distance at pose {distance}, culled for owner {YesNo(entity.CulledForOwner)}";
     }
 
-    /// <param name="weapon">What a drop took out of the slot, which the message does not name.</param>
-    public static string? DescribeAttachment(ModuleProtocol.AttachmentChange change, string barcode, ushort? weapon)
-    {
-        ushort? entity = change.Kind switch
-        {
-            ModuleProtocol.AttachmentKind.SlotInsert => change.Entity,
-            ModuleProtocol.AttachmentKind.SlotDrop => weapon,
-            _ => null,
-        };
-
-        if (entity == null || !Ammunition.IsAmmo(barcode))
-        {
-            return null;
-        }
-
-        string direction = change.Kind == ModuleProtocol.AttachmentKind.SlotInsert ? "into" : "out of";
-
-        return $"Ammo {direction} body slot {change.Slot} index {change.SlotIndex}: " +
-               $"{NameOf(barcode)} (entity {entity})";
-    }
-
     /// <summary>Base game barcodes are GUIDs, so their own name is used when it is known.</summary>
     private static string NameOf(string barcode)
     {

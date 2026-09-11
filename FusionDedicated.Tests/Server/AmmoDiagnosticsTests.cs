@@ -90,38 +90,6 @@ public class AmmoDiagnosticsTests
     }
 
     [Fact]
-    public void A_magazine_going_into_a_body_slot_is_named()
-    {
-        var change = new ModuleProtocol.AttachmentChange(
-            ModuleProtocol.AttachmentKind.SlotInsert, 300, 3, 1);
-
-        Assert.Equal(
-            "Ammo into body slot 3 index 1: UMP Mag (entity 300)",
-            AmmoDiagnostics.DescribeAttachment(change, Magazine, null));
-    }
-
-    [Fact]
-    public void A_magazine_coming_out_of_a_body_slot_is_named_from_what_the_slot_held()
-    {
-        // The drop message names the slot, not what was in it.
-        var change = new ModuleProtocol.AttachmentChange(
-            ModuleProtocol.AttachmentKind.SlotDrop, 0, 3, 1);
-
-        Assert.Equal(
-            "Ammo out of body slot 3 index 1: UMP Mag (entity 300)",
-            AmmoDiagnostics.DescribeAttachment(change, Magazine, 300));
-    }
-
-    [Fact]
-    public void A_drop_from_a_slot_nobody_recorded_is_not_described()
-    {
-        var change = new ModuleProtocol.AttachmentChange(
-            ModuleProtocol.AttachmentKind.SlotDrop, 0, 3, 1);
-
-        Assert.Null(AmmoDiagnostics.DescribeAttachment(change, "", null));
-    }
-
-    [Fact]
     public void A_gun_going_into_a_holster_is_not_described()
     {
         var change = new ModuleProtocol.AttachmentChange(
