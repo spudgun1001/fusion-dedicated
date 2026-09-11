@@ -3365,6 +3365,9 @@ public sealed class FusionServer : IDisposable
 
         // The host's only job here is to confirm; it never claims anything itself.
         AnnounceOwner(entityId, requestedOwner);
+
+        Log("INFO", $"Ownership of entity {entityId} given to player {requestedOwner}, " +
+                    $"asked for by {sender.DisplayName}", console: false);
     }
 
     /// <summary>
@@ -3451,6 +3454,9 @@ public sealed class FusionServer : IDisposable
                 vehicle.X, vehicle.Y, vehicle.Z))
         {
             SeatEgress(sender.SmallId);
+
+            Log("INFO", $"{sender.DisplayName} is more than 15 m from entity {seat.EntityId}, " +
+                        $"taken out of seat {seat.Index}", console: false);
         }
     }
 
@@ -3509,6 +3515,9 @@ public sealed class FusionServer : IDisposable
         {
             Entities.SetOwner(vehicleId, sender.SmallId);
             AnnounceOwner(vehicleId, sender.SmallId);
+
+            Log("INFO", $"Entity {vehicleId} now owned by {sender.DisplayName} (player {sender.SmallId}), " +
+                        "who sits in it", console: false);
         }
     }
 
@@ -3562,6 +3571,9 @@ public sealed class FusionServer : IDisposable
             SendTo(current.Connection,
                 FusionProtocol.BuildEntityDataRequest(sender.SmallId, owner, request.EntityId),
                 reliable: true);
+
+            Log("INFO", $"Data request by {sender.DisplayName} for entity {request.EntityId} " +
+                        $"redirected from {request.Target?.ToString() ?? "nobody"} to player {owner}", console: false);
         }
         else
         {
@@ -3613,6 +3625,10 @@ public sealed class FusionServer : IDisposable
                 SeatEgress(sender.SmallId);
             }
 
+            Log("INFO", $"{sender.DisplayName} {(seat.Ingress ? "sat in" : "got out of")} seat {seat.Index} " +
+                        $"of entity {seat.SeatId}, {(known ? "known" : "not known")} to the server, " +
+                        $"relay type {seat.RelayType}", console: false);
+
             if (!WorldCatchup.PassSeatMessage(seat.RelayType, seat.Ingress,
                     _seats.IsRecorded(seat.SeatId, seat.Index)))
             {
@@ -3639,6 +3655,12 @@ public sealed class FusionServer : IDisposable
         {
             SendTo(requester.Connection, FusionProtocol.BuildSeat(seat.Rider, entityId, seat.Index, true),
                 reliable: true);
+        }
+
+        if (seats.Count > 0)
+        {
+            Log("INFO", $"Replayed {seats.Count} seat(s) in entity {entityId} to {requester.DisplayName}",
+                console: false);
         }
     }
 
