@@ -43,6 +43,7 @@ public sealed class FusionServer : IDisposable
 
     private BlocklistEvaluator _blocklist = new(new HashSet<string>(StringComparer.Ordinal));
     private SpawnRateLimiter _rateLimiter = new(0);
+    private RefusalGuard _refusals = new(0, TimeSpan.FromSeconds(5));
     private NicknameGuard _nicknames = new(0, Array.Empty<string>());
 
     public FusionServer(ServerConfig config)
@@ -51,6 +52,7 @@ public sealed class FusionServer : IDisposable
         Players.MaxPlayers = config.MaxPlayers;
         Entities.Capacity = config.MaxEntities;
         Guard = new SpawnGuard(config);
+        _refusals = new RefusalGuard(config.RefusalKickPerSecond, TimeSpan.FromSeconds(5));
 
         // A prop's saved variables go with it, or a busy level fills the cache and
         // newer props stop being replayed to anybody who joins.
@@ -314,6 +316,7 @@ public sealed class FusionServer : IDisposable
 
         Guard.Forget(player.SmallId);
         _rateLimiter.Forget(player.SmallId);
+        _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         SeatForgetRider(player.SmallId);
 
@@ -1386,7 +1389,7 @@ public sealed class FusionServer : IDisposable
         if (request.Value.PlayerSmallId != sender.SmallId
             && !sender.Permission.IsAtLeast(PermissionLevel.Operator))
         {
-            Log("WARN", $"{sender.DisplayName} tried to set metadata on SmallID " +
+            Refuse(sender, "metadata", $"{sender.DisplayName} tried to set metadata on SmallID " +
                         $"{request.Value.PlayerSmallId}, which is not theirs");
             return;
         }
@@ -1475,7 +1478,14 @@ public sealed class FusionServer : IDisposable
 
         if (request == null)
         {
-            Log("WARN", $"SpawnRequest from {sender.DisplayName} did not parse");
+            Refuse(sender, "spawn", $"SpawnRequest from {sender.DisplayName} did not parse");
+            return;
+        }
+
+        // First, so a flood of requests that would all be refused is cut off before any other work.
+        if (!_rateLimiter.Allow(sender.SmallId, DateTime.UtcNow))
+        {
+            Refuse(sender, "spawn", $"Spawn by {sender.DisplayName} denied: over the per-second rate cap");
             return;
         }
 
@@ -1490,7 +1500,7 @@ public sealed class FusionServer : IDisposable
 
         if (rankVerdict.Blocked)
         {
-            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+            Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
                         $"denied: {rankVerdict.Reason} (source={request.Value.Source})");
             return;
         }
@@ -1499,7 +1509,7 @@ public sealed class FusionServer : IDisposable
 
         if (blockVerdict.Blocked)
         {
-            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+            Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
                         $"denied by the {blockVerdict.Layer} blocklist: {blockVerdict.Reason}");
             return;
         }
@@ -1508,7 +1518,7 @@ public sealed class FusionServer : IDisposable
 
         if (toolVerdict.Blocked)
         {
-            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+            Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
                         $"denied: {toolVerdict.Reason}");
             return;
         }
@@ -1519,14 +1529,8 @@ public sealed class FusionServer : IDisposable
 
         if (pluginSpawn is { Allowed: false })
         {
-            Log("WARN", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+            Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
                         $"denied by a plugin: {pluginSpawn.Reason}");
-            return;
-        }
-
-        if (!_rateLimiter.Allow(sender.SmallId, DateTime.UtcNow))
-        {
-            Log("WARN", $"Spawn by {sender.DisplayName} denied: over the per-second rate cap");
             return;
         }
 
@@ -1569,7 +1573,7 @@ public sealed class FusionServer : IDisposable
 
             if (Entities.SpawnedCount >= Config.MaxEntities)
             {
-                Log("WARN", $"Spawn denied: entity limit reached ({Config.MaxEntities}) " +
+                Refuse(sender, "spawn", $"Spawn denied: entity limit reached ({Config.MaxEntities}) " +
                             "and nothing could be evicted");
                 return;
             }
@@ -1729,7 +1733,7 @@ public sealed class FusionServer : IDisposable
             && Entities.Get(entityId) is { } target
             && !DespawnAuthority.MayDespawn(target.OwnerSmallId, sender.SmallId, sender.Permission))
         {
-            Log("WARN", $"{sender.DisplayName} tried to despawn entity {entityId}, " +
+            Refuse(sender, "despawn", $"{sender.DisplayName} tried to despawn entity {entityId}, " +
                         "which belongs to someone else");
             return;
         }
@@ -1740,6 +1744,22 @@ public sealed class FusionServer : IDisposable
             reliable: true);
 
         Log("INFO", $"Despawn: id={entityId} by {sender.DisplayName}");
+    }
+
+    /// <summary>Logs a refused request without letting a flood of them stall the server, and kicks whoever floods.</summary>
+    private void Refuse(ConnectedPlayer sender, string kind, string line)
+    {
+        var verdict = _refusals.Note(sender.SmallId, kind, DateTime.UtcNow);
+
+        if (verdict.Log)
+        {
+            Log("WARN", verdict.Suppressed > 0 ? $"{line} ({verdict.Suppressed} more like it before this)" : line);
+        }
+
+        if (verdict.Kick)
+        {
+            Kick(sender.SmallId, "Flooding the server with refused requests");
+        }
     }
 
     // ---- moderation ----
@@ -4152,6 +4172,12 @@ public sealed class FusionServer : IDisposable
         if (Players.Count > 0)
         {
             PushSettings();
+        }
+
+        foreach (var (player, kind, count) in _refusals.Flush(DateTime.UtcNow))
+        {
+            string name = Players.Get(player)?.DisplayName ?? $"player {player}";
+            Log("WARN", $"{name}: {count} more {kind} refusal(s) held back from the log");
         }
 
         if (!Config.CullOrphanedEntities)

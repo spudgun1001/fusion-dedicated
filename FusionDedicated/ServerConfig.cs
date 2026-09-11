@@ -331,6 +331,12 @@ public sealed class ServerConfig
     public int MaxEntitiesPerPlayer { get; set; } = 300;
 
     /// <summary>
+    /// Refused requests a second, of any kind, before a player is kicked for flooding.
+    /// Zero never kicks.
+    /// </summary>
+    public int RefusalKickPerSecond { get; set; } = 50;
+
+    /// <summary>
     /// Trips before a kick. The first strikes only purge the offending props, so an
     /// enthusiastic builder is slowed down rather than ejected.
     /// </summary>
