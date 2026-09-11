@@ -113,4 +113,21 @@ public class CatchupGlueTests
     [Fact]
     public void The_join_still_reseats_at_three_and_nine_seconds()
         => Assert.Contains("AfterJoinDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) }", Source());
+
+    [Fact]
+    public void A_prop_a_client_asks_about_is_sent_its_variables()
+    {
+        // The replay after loading lands before a kept prop is spawned, so its values
+        // were dropped. A client asks about each prop once it exists.
+        Assert.Contains("ReplayVariables(sender, request.EntityId);", Method("private void HandleEntityDataRequest("));
+
+        string replay = Method("private void ReplayVariables(");
+
+        Assert.Contains("_rpcVariables.ForEntity(entityId)", replay);
+        Assert.Contains("SendRpcVariable(requester,", replay);
+    }
+
+    [Fact]
+    public void Both_replays_stamp_a_variable_the_same_way()
+        => Assert.Contains("SendRpcVariable(player,", Method("private int SendRpcVariables("));
 }

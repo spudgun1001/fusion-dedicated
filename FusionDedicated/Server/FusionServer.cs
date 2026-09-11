@@ -1351,18 +1351,24 @@ public sealed class FusionServer : IDisposable
 
         foreach (var (tag, from, body) in variables)
         {
-            // As the player who set it, and only while they are still here. A
-            // value stamped as the server would present whatever somebody put in
-            // the cache to every later joiner as though the level said it.
-            byte source = Players.Get(from) != null ? from : player.SmallId;
-
-            SendTo(player.Connection,
-                GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body), reliable: true);
-
+            SendRpcVariable(player, tag, from, body);
             sent++;
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// Sends one held variable as the player who set it, and only while they are
+    /// still here. A value stamped as the server would present whatever somebody put
+    /// in the cache to every later joiner as though the level said it.
+    /// </summary>
+    private void SendRpcVariable(ConnectedPlayer player, byte tag, byte from, byte[] body)
+    {
+        byte source = Players.Get(from) != null ? from : player.SmallId;
+
+        SendTo(player.Connection,
+            GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body), reliable: true);
     }
 
     private void HandleMetadataRequest(ConnectedPlayer sender, byte[] message)
@@ -3676,6 +3682,7 @@ public sealed class FusionServer : IDisposable
             Relay(sender, message);
         }
 
+        ReplayVariables(sender, request.EntityId);
         ReplaySeats(sender, request.EntityId);
     }
 
@@ -3738,6 +3745,31 @@ public sealed class FusionServer : IDisposable
         }
 
         Relay(sender, message);
+    }
+
+    /// <summary>
+    /// Sends a client a prop's variables once it has the prop. The replay after
+    /// loading lands before a kept prop is spawned, so those values were dropped.
+    /// </summary>
+    private void ReplayVariables(ConnectedPlayer requester, ushort entityId)
+    {
+        List<(byte Tag, byte From, byte[] Body)> variables;
+
+        lock (_cacheLock)
+        {
+            variables = _rpcVariables.ForEntity(entityId);
+        }
+
+        foreach (var (tag, from, body) in variables)
+        {
+            SendRpcVariable(requester, tag, from, body);
+        }
+
+        if (variables.Count > 0)
+        {
+            Log("INFO", $"Replayed {variables.Count} variable(s) on entity {entityId} to {requester.DisplayName}",
+                console: false);
+        }
     }
 
     /// <summary>

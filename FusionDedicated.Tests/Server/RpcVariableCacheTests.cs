@@ -122,4 +122,24 @@ public class RpcVariableCacheTests
 
         Assert.True(cache.Set(RpcBool, 1, Body(held, 0), held));
     }
+
+    [Fact]
+    public void One_props_variables_can_be_read_on_their_own()
+    {
+        // A client that has just spawned a prop is sent that prop's values, not the level's.
+        var cache = new RpcVariableCache();
+        Hold(cache, EntityPath(300, 1), value: 7);
+        Hold(cache, EntityPath(300, 3, withHash: true), value: 8);
+        Hold(cache, EntityPath(3001, 1));
+        Hold(cache, LevelPath());
+
+        var mine = cache.ForEntity(300);
+
+        Assert.Equal(2, mine.Count);
+        Assert.All(mine, v => Assert.Equal(EntityPath(300, 0)[..3], v.Body[..3]));
+    }
+
+    [Fact]
+    public void A_prop_with_no_variables_has_nothing_to_send()
+        => Assert.Empty(new RpcVariableCache().ForEntity(300));
 }

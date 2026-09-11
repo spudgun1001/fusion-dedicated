@@ -80,6 +80,20 @@ public sealed class RpcVariableCache
         }
     }
 
+    /// <summary>Every held value on one prop, for a client that has just spawned it.</summary>
+    public List<(byte Tag, byte From, byte[] Body)> ForEntity(ushort entityId)
+    {
+        string prefix = EntityPrefix(entityId);
+
+        lock (_lock)
+        {
+            return _values
+                .Where(v => v.Key.Key.StartsWith(prefix, StringComparison.Ordinal))
+                .Select(v => (v.Key.Tag, v.Value.From, v.Value.Body))
+                .ToList();
+        }
+    }
+
     /// <summary>The entity and component for a prop's variable, or the whole path for a level's.</summary>
     private static string KeyFor(ReadOnlySpan<byte> path)
         => path.Length >= 5 && path[0] == 1
