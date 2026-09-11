@@ -39,6 +39,9 @@ public sealed class TrackedEntity
     /// </summary>
     public float? OwnerDistanceAtPose { get; set; }
 
+    /// <summary>True once a pose has given this entity a real position.</summary>
+    public bool PositionKnown { get; set; } = true;
+
     /// <summary>
     /// The seven rotation bytes this was spawned with, kept so a prop can be put
     /// back the way round it was. Empty for anything the server only learned about
@@ -365,6 +368,7 @@ public sealed class EntityRegistry
                 }
 
                 entity.OwnerDistanceAtPose = ownerDistance;
+                entity.PositionKnown = true;
                 entity.LastUpdate = DateTime.UtcNow;
                 return;
             }
@@ -391,6 +395,7 @@ public sealed class EntityRegistry
                 VelocityY = vy,
                 VelocityZ = vz,
                 OwnerDistanceAtPose = ownerDistance,
+                PositionKnown = true,
             };
         }
     }

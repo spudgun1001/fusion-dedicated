@@ -1025,6 +1025,7 @@ public sealed class FusionServer : IDisposable
             // catch-up must not send it as a spawn.
             var entity = Entities.Register(allocated, "", sender.SmallId, 0, 0, 0);
             entity.Discovered = true;
+            entity.PositionKnown = false;
         }
         else
         {
@@ -3398,6 +3399,7 @@ public sealed class FusionServer : IDisposable
         // replayed into a vehicle they are nowhere near.
         if (_seats.SeatOf(sender.SmallId) is { } seat
             && Entities.Get(seat.EntityId) is { } vehicle
+            && vehicle.PositionKnown
             && SeatBook.IsStale(sender.LastPosition.X, sender.LastPosition.Y, sender.LastPosition.Z,
                 vehicle.X, vehicle.Y, vehicle.Z))
         {
@@ -3532,16 +3534,21 @@ public sealed class FusionServer : IDisposable
     {
         if (FusionProtocol.TryReadSeat(message) is { } seat)
         {
-            bool live = seat.RelayType is 2 or 3;
             bool known = Entities.Get(seat.SeatId) != null;
 
             if (!seat.Ingress)
             {
                 _seats.Egress(sender.SmallId);
             }
-            else if (live && known)
+            else if (WorldCatchup.KeepSeat(seat.RelayType, seat.Ingress, known))
             {
                 _seats.Ingress(sender.SmallId, seat.SeatId, seat.Index, DateTime.UtcNow);
+            }
+            else
+            {
+                // Not kept, so the sender must not be left recorded in whatever
+                // seat they were in before this one.
+                _seats.Egress(sender.SmallId);
             }
 
             if (!WorldCatchup.PassSeatMessage(seat.RelayType, seat.Ingress,

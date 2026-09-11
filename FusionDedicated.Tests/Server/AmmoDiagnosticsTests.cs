@@ -174,6 +174,27 @@ public class AmmoDiagnosticsTests
     }
 
     [Fact]
+    public void A_registered_entity_starts_with_a_known_position()
+    {
+        var registry = new EntityRegistry();
+        var entity = registry.Register(300, Magazine, 1, 0, 0, 0);
+
+        Assert.True(entity.PositionKnown);
+    }
+
+    [Fact]
+    public void A_pose_makes_an_unqueued_entity_known_again()
+    {
+        var registry = new EntityRegistry();
+        var entity = registry.Register(300, Magazine, 1, 0, 0, 0);
+        entity.PositionKnown = false;
+
+        registry.NotePose(300, 1, 1, 2, 3);
+
+        Assert.True(registry.Get(300)!.PositionKnown);
+    }
+
+    [Fact]
     public void The_detailed_cull_hands_back_what_it_removed()
     {
         var registry = new EntityRegistry();

@@ -70,5 +70,32 @@ public class SeatGlueTests
 
         Assert.Contains("SeatBook.IsStale(", pose);
         Assert.Contains("Egress(sender.SmallId);", pose);
+        Assert.Contains("vehicle.PositionKnown", pose);
     }
+
+    [Theory]
+    [InlineData((byte)3, true, true)]
+    [InlineData((byte)2, true, true)]
+    public void A_live_ingress_into_a_known_entity_is_kept(byte relayType, bool ingress, bool known)
+        => Assert.True(WorldCatchup.KeepSeat(relayType, ingress, known));
+
+    [Fact]
+    public void A_catch_up_reply_ingress_is_not_kept()
+        => Assert.False(WorldCatchup.KeepSeat(4, ingress: true, known: true));
+
+    [Fact]
+    public void An_ingress_into_an_unknown_entity_is_not_kept()
+        => Assert.False(WorldCatchup.KeepSeat(3, ingress: true, known: false));
+
+    [Fact]
+    public void An_egress_is_not_kept()
+        => Assert.False(WorldCatchup.KeepSeat(3, ingress: false, known: true));
+
+    [Fact]
+    public void HandleSeat_decides_through_KeepSeat()
+        => Assert.Contains("WorldCatchup.KeepSeat(", FusionServerSource.Method("private void HandleSeat("));
+
+    [Fact]
+    public void An_unqueued_entity_starts_with_no_known_position()
+        => Assert.Contains("PositionKnown = false;", FusionServerSource.Method("private void HandleUnqueueRequest("));
 }
