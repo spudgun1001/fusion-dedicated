@@ -32,6 +32,12 @@ public sealed class TrackedEntity
     public float VelocityZ { get; set; }
 
     /// <summary>
+    /// How far the player who sent its latest pose was standing from it, or null
+    /// when their position was not known. For the ammo cull's log line.
+    /// </summary>
+    public float? OwnerDistanceAtPose { get; set; }
+
+    /// <summary>
     /// The seven rotation bytes this was spawned with, kept so a prop can be put
     /// back the way round it was. Empty for anything the server only learned about
     /// from a pose update.
@@ -332,7 +338,8 @@ public sealed class EntityRegistry
     /// first spawned.
     /// </param>
     public void NotePose(ushort id, byte owner, float x, float y, float z,
-        byte[]? rotation = null, float vx = 0f, float vy = 0f, float vz = 0f)
+        byte[]? rotation = null, float vx = 0f, float vy = 0f, float vz = 0f,
+        float? ownerDistance = null)
     {
         if (id < FirstEntityId)
         {
@@ -355,6 +362,7 @@ public sealed class EntityRegistry
                     entity.Rotation = rotation;
                 }
 
+                entity.OwnerDistanceAtPose = ownerDistance;
                 entity.LastUpdate = DateTime.UtcNow;
                 return;
             }
@@ -380,6 +388,7 @@ public sealed class EntityRegistry
                 VelocityX = vx,
                 VelocityY = vy,
                 VelocityZ = vz,
+                OwnerDistanceAtPose = ownerDistance,
             };
         }
     }
@@ -475,8 +484,19 @@ public sealed class EntityRegistry
     public List<ushort> CullStale(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
         TimeSpan ammoTimeout = default)
+        => CullStaleDetailed(orphanTimeout, inheritedTimeout, idleTimeout, ammoTimeout)
+            .Select(e => e.Id)
+            .ToList();
+
+    /// <summary>
+    /// The same cull, handing back the entities themselves so the log can say why
+    /// each one went.
+    /// </summary>
+    public List<TrackedEntity> CullStaleDetailed(
+        TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
+        TimeSpan ammoTimeout = default)
     {
-        var removed = new List<ushort>();
+        var removed = new List<TrackedEntity>();
         var now = DateTime.UtcNow;
 
         lock (_lock)
@@ -549,12 +569,12 @@ public sealed class EntityRegistry
                 if (stale)
                 {
                     _entities.Remove(entity.Id);
-                    removed.Add(entity.Id);
+                    removed.Add(entity);
                 }
             }
         }
 
-        Announce(removed);
+        Announce(removed.Select(e => e.Id).ToList());
 
         return removed;
     }

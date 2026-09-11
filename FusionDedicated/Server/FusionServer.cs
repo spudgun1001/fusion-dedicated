@@ -3126,18 +3126,37 @@ public sealed class FusionServer : IDisposable
                     _slotted.Insert(change.Slot, change.SlotIndex, change.Entity);
                 }
 
+                LogAmmoAttachment(change, change.Entity);
+
                 return;
 
             case ModuleProtocol.AttachmentKind.SlotDrop:
+                ushort? dropped;
+
                 lock (_cacheLock)
                 {
-                    if (_slotted.Drop(change.Slot, change.SlotIndex) is { } weapon)
+                    dropped = _slotted.Drop(change.Slot, change.SlotIndex);
+
+                    if (dropped is { } weapon)
                     {
                         Entities.SetAttached(weapon, false);
                     }
                 }
 
+                LogAmmoAttachment(change, dropped);
+
                 return;
+        }
+    }
+
+    /// <summary>Notes ammunition going into or out of a body slot, for the detailed log.</summary>
+    private void LogAmmoAttachment(ModuleProtocol.AttachmentChange change, ushort? entityId)
+    {
+        string barcode = entityId is { } id ? Entities.Get(id)?.Barcode ?? "" : "";
+
+        if (AmmoDiagnostics.DescribeAttachment(change, barcode, entityId) is { } line)
+        {
+            Log("INFO", line, console: false);
         }
     }
 
@@ -3399,10 +3418,19 @@ public sealed class FusionServer : IDisposable
         // A pose for an id we never handed out is a client-made entity telling us it
         // exists. Registering it is what makes it visible; removing it is not safe
         // without knowing whether it is a scene prop, so that stays opt-in.
+        // How far the sender stood from it, for the ammo cull's log line.
+        float? ownerDistance = sender.HasPosition
+            ? new Vec3(
+                pose.Value.Position.X - sender.LastPosition.X,
+                pose.Value.Position.Y - sender.LastPosition.Y,
+                pose.Value.Position.Z - sender.LastPosition.Z).Magnitude
+            : null;
+
         Entities.NotePose(pose.Value.EntityId, sender.SmallId,
             pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
             pose.Value.Rotation,
-            pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z);
+            pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z,
+            ownerDistance);
     }
 
     /// <summary>
@@ -3716,11 +3744,13 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        var removed = Entities.CullStale(
+        var culled = Entities.CullStaleDetailed(
             TimeSpan.FromSeconds(Config.OrphanTimeoutSeconds),
             TimeSpan.FromSeconds(Config.InheritedTimeoutSeconds),
             TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)),
             TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)));
+
+        var removed = culled.Select(e => e.Id).ToList();
 
         if (removed.Count > 0)
         {
@@ -3733,6 +3763,18 @@ public sealed class FusionServer : IDisposable
 
             Log("INFO", $"Culled {removed.Count} abandoned entities " +
                         $"({Entities.Count} left in world)");
+
+            var now = DateTime.UtcNow;
+
+            foreach (var entity in culled)
+            {
+                bool ownerOnline = entity.OwnerSmallId is { } owner && Players.Get(owner) != null;
+
+                if (AmmoDiagnostics.DescribeCull(entity, ownerOnline, now) is { } line)
+                {
+                    Log("INFO", line, console: false);
+                }
+            }
         }
 
         // Warn before the allocator laps rather than after.
