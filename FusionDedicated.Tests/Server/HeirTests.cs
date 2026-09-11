@@ -100,4 +100,64 @@ public class HeirTests
         Assert.Equal((byte?)3, registry.Get(300)!.OwnerSmallId);
         Assert.Equal((byte?)3, registry.Get(301)!.OwnerSmallId);
     }
+
+    [Fact]
+    public void Everybody_hears_who_left_before_they_hear_the_heirs()
+    {
+        // A client that locked a vehicle to the driver who left ignores a new owner
+        // until its disconnect handler has run.
+        string depart = FusionServerSource.Method("private void Depart(");
+
+        int disconnect = depart.IndexOf("Broadcast(ServerProtocol.WriteDisconnect(", StringComparison.Ordinal);
+        int heirs = depart.IndexOf("AnnounceOwner(", StringComparison.Ordinal);
+        int again = depart.IndexOf("ReannounceHeirs(", StringComparison.Ordinal);
+
+        Assert.True(disconnect > 0, "the disconnect is no longer broadcast here");
+        Assert.True(heirs > disconnect, "the heirs must be announced after the disconnect");
+        Assert.True(again > heirs, "the heirs must be named again after the first announcement");
+    }
+
+    [Fact]
+    public void The_heirs_are_named_again_only_while_they_own_it_and_are_still_here()
+    {
+        string again = FusionServerSource.Method("private void ReannounceHeirs(");
+
+        Assert.Contains("Defer(", again);
+        Assert.Contains("Entities.Get(", again);
+        Assert.Contains("OwnerSmallId", again);
+        Assert.Contains("Players.Get(", again);
+        Assert.Contains("AnnounceOwner(", again);
+    }
+
+    [Fact]
+    public void An_heir_who_still_owns_it_is_named_again_a_moment_later()
+    {
+        var server = new FusionServer(new ServerConfig());
+        server.Entities.Register(300, "Pack.Spawnable.Atv", Leaver, 0, 0, 0);
+        server.Entities.Register(301, "Pack.Spawnable.Crate", Leaver, 0, 0, 0);
+
+        foreach (byte smallId in new byte[] { Leaver, 2, 3 })
+        {
+            server.Players.Add(new ConnectedPlayer
+            {
+                Connection = new Steamworks.HSteamNetConnection(smallId),
+                PlatformId = 76561198000000000UL + smallId,
+                SmallId = smallId,
+            });
+        }
+
+        server.Kick(Leaver, "test");
+
+        Assert.Equal((byte?)2, server.Entities.Get(300)!.OwnerSmallId);
+        Assert.Equal((byte?)2, server.Entities.Get(301)!.OwnerSmallId);
+
+        // Ownership of one moved on before the second announcement was due.
+        server.Entities.SetOwner(301, 3);
+
+        Thread.Sleep(TimeSpan.FromSeconds(1.2));
+        server.PumpDeferred();
+
+        Assert.Contains(server.RecentLog(),
+            e => e.Message == "Announced the new owner of 1 inherited entity(ies) again");
+    }
 }

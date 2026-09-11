@@ -352,15 +352,29 @@ public sealed class FusionServer : IDisposable
         var affected = Entities.OrphanWith(player.SmallId, entity =>
             WorldCatchup.HeirFor(RidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
 
+        // Before the heirs, because a client that locked a vehicle to the driver who
+        // left ignores any new owner until it has cleaned that driver up.
+        Broadcast(ServerProtocol.WriteDisconnect(player.PlatformId, announce ?? "Player left"),
+            reliable: true);
+
         // Every client has already dropped the owner of these, so unless they are
         // told who has them now nobody simulates them and they freeze.
+        var heirs = new List<(ushort EntityId, ConnectedPlayer Heir)>();
+
         foreach (var entity in affected)
         {
             if (entity.OwnerSmallId is { } newOwner)
             {
                 AnnounceOwner(entity.Id, newOwner);
+
+                if (Players.Get(newOwner) is { } heir)
+                {
+                    heirs.Add((entity.Id, heir));
+                }
             }
         }
+
+        ReannounceHeirs(heirs);
 
         foreach (var handed in affected.GroupBy(e => e.OwnerSmallId))
         {
@@ -369,10 +383,41 @@ public sealed class FusionServer : IDisposable
                 : $"{handed.Count()} entities left without an owner");
         }
 
-        Broadcast(ServerProtocol.WriteDisconnect(player.PlatformId, announce ?? "Player left"),
-            reliable: true);
-
         PushSettings();
+    }
+
+    /// <summary>
+    /// Names the heirs again a moment later, while each still owns what it was given
+    /// and is still here. A vehicle locked to the driver who left only lets go once
+    /// the driver's seat is cleaned up, so a client can drop the first announcement.
+    /// </summary>
+    private void ReannounceHeirs(IReadOnlyList<(ushort EntityId, ConnectedPlayer Heir)> heirs)
+    {
+        if (heirs.Count == 0)
+        {
+            return;
+        }
+
+        Defer(TimeSpan.FromSeconds(1), () =>
+        {
+            int sent = 0;
+
+            foreach (var (entityId, heir) in heirs)
+            {
+                if (Entities.Get(entityId)?.OwnerSmallId != heir.SmallId || Players.Get(heir.SmallId) != heir)
+                {
+                    continue;
+                }
+
+                AnnounceOwner(entityId, heir.SmallId);
+                sent++;
+            }
+
+            if (sent > 0)
+            {
+                Log("INFO", $"Announced the new owner of {sent} inherited entity(ies) again", console: false);
+            }
+        });
     }
 
     /// <summary>
