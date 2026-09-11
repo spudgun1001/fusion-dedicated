@@ -74,4 +74,15 @@ public static class WorldCatchup
         => string.Equals(key, "Loading", StringComparison.OrdinalIgnoreCase)
             && bool.TryParse(value, out bool loading)
             && !loading;
+
+    /// <summary>
+    /// Whether a seat message is passed on.
+    ///
+    /// Fusion answers a data request by sending each occupied seat to the asker,
+    /// stamped as coming from whoever answered, so the asker seats the answerer in
+    /// the rider's place. When the server has that seat it replays the right rider,
+    /// so the broken copy is dropped. Anything else goes through as before.
+    /// </summary>
+    public static bool PassSeatMessage(byte relayType, bool ingress, bool seatRecorded)
+        => !(relayType == 4 && ingress && seatRecorded);
 }

@@ -58,6 +58,8 @@ public sealed class FusionServer : IDisposable
 
         // Nobody holds a prop that has gone.
         Entities.Removed += id => _grabs.ForgetEntity(id);
+
+        Entities.Removed += id => _seats.ForgetEntity(id);
     }
 
     public void Start()
@@ -312,6 +314,7 @@ public sealed class FusionServer : IDisposable
         Guard.Forget(player.SmallId);
         _rateLimiter.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
+        _seats.ForgetRider(player.SmallId);
 
         // Small ids are reused, so the next holder of this one is a different
         // person with a different set of mods and has never been asked anything.
@@ -574,6 +577,10 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagEntityOwnershipRequest when sender != null:
                 HandleOwnershipRequest(sender, message);
+                return;
+
+            case FusionProtocol.TagPlayerRepSeat when sender != null:
+                HandleSeat(sender, message);
                 return;
 
             case FusionProtocol.TagEntityUnqueueRequest when sender != null:
@@ -3372,10 +3379,10 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
-    /// Remembers where a player is standing. Nothing else needs it, but teleporting
-    /// does, and the pose is only ever passing through on its way to other clients.
+    /// Remembers where a player is standing. Teleporting needs it, and so does
+    /// noticing a rider who left a seat without the server hearing.
     /// </summary>
-    private static void TrackPlayerPose(ConnectedPlayer sender, byte[] message)
+    private void TrackPlayerPose(ConnectedPlayer sender, byte[] message)
     {
         var pose = FusionProtocol.TryReadPlayerPoseUpdate(message);
 
@@ -3386,6 +3393,16 @@ public sealed class FusionServer : IDisposable
 
         sender.LastPosition = pose.Value.Pose.PelvisPosition;
         sender.HasPosition = true;
+
+        // An egress is sent once and can be missed, which would leave the rider
+        // replayed into a vehicle they are nowhere near.
+        if (_seats.SeatOf(sender.SmallId) is { } seat
+            && Entities.Get(seat.EntityId) is { } vehicle
+            && SeatBook.IsStale(sender.LastPosition.X, sender.LastPosition.Y, sender.LastPosition.Z,
+                vehicle.X, vehicle.Y, vehicle.Z))
+        {
+            _seats.Egress(sender.SmallId);
+        }
     }
 
     /// <summary>
@@ -3488,6 +3505,53 @@ public sealed class FusionServer : IDisposable
         {
             Relay(sender, message);
         }
+    }
+
+    // ---- vehicle seats ----
+
+    /// <summary>
+    /// Who sits in which vehicle seat. Fusion sends a seat once, when the rider
+    /// sits, so this is the only record a player who arrives later can be given.
+    /// </summary>
+    private readonly SeatBook _seats = new();
+
+    /// <summary>Who is sitting in a vehicle, by small id, first to sit first.</summary>
+    public IReadOnlyList<byte> RidersOf(ushort entityId)
+        => _seats.RidersOf(entityId).Select(s => s.Rider).ToList();
+
+    /// <summary>
+    /// Keeps the seat book in step with PlayerRepSeat, then passes the message on
+    /// as before.
+    ///
+    /// Only a live seat is kept. One sent ToTarget is Fusion's catch-up reply,
+    /// stamped with whoever answered rather than the rider. A seat in an entity
+    /// the server does not know is passed on but not kept, since nothing would
+    /// ever clear it.
+    /// </summary>
+    private void HandleSeat(ConnectedPlayer sender, byte[] message)
+    {
+        if (FusionProtocol.TryReadSeat(message) is { } seat)
+        {
+            bool live = seat.RelayType is 2 or 3;
+            bool known = Entities.Get(seat.SeatId) != null;
+
+            if (!seat.Ingress)
+            {
+                _seats.Egress(sender.SmallId);
+            }
+            else if (live && known)
+            {
+                _seats.Ingress(sender.SmallId, seat.SeatId, seat.Index, DateTime.UtcNow);
+            }
+
+            if (!WorldCatchup.PassSeatMessage(seat.RelayType, seat.Ingress,
+                    _seats.IsRecorded(seat.SeatId, seat.Index)))
+            {
+                return;
+            }
+        }
+
+        Relay(sender, message);
     }
 
     // ---- relaying ----
