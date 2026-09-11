@@ -113,4 +113,38 @@ public class SeatGlueTests
     public void HandleSeat_only_egresses_an_unkept_seat_when_it_is_live()
         => Assert.Contains("else if (WorldCatchup.IsLiveSeat(seat.RelayType))",
             FusionServerSource.Method("private void HandleSeat("));
+
+    [Theory]
+    [InlineData("private void SeatIngress(")]
+    [InlineData("private bool SeatEgress(")]
+    [InlineData("private int SeatForgetRider(")]
+    public void Each_seat_wrapper_takes_the_seat_lock(string wrapper)
+    {
+        // Depart can run off the message loop through Kick.
+        Assert.Contains("lock (_seatLock)", FusionServerSource.Method(wrapper));
+    }
+
+    [Theory]
+    [InlineData("_seats.Ingress(", "private void SeatIngress(")]
+    [InlineData("_seats.Egress(", "private bool SeatEgress(")]
+    [InlineData("_seats.ForgetRider(", "private int SeatForgetRider(")]
+    public void The_seat_book_is_only_changed_through_its_wrappers(string call, string wrapper)
+    {
+        Assert.Equal(1, Occurrences(FusionServerSource.Method(wrapper), call));
+        Assert.True(Occurrences(FusionServerSource.Text(), call) == 1,
+            $"'{call}' is called outside {wrapper}, which skips the seat lock and the occupancy sync");
+    }
+
+    private static int Occurrences(string text, string value)
+    {
+        int count = 0;
+
+        for (int at = text.IndexOf(value, StringComparison.Ordinal); at >= 0;
+             at = text.IndexOf(value, at + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
 }

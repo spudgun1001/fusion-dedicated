@@ -3472,34 +3472,43 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void SeatIngress(byte rider, ushort entityId, byte index, DateTime now)
     {
-        ushort? before = _seats.SeatOf(rider)?.EntityId;
+        lock (_seatLock)
+        {
+            ushort? before = _seats.SeatOf(rider)?.EntityId;
 
-        _seats.Ingress(rider, entityId, index, now);
+            _seats.Ingress(rider, entityId, index, now);
 
-        SyncOccupied(before);
-        SyncOccupied(entityId);
+            SyncOccupied(before);
+            SyncOccupied(entityId);
+        }
     }
 
     private bool SeatEgress(byte rider)
     {
-        ushort? before = _seats.SeatOf(rider)?.EntityId;
+        lock (_seatLock)
+        {
+            ushort? before = _seats.SeatOf(rider)?.EntityId;
 
-        bool left = _seats.Egress(rider);
+            bool left = _seats.Egress(rider);
 
-        SyncOccupied(before);
+            SyncOccupied(before);
 
-        return left;
+            return left;
+        }
     }
 
     private int SeatForgetRider(byte rider)
     {
-        ushort? before = _seats.SeatOf(rider)?.EntityId;
+        lock (_seatLock)
+        {
+            ushort? before = _seats.SeatOf(rider)?.EntityId;
 
-        int forgotten = _seats.ForgetRider(rider);
+            int forgotten = _seats.ForgetRider(rider);
 
-        SyncOccupied(before);
+            SyncOccupied(before);
 
-        return forgotten;
+            return forgotten;
+        }
     }
 
     private void SyncOccupied(ushort? entityId)
@@ -3673,6 +3682,9 @@ public sealed class FusionServer : IDisposable
     /// sits, so this is the only record a player who arrives later can be given.
     /// </summary>
     private readonly SeatBook _seats = new();
+
+    /// <summary>Around each seat change and its occupancy sync, since Kick can run Depart off the message loop.</summary>
+    private readonly object _seatLock = new();
 
     /// <summary>Who is sitting in a vehicle, by small id, first to sit first.</summary>
     public IReadOnlyList<byte> RidersOf(ushort entityId)
