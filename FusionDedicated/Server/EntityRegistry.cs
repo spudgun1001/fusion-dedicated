@@ -527,8 +527,8 @@ public sealed class EntityRegistry
     /// </param>
     public List<ushort> CullStale(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
-        TimeSpan ammoTimeout = default)
-        => CullStaleDetailed(orphanTimeout, inheritedTimeout, idleTimeout, ammoTimeout)
+        TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null)
+        => CullStaleDetailed(orphanTimeout, inheritedTimeout, idleTimeout, ammoTimeout, inUse)
             .Select(e => e.Id)
             .ToList();
 
@@ -538,7 +538,7 @@ public sealed class EntityRegistry
     /// </summary>
     public List<TrackedEntity> CullStaleDetailed(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
-        TimeSpan ammoTimeout = default)
+        TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null)
     {
         var removed = new List<TrackedEntity>();
         var now = DateTime.UtcNow;
@@ -573,6 +573,12 @@ public sealed class EntityRegistry
                 }
 
                 if (entity.Occupied)
+                {
+                    continue;
+                }
+
+                // Held or holstered, so it sleeps while somebody is carrying it.
+                if (inUse?.Contains(entity.Id) == true)
                 {
                     continue;
                 }
@@ -661,7 +667,8 @@ public sealed class EntityRegistry
     /// who can add entities faster than they are evicted decides whose work
     /// goes. Requiring real idleness means nothing in use is ever a candidate.
     /// </param>
-    public List<ushort> EvictOldest(int count, bool anyOwner = false, TimeSpan idleFor = default)
+    public List<ushort> EvictOldest(int count, bool anyOwner = false, TimeSpan idleFor = default,
+        IReadOnlySet<ushort>? inUse = null)
     {
         var removed = new List<ushort>();
         var cutoff = DateTime.UtcNow - (idleFor == default ? TimeSpan.FromMinutes(2) : idleFor);
@@ -679,6 +686,7 @@ public sealed class EntityRegistry
                     && !e.Synthetic
                     // Somebody is sitting in it, so it is in use on either pass.
                     && !e.Occupied
+                    && inUse?.Contains(e.Id) != true
                     // A magazine in a gun or a gun in a holster sleeps, so it
                     // looks idle while somebody is carrying it.
                     && (anyOwner

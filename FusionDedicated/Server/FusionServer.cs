@@ -1533,7 +1533,7 @@ public sealed class FusionServer : IDisposable
             // invisible to the player, they pull the trigger and nothing happens -
             // and once the world is full it stays full, so every spawn after that
             // fails for everyone.
-            var evicted = Entities.EvictOldest(Config.EvictBatchSize);
+            var evicted = Entities.EvictOldest(Config.EvictBatchSize, inUse: EntitiesInUse());
 
             if (evicted.Count > 0)
             {
@@ -1552,7 +1552,8 @@ public sealed class FusionServer : IDisposable
                 // out from under them, and somebody adding entities quickly
                 // cannot aim the eviction at anybody else.
                 var forced = Entities.EvictOldest(
-                    Config.EvictBatchSize, anyOwner: true, idleFor: TimeSpan.FromMinutes(2));
+                    Config.EvictBatchSize, anyOwner: true, idleFor: TimeSpan.FromMinutes(2),
+                    inUse: EntitiesInUse());
 
                 if (forced.Count > 0)
                 {
@@ -2975,6 +2976,21 @@ public sealed class FusionServer : IDisposable
     /// <summary>Who holds an entity, earliest grab first.</summary>
     public IReadOnlyList<byte> HoldersOf(ushort entityId) => _grabs.HoldersOf(entityId);
 
+    /// <summary>What players are holding or have holstered, for the cull and the eviction to leave alone.</summary>
+    private HashSet<ushort> EntitiesInUse()
+    {
+        List<ushort> holstered;
+        List<(ushort Magazine, ushort Gun)> loaded;
+
+        lock (_cacheLock)
+        {
+            holstered = _slotted.All().Select(s => s.Weapon).ToList();
+            loaded = _loaded.Select(m => (m.Key, m.Value)).ToList();
+        }
+
+        return InUse.Of(_grabs.All().Select(h => h.EntityId), holstered, loaded);
+    }
+
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly HolsterSlots _slotted = new();
 
@@ -4055,7 +4071,8 @@ public sealed class FusionServer : IDisposable
             TimeSpan.FromSeconds(Config.OrphanTimeoutSeconds),
             TimeSpan.FromSeconds(Config.InheritedTimeoutSeconds),
             TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)),
-            TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)));
+            TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)),
+            EntitiesInUse());
 
         var removed = culled.Select(e => e.Id).ToList();
 
