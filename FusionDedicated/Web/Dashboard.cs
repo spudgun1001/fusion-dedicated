@@ -306,9 +306,7 @@ public sealed class Dashboard
                     return;
                 }
 
-                var values = query.AllKeys
-                    .Where(k => k != null && k != "plugin" && k != "action")
-                    .ToDictionary(k => k!, k => query[k] ?? "");
+                var values = PluginActionValues.From(query, ActorFor(context));
 
                 var result = PluginPanel?.Invoke(plugin, action, values)
                     ?? Plugins.PanelActionResult.Failed("plugins are off");
