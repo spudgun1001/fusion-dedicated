@@ -2894,6 +2894,25 @@ public sealed class FusionServer : IDisposable
                 e.X, e.Y, e.Z, e.Persistent))
             .ToList();
 
+    /// <summary>Gives one entity to one player, for a plugin. False when either is missing.</summary>
+    public bool GiveOwner(ushort entityId, ulong platformId)
+    {
+        if (Entities.Get(entityId) is not { })
+        {
+            return false;
+        }
+
+        if (Players.GetByPlatformId(platformId) is not { } player)
+        {
+            return false;
+        }
+
+        Entities.SetOwner(entityId, player.SmallId);
+        AnnounceOwner(entityId, player.SmallId);
+
+        return true;
+    }
+
     /// <summary>What each player has in their hands.</summary>
     private readonly GrabBook _grabs = new();
 

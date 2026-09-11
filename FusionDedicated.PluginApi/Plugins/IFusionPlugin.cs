@@ -43,4 +43,7 @@ public interface IPluginActions
 
     /// <summary>Stops putting an entity back after a restart.</summary>
     bool Forget(ushort entityId) => false;
+
+    /// <summary>Gives one entity to one player. False when either is missing.</summary>
+    bool GiveOwner(ushort entityId, ulong platformId) => false;
 }

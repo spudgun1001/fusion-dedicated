@@ -254,7 +254,8 @@ public static class Program
             (tag, payload) => server.BroadcastModule(tag, payload),
             (barcode, x, y, z, rotation) => server.SpawnForPlugin(barcode, x, y, z, rotation),
             (id, note) => server.KeepProp(id, note),
-            id => server.ForgetProp(id));
+            id => server.ForgetProp(id),
+            (id, platformId) => server.GiveOwner(id, platformId));
 
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));

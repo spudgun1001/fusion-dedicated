@@ -93,6 +93,39 @@ public class PluginActionsTests
         Assert.False(actions.Forget(300));
     }
 
+    [Fact]
+    public void Giving_an_owner_reaches_the_server_call_behind_it()
+    {
+        var made = new List<string>();
+
+        var actions = new ServerPluginActions(
+            (id, reason) => { },
+            (id, reason) => { },
+            (id, level) => { },
+            id => { },
+            (id, tag, payload) => { },
+            (tag, payload) => { },
+            (barcode, x, y, z, rotation) => 0,
+            (id, note) => false,
+            id => false,
+            (id, platformId) =>
+            {
+                made.Add($"give {id} {platformId}");
+                return true;
+            });
+
+        Assert.True(actions.GiveOwner(400, 76561198000000001));
+        Assert.Equal(new[] { "give 400 76561198000000001" }, made);
+    }
+
+    [Fact]
+    public void An_older_actions_class_gives_no_owner()
+    {
+        IPluginActions actions = new OlderActions();
+
+        Assert.False(actions.GiveOwner(300, 1));
+    }
+
     private sealed class OlderActions : IPluginActions
     {
         public void Kick(ulong platformId, string reason) { }
