@@ -57,4 +57,15 @@ public static class WorldCatchup
     /// somebody holds it: the draw was missed and the slot is really empty.
     /// </summary>
     public static bool ShouldReseat(IReadOnlyCollection<byte> holders) => holders.Count == 0;
+
+    /// <summary>
+    /// Where a client's request for an entity's state should really go. It asks the
+    /// owner it was told about, who may have left or handed the entity on while it
+    /// loaded, or player 0, who does not exist here.
+    /// </summary>
+    /// <returns>The owner to send it to instead, or null to relay it unchanged.</returns>
+    public static byte? DataRequestTarget(byte? asked, byte? current, byte requester, Func<byte, bool> present)
+        => current is { } owner && owner != requester && owner != asked && present(owner)
+            ? owner
+            : null;
 }

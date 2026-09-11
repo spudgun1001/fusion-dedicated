@@ -1030,6 +1030,97 @@ public static class FusionProtocol
         }
     }
 
+    public const byte TagEntityDataRequest = 79;
+
+    /// <summary>
+    /// A client asking an entity's owner for its state. Target is who the route
+    /// named and PlayerId is who is asking.
+    /// </summary>
+    public readonly record struct EntityDataRequest(byte? Target, byte PlayerId, ushort EntityId);
+
+    /// <summary>Reads an EntityDataRequest, whose payload is EntityPlayerData.</summary>
+    public static EntityDataRequest? TryReadEntityDataRequest(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (reader.ReadByte() != TagEntityDataRequest)
+            {
+                return null;
+            }
+
+            byte relayType = reader.ReadByte();
+            reader.ReadByte(); // channel
+
+            byte? target = null;
+
+            if (relayType == 4) // ToTarget
+            {
+                target = reader.ReadNullableByte();
+            }
+            else if (relayType == 5) // ToTargets
+            {
+                reader.ReadRaw(reader.ReadInt32());
+            }
+
+            if (relayType != RelayTypeNone)
+            {
+                reader.ReadNullableByte(); // sender
+            }
+
+            reader.ReadInt32(); // payload length
+
+            return new EntityDataRequest(target, reader.ReadByte(), reader.ReadUInt16());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Asks an entity's owner for its state on behalf of a player, stamped as that
+    /// player. The owner answers whoever the payload names.
+    /// </summary>
+    public static byte[] BuildEntityDataRequest(byte requester, byte target, ushort entityId)
+    {
+        var payload = new FusionNetWriter(8);
+
+        payload.Write(requester);
+        payload.WriteUInt16(entityId);
+
+        var message = new FusionNetWriter(32);
+
+        message.Write(TagEntityDataRequest);
+        message.Write((byte)4);             // ToTarget
+        message.Write(ChannelReliable);
+        message.WriteNullable(target);      // the route's target
+        message.WriteNullable(requester);   // sender
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
+    /// <summary>Tells clients who owns an entity now, stamped as that owner.</summary>
+    public static byte[] BuildOwnershipResponse(byte owner, ushort entityId)
+    {
+        var payload = new FusionNetWriter(8);
+
+        payload.Write(owner);
+        payload.WriteUInt16(entityId);
+
+        var message = new FusionNetWriter(32);
+
+        message.Write(TagEntityOwnershipResponse);
+        message.Write(RelayTypeToClients);
+        message.Write(ChannelReliable);
+        message.WriteNullable(owner);
+        message.WriteBlock(payload.ToArray());
+
+        return message.ToArray();
+    }
+
     /// <summary>
     /// Drives a world entity we own. Velocity matters for throwing, the receiving
     /// side extrapolates from it, so a release with velocity reads as a throw.

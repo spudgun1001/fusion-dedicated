@@ -158,4 +158,39 @@ public class WorldCatchupTests
         // The draw was missed, so the record is stale and the hip is empty.
         Assert.False(WorldCatchup.ShouldReseat(new byte[] { 3 }));
     }
+
+    [Fact]
+    public void A_request_to_the_owner_is_left_alone()
+        => Assert.Null(WorldCatchup.DataRequestTarget(asked: 2, current: 2, requester: 3, present: Here));
+
+    [Fact]
+    public void A_request_to_an_owner_who_has_left_goes_to_the_owner_now()
+        => Assert.Equal((byte?)2, WorldCatchup.DataRequestTarget(asked: 9, current: 2, requester: 3, present: Here));
+
+    [Fact]
+    public void A_request_to_an_old_owner_who_is_still_here_goes_to_the_new_one()
+    {
+        // It changed hands while the newcomer was loading.
+        Assert.Equal((byte?)2, WorldCatchup.DataRequestTarget(asked: 1, current: 2, requester: 3, present: Here));
+    }
+
+    [Fact]
+    public void A_request_to_player_zero_goes_to_the_real_owner()
+        => Assert.Equal((byte?)2, WorldCatchup.DataRequestTarget(asked: 0, current: 2, requester: 3, present: Here));
+
+    [Fact]
+    public void A_request_with_no_target_goes_to_the_owner()
+        => Assert.Equal((byte?)2, WorldCatchup.DataRequestTarget(asked: null, current: 2, requester: 3, present: Here));
+
+    [Fact]
+    public void An_owner_who_has_gone_is_not_redirected_to()
+        => Assert.Null(WorldCatchup.DataRequestTarget(asked: 1, current: 9, requester: 3, present: Here));
+
+    [Fact]
+    public void An_entity_nobody_owns_leaves_the_request_alone()
+        => Assert.Null(WorldCatchup.DataRequestTarget(asked: 1, current: null, requester: 3, present: Here));
+
+    [Fact]
+    public void A_player_is_never_sent_their_own_request()
+        => Assert.Null(WorldCatchup.DataRequestTarget(asked: 1, current: 3, requester: 3, present: Here));
 }

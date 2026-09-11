@@ -67,4 +67,29 @@ public class CatchupGlueTests
     public void A_held_gun_is_not_put_back_in_a_holster()
         => Assert.Contains("WorldCatchup.ShouldReseat(_grabs.HoldersOf(weapon))",
             Method("private int SendAttachments("));
+
+    [Fact]
+    public void A_data_request_is_handled_before_it_is_relayed()
+        => Assert.Contains("HandleEntityDataRequest(sender, message);",
+            Case("case FusionProtocol.TagEntityDataRequest when sender != null:"));
+
+    [Fact]
+    public void A_stale_request_tells_the_asker_and_asks_the_owner()
+    {
+        string handler = Method("private void HandleEntityDataRequest(");
+
+        Assert.Contains("WorldCatchup.DataRequestTarget(", handler);
+        Assert.Contains("FusionProtocol.BuildOwnershipResponse(owner, request.EntityId)", handler);
+        Assert.Contains("FusionProtocol.BuildEntityDataRequest(sender.SmallId, owner, request.EntityId)", handler);
+        Assert.Contains("Relay(sender, message);", handler);
+    }
+
+    [Fact]
+    public void Owner_announcements_use_the_shared_builder()
+    {
+        string announce = Method("private void AnnounceOwner(");
+
+        Assert.Contains("Broadcast(FusionProtocol.BuildOwnershipResponse(owner, entityId), reliable: true);", announce);
+        Assert.DoesNotContain("new FusionNetWriter", announce);
+    }
 }

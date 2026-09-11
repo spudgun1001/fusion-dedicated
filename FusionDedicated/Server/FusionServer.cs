@@ -580,6 +580,10 @@ public sealed class FusionServer : IDisposable
                 HandleUnqueueRequest(sender, message);
                 return;
 
+            case FusionProtocol.TagEntityDataRequest when sender != null:
+                HandleEntityDataRequest(sender, message);
+                return;
+
             case FusionProtocol.TagNetworkPropCreate when sender != null:
                 NotePropCreate(sender, message);
                 break;
@@ -3323,18 +3327,7 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void AnnounceOwner(ushort entityId, byte owner)
     {
-        var payload = new FusionNetWriter(8);
-        payload.Write(owner);
-        payload.WriteUInt16(entityId);
-
-        var response = new FusionNetWriter(32);
-        response.Write(FusionProtocol.TagEntityOwnershipResponse);
-        response.Write((byte)2); // ToClients
-        response.Write((byte)0); // Reliable
-        response.WriteNullable(owner);
-        response.WriteBlock(payload.ToArray());
-
-        Broadcast(response.ToArray(), reliable: true);
+        Broadcast(FusionProtocol.BuildOwnershipResponse(owner, entityId), reliable: true);
     }
 
     /// <summary>
@@ -3408,6 +3401,42 @@ public sealed class FusionServer : IDisposable
         else
         {
             _grabs.Release(sender.SmallId, grab.Hand);
+        }
+    }
+
+    /// <summary>
+    /// Sends a client's request for an entity's state to whoever owns it now.
+    ///
+    /// Relayed as it was, a request naming an owner who had left, an old owner, or
+    /// player 0 was never answered, so the gun in the real owner's hand floated for
+    /// the newcomer. The asker is told the owner and the owner is asked instead.
+    /// </summary>
+    private void HandleEntityDataRequest(ConnectedPlayer sender, byte[] message)
+    {
+        if (FusionProtocol.TryReadEntityDataRequest(message) is not { } request)
+        {
+            Relay(sender, message);
+            return;
+        }
+
+        byte? target = WorldCatchup.DataRequestTarget(
+            request.Target,
+            Entities.Get(request.EntityId)?.OwnerSmallId,
+            sender.SmallId,
+            id => Players.Get(id) != null);
+
+        if (target is { } owner && Players.Get(owner) is { } current)
+        {
+            SendTo(sender.Connection,
+                FusionProtocol.BuildOwnershipResponse(owner, request.EntityId), reliable: true);
+
+            SendTo(current.Connection,
+                FusionProtocol.BuildEntityDataRequest(sender.SmallId, owner, request.EntityId),
+                reliable: true);
+        }
+        else
+        {
+            Relay(sender, message);
         }
     }
 
