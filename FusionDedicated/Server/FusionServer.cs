@@ -3720,7 +3720,9 @@ public sealed class FusionServer : IDisposable
                 SeatEgress(sender.SmallId);
             }
 
-            Log("INFO", $"{sender.DisplayName} {(seat.Ingress ? "sat in" : "got out of")} seat {seat.Index} " +
+            Log("INFO", $"{sender.DisplayName} " +
+                        $"{(!seat.Ingress ? "got out of" : seat.RelayType == 4 ? "sent a catch-up reply for" : "sat in")} " +
+                        $"seat {seat.Index} " +
                         $"of entity {seat.SeatId}, {(known ? "known" : "not known")} to the server, " +
                         $"relay type {seat.RelayType}", console: false);
 

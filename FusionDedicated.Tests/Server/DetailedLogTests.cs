@@ -27,6 +27,10 @@ public class DetailedLogTests
         => LogsQuietly("private void HandleSeat(", "relay type");
 
     [Fact]
+    public void A_catch_up_reply_is_logged_as_sent_by_whoever_answered()
+        => LogsQuietly("private void HandleSeat(", "sent a catch-up reply for");
+
+    [Fact]
     public void A_rider_taken_out_for_being_too_far_away_is_logged()
         => LogsQuietly("private void TrackPlayerPose(", "taken out of seat");
 
