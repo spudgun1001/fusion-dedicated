@@ -314,7 +314,7 @@ public sealed class FusionServer : IDisposable
         Guard.Forget(player.SmallId);
         _rateLimiter.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
-        _seats.ForgetRider(player.SmallId);
+        SeatForgetRider(player.SmallId);
 
         // Small ids are reused, so the next holder of this one is a different
         // person with a different set of mods and has never been asked anything.
@@ -344,26 +344,29 @@ public sealed class FusionServer : IDisposable
             holders.Remove(player.SmallId);
         }
 
-        // Their entities lost the only machine simulating them. Hand them to another
-        // player if anyone is left, otherwise they hang frozen until culled.
-        byte? heir = Players.Players.FirstOrDefault()?.SmallId;
-        var affected = Entities.Orphan(player.SmallId, heir);
+        // Their entities lost the only machine simulating them. A vehicle goes to
+        // somebody still sitting in it and a held thing to somebody still holding
+        // it, otherwise to another player if anyone is left, otherwise they hang
+        // frozen until culled.
+        byte? fallback = Players.Players.FirstOrDefault()?.SmallId;
+        var affected = Entities.OrphanWith(player.SmallId, entity =>
+            WorldCatchup.HeirFor(RidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
 
         // Every client has already dropped the owner of these, so unless they are
         // told who has them now nobody simulates them and they freeze.
-        if (heir is { } newOwner)
+        foreach (var entity in affected)
         {
-            foreach (var entity in affected)
+            if (entity.OwnerSmallId is { } newOwner)
             {
                 AnnounceOwner(entity.Id, newOwner);
             }
         }
 
-        if (affected.Count > 0)
+        foreach (var handed in affected.GroupBy(e => e.OwnerSmallId))
         {
-            Log("INFO", heir.HasValue
-                ? $"{affected.Count} entities handed to player {heir}"
-                : $"{affected.Count} entities left without an owner");
+            Log("INFO", handed.Key.HasValue
+                ? $"{handed.Count()} entities handed to player {handed.Key}"
+                : $"{handed.Count()} entities left without an owner");
         }
 
         Broadcast(ServerProtocol.WriteDisconnect(player.PlatformId, announce ?? "Player left"),
@@ -3380,6 +3383,50 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
+    /// Seat changes go through these so the registry's Occupied flag follows the
+    /// seat book, for the entity a rider left and the one they sat in.
+    /// </summary>
+    private void SeatIngress(byte rider, ushort entityId, byte index, DateTime now)
+    {
+        ushort? before = _seats.SeatOf(rider)?.EntityId;
+
+        _seats.Ingress(rider, entityId, index, now);
+
+        SyncOccupied(before);
+        SyncOccupied(entityId);
+    }
+
+    private bool SeatEgress(byte rider)
+    {
+        ushort? before = _seats.SeatOf(rider)?.EntityId;
+
+        bool left = _seats.Egress(rider);
+
+        SyncOccupied(before);
+
+        return left;
+    }
+
+    private int SeatForgetRider(byte rider)
+    {
+        ushort? before = _seats.SeatOf(rider)?.EntityId;
+
+        int forgotten = _seats.ForgetRider(rider);
+
+        SyncOccupied(before);
+
+        return forgotten;
+    }
+
+    private void SyncOccupied(ushort? entityId)
+    {
+        if (entityId is { } id)
+        {
+            Entities.SetOccupied(id, _seats.IsOccupied(id));
+        }
+    }
+
+    /// <summary>
     /// Remembers where a player is standing. Teleporting needs it, and so does
     /// noticing a rider who left a seat without the server hearing.
     /// </summary>
@@ -3403,7 +3450,7 @@ public sealed class FusionServer : IDisposable
             && SeatBook.IsStale(sender.LastPosition.X, sender.LastPosition.Y, sender.LastPosition.Z,
                 vehicle.X, vehicle.Y, vehicle.Z))
         {
-            _seats.Egress(sender.SmallId);
+            SeatEgress(sender.SmallId);
         }
     }
 
@@ -3553,17 +3600,17 @@ public sealed class FusionServer : IDisposable
 
             if (!seat.Ingress)
             {
-                _seats.Egress(sender.SmallId);
+                SeatEgress(sender.SmallId);
             }
             else if (WorldCatchup.KeepSeat(seat.RelayType, seat.Ingress, known))
             {
-                _seats.Ingress(sender.SmallId, seat.SeatId, seat.Index, DateTime.UtcNow);
+                SeatIngress(sender.SmallId, seat.SeatId, seat.Index, DateTime.UtcNow);
             }
             else if (WorldCatchup.IsLiveSeat(seat.RelayType))
             {
                 // Not kept because the entity is unknown, so the sender must not
                 // be left recorded in whatever seat they were in before this one.
-                _seats.Egress(sender.SmallId);
+                SeatEgress(sender.SmallId);
             }
 
             if (!WorldCatchup.PassSeatMessage(seat.RelayType, seat.Ingress,

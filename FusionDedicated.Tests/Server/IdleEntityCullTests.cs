@@ -91,4 +91,42 @@ public class IdleEntityCullTests
         Assert.Empty(registry.CullStale(Orphan, Inherited, TimeSpan.Zero));
         Assert.NotNull(registry.Get(306));
     }
+
+    [Fact]
+    public void A_vehicle_somebody_is_sitting_in_is_never_culled()
+    {
+        // A parked car sleeps with its driver in it and sends no poses, so every
+        // clock here saw it as abandoned. Inherited is the usual case: its owner
+        // left while somebody was still sitting in it.
+        var registry = new EntityRegistry();
+        registry.Register(307, "Pack.Spawnable.Atv", owner: 3, 1f, 2f, 3f);
+
+        var vehicle = registry.Get(307)!;
+        vehicle.Inherited = true;
+        vehicle.LastUpdate = DateTime.UtcNow.AddSeconds(-3600);
+
+        registry.SetOccupied(307, true);
+
+        Assert.Empty(registry.CullStale(Orphan, Inherited, Idle));
+        Assert.NotNull(registry.Get(307));
+    }
+
+    [Fact]
+    public void Getting_out_starts_its_clock_again()
+    {
+        // Not culled the moment the last rider steps out, however long it was parked.
+        var registry = new EntityRegistry();
+        registry.Register(308, "Pack.Spawnable.Atv", owner: 3, 1f, 2f, 3f);
+        registry.Get(308)!.Inherited = true;
+        registry.Get(308)!.LastUpdate = DateTime.UtcNow.AddSeconds(-3600);
+        registry.SetOccupied(308, true);
+
+        registry.SetOccupied(308, false);
+
+        Assert.Empty(registry.CullStale(Orphan, Inherited, Idle));
+
+        registry.Get(308)!.LastUpdate = DateTime.UtcNow.AddSeconds(-3600);
+
+        Assert.Equal(new ushort[] { 308 }, registry.CullStale(Orphan, Inherited, Idle));
+    }
 }

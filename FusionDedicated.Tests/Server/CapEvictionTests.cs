@@ -118,6 +118,23 @@ public class CapEvictionTests
     }
 
     [Fact]
+    public void An_occupied_vehicle_is_never_evicted()
+    {
+        // Neither pass may take it, however long it has been parked or whoever
+        // owns it now.
+        var registry = new EntityRegistry();
+
+        var vehicle = registry.Register(400, "Pack.Spawnable.Atv", 1, 0, 0, 0);
+        registry.SetOwner(400, null);
+        vehicle.LastUpdate = DateTime.UtcNow.AddHours(-1);
+        registry.SetOccupied(400, true);
+
+        Assert.DoesNotContain((ushort)400, registry.EvictOldest(10));
+        Assert.DoesNotContain((ushort)400, registry.EvictOldest(10, anyOwner: true));
+        Assert.NotNull(registry.Get(400));
+    }
+
+    [Fact]
     public void Freed_ids_come_back_around()
     {
         // Ids are recycled already: the allocator skips whatever is in use and

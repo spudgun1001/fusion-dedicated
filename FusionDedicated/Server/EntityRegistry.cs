@@ -87,6 +87,12 @@ public sealed class TrackedEntity
     public bool CulledForOwner { get; set; }
 
     /// <summary>
+    /// Somebody is sitting in it. A parked vehicle sleeps with its riders in it and
+    /// sends no poses, so it is exempt from every cull and from eviction.
+    /// </summary>
+    public bool Occupied { get; set; }
+
+    /// <summary>
     /// Fusion's EntitySource, as the spawn carried it. Repeated to a newcomer so
     /// their copy agrees with everybody else's about what the thing is.
     /// </summary>
@@ -307,6 +313,28 @@ public sealed class EntityRegistry
         }
     }
 
+    /// <summary>
+    /// Records whether anybody is sitting in an entity. The last rider getting out
+    /// restarts its clock, so a car parked for an hour is not culled as they step out.
+    /// </summary>
+    public void SetOccupied(ushort id, bool occupied)
+    {
+        lock (_lock)
+        {
+            if (!_entities.TryGetValue(id, out var entity))
+            {
+                return;
+            }
+
+            if (entity.Occupied && !occupied)
+            {
+                entity.LastUpdate = DateTime.UtcNow;
+            }
+
+            entity.Occupied = occupied;
+        }
+    }
+
     public void SetOwner(ushort id, byte? owner)
     {
         lock (_lock)
@@ -430,6 +458,13 @@ public sealed class EntityRegistry
     /// handed to whoever is named as heir, or left orphaned if the server is alone.
     /// </summary>
     public List<TrackedEntity> Orphan(byte departedSmallId, byte? heir)
+        => OrphanWith(departedSmallId, _ => heir);
+
+    /// <summary>
+    /// The same, choosing an heir for each entity. <paramref name="heirFor"/> runs
+    /// under the registry lock, so it must not call back into the registry.
+    /// </summary>
+    public List<TrackedEntity> OrphanWith(byte departedSmallId, Func<TrackedEntity, byte?> heirFor)
     {
         var affected = new List<TrackedEntity>();
 
@@ -437,6 +472,8 @@ public sealed class EntityRegistry
         {
             foreach (var entity in _entities.Values.Where(e => e.OwnerSmallId == departedSmallId))
             {
+                byte? heir = heirFor(entity);
+
                 entity.OwnerSmallId = heir;
                 entity.Inherited = heir.HasValue;
                 entity.LastUpdate = DateTime.UtcNow;
@@ -531,6 +568,11 @@ public sealed class EntityRegistry
                 // A constraint end never moves, so it always looks idle. It goes
                 // when a client deletes the constraint, or the level changes.
                 if (entity.Synthetic)
+                {
+                    continue;
+                }
+
+                if (entity.Occupied)
                 {
                     continue;
                 }
@@ -635,6 +677,8 @@ public sealed class EntityRegistry
                 .Where(e => e.Removable
                     && !e.Discovered
                     && !e.Synthetic
+                    // Somebody is sitting in it, so it is in use on either pass.
+                    && !e.Occupied
                     // A magazine in a gun or a gun in a holster sleeps, so it
                     // looks idle while somebody is carrying it.
                     && (anyOwner

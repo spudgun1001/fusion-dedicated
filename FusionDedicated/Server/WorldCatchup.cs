@@ -114,4 +114,29 @@ public static class WorldCatchup
     public static bool OwnerFromSeatedPose(byte sender, byte? registryOwner, ushort? senderSeatEntity,
         ushort poseEntity)
         => senderSeatEntity == poseEntity && registryOwner != sender;
+
+    /// <summary>
+    /// Who takes over an entity when its owner leaves: somebody sitting in it,
+    /// then somebody holding it, then the fallback. Never the player who left.
+    /// </summary>
+    public static byte? HeirFor(IReadOnlyList<byte> riders, IReadOnlyList<byte> holders, byte? fallback, byte departed)
+    {
+        foreach (byte rider in riders)
+        {
+            if (rider != departed)
+            {
+                return rider;
+            }
+        }
+
+        foreach (byte holder in holders)
+        {
+            if (holder != departed)
+            {
+                return holder;
+            }
+        }
+
+        return fallback == departed ? null : fallback;
+    }
 }
