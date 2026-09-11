@@ -23,6 +23,10 @@ public readonly record struct ConstraintEvent(ulong PlatformId, string Name, Per
 public readonly record struct ModerationEvent(
     ulong ActorPlatformId, string Actor, ulong TargetPlatformId, string Action);
 
+public readonly record struct OwnershipEvent(
+    ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
+    ushort EntityId, string Barcode, ulong OwnerPlatformId);
+
 /// <summary>
 /// Everything a plugin can watch. Each is a channel of its own, so subscribing to
 /// one costs nothing on the others, and every one can refuse except those that
@@ -42,6 +46,7 @@ public sealed class PluginEvents
         Teleport = new EventChannel<TeleportEvent>(health, log);
         Constraint = new EventChannel<ConstraintEvent>(health, log);
         Moderation = new EventChannel<ModerationEvent>(health, log);
+        Ownership = new EventChannel<OwnershipEvent>(health, log);
     }
 
     public EventChannel<SpawnEvent> Spawn { get; }
@@ -60,6 +65,9 @@ public sealed class PluginEvents
     public EventChannel<ConstraintEvent> Constraint { get; }
     public EventChannel<ModerationEvent> Moderation { get; }
 
+    /// <summary>Raised after MayHold, so a plugin sees only a request the server itself already allows.</summary>
+    public EventChannel<OwnershipEvent> Ownership { get; }
+
     /// <summary>Detaches a plugin from everything, so unloading leaves nothing behind.</summary>
     public void RemoveAll(string plugin)
     {
@@ -73,5 +81,6 @@ public sealed class PluginEvents
         Teleport.RemoveAll(plugin);
         Constraint.RemoveAll(plugin);
         Moderation.RemoveAll(plugin);
+        Ownership.RemoveAll(plugin);
     }
 }

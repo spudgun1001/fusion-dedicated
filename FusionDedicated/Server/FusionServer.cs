@@ -3361,6 +3361,23 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        var entity = Entities.Get(entityId);
+
+        ulong ownerPlatformId = entity?.OwnerSmallId is { } ownerSmall
+            ? Players.Get(ownerSmall)?.PlatformId ?? 0UL
+            : 0UL;
+
+        var ownershipVerdict = Plugins?.Ownership.Raise(new Plugins.OwnershipEvent(
+            sender.PlatformId, sender.SmallId, sender.DisplayName, sender.Permission,
+            entityId, entity?.Barcode ?? "", ownerPlatformId));
+
+        if (ownershipVerdict is { Allowed: false })
+        {
+            Log("INFO", $"A plugin refused {sender.DisplayName} ownership of entity {entityId}: " +
+                        $"{ownershipVerdict.Reason}", console: false);
+            return;
+        }
+
         Entities.SetOwner(entityId, requestedOwner);
 
         // The host's only job here is to confirm; it never claims anything itself.

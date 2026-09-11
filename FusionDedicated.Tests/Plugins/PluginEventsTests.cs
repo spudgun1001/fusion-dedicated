@@ -73,4 +73,32 @@ public class PluginEventsTests
         Assert.True(events.Avatar.Raise(new AvatarEvent(1, "a", PermissionLevel.Default, "b")).Allowed);
         Assert.True(events.Damage.Raise(new DamageEvent(1, "a", 2, 10f)).Allowed);
     }
+
+    [Fact]
+    public void An_ownership_request_can_be_refused_by_a_plugin()
+    {
+        var events = Events();
+
+        events.Ownership.Subscribe("police", e => e.OwnerPlatformId != 0 && e.PlatformId != e.OwnerPlatformId
+            ? PluginVerdict.Refuse("held by its owner")
+            : PluginVerdict.Allow);
+
+        Assert.False(events.Ownership.Raise(
+            new OwnershipEvent(2, 2, "Kanza", PermissionLevel.Default, 400, "a.b.Gun", 1)).Allowed);
+
+        Assert.True(events.Ownership.Raise(
+            new OwnershipEvent(1, 1, "Joel", PermissionLevel.Default, 400, "a.b.Gun", 1)).Allowed);
+    }
+
+    [Fact]
+    public void Removing_a_plugin_detaches_it_from_the_ownership_event()
+    {
+        var events = Events();
+
+        events.Ownership.Subscribe("police", _ => PluginVerdict.Refuse("no"));
+        events.RemoveAll("police");
+
+        Assert.True(events.Ownership.Raise(
+            new OwnershipEvent(1, 1, "a", PermissionLevel.Default, 400, "b", 0)).Allowed);
+    }
 }
