@@ -49,6 +49,37 @@ public class SocketSeamTests
         Assert.Equal(0L, server.BytesOut);
     }
 
+    [Fact]
+    public void The_steam_transport_accepts_a_read_failure_callback()
+    {
+        string source = SteamSocketTransportSource();
+
+        Assert.Contains("Action<string>? onReadFailure", source);
+    }
+
+    [Fact]
+    public void Receive_reports_an_unreadable_message_through_the_callback()
+    {
+        string source = SteamSocketTransportSource();
+
+        Assert.Contains("_onReadFailure?.Invoke(", source);
+    }
+
+    [Fact]
+    public void Receive_grows_its_buffer_to_the_requested_batch_size_instead_of_capping_it()
+    {
+        string source = SteamSocketTransportSource();
+
+        Assert.DoesNotContain("Math.Min(max, _messageBuffer.Length)", source);
+    }
+
+    /// <summary>Reads SteamSocketTransport.cs for the same reason FusionServerSource reads FusionServer.cs.</summary>
+    private static string SteamSocketTransportSource()
+        => File.ReadAllText(Path.Combine(
+                AppContext.BaseDirectory, "..", "..", "..", "..",
+                "FusionDedicated", "Server", "SteamSocketTransport.cs"))
+            .Replace("\r\n", "\n");
+
     /// <summary>A transport whose send always fails, for the counter test above.</summary>
     private sealed class FailingSendTransport : ISocketTransport
     {

@@ -6,7 +6,7 @@ namespace FusionDedicated.Server;
 /// <summary>The real transport: Steam's networking sockets over the relay.</summary>
 public sealed class SteamSocketTransport : ISocketTransport
 {
-    private readonly IntPtr[] _messageBuffer = new IntPtr[128];
+    private IntPtr[] _messageBuffer = new IntPtr[128];
 
     private HSteamListenSocket _listenSocket;
     private HSteamNetPollGroup _pollGroup;
@@ -14,6 +14,12 @@ public sealed class SteamSocketTransport : ISocketTransport
 
     private Action<HSteamNetConnection> _connecting = _ => { };
     private Action<HSteamNetConnection, string> _closed = (_, _) => { };
+    private readonly Action<string>? _onReadFailure;
+
+    public SteamSocketTransport(Action<string>? onReadFailure = null)
+    {
+        _onReadFailure = onReadFailure;
+    }
 
     public ulong LocalSteamId => SteamUser.GetSteamID().m_SteamID;
 
@@ -87,8 +93,12 @@ public sealed class SteamSocketTransport : ISocketTransport
 
     public int Receive(int max, Action<HSteamNetConnection, byte[]> handle)
     {
-        int count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(
-            _pollGroup, _messageBuffer, Math.Min(max, _messageBuffer.Length));
+        if (max > _messageBuffer.Length)
+        {
+            _messageBuffer = new IntPtr[max];
+        }
+
+        int count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(_pollGroup, _messageBuffer, max);
 
         for (var i = 0; i < count; i++)
         {
@@ -100,9 +110,10 @@ public sealed class SteamSocketTransport : ISocketTransport
 
                 handle(native.m_conn, bytes);
             }
-            catch (Exception)
+            catch (Exception e)
             {
                 // A message that cannot be read is skipped so the rest of the batch is still handled and released.
+                _onReadFailure?.Invoke(e.Message);
             }
             finally
             {
