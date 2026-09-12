@@ -3289,6 +3289,9 @@ public sealed class FusionServer : IDisposable
             case ModuleProtocol.AttachmentKind.SlotInsert:
                 Entities.SetAttached(change.Entity, true);
 
+                // A hand lets go of what it holsters. The release message can be lost, so the slot insert itself ends the hold.
+                _grabs.ReleaseEntity(sender.SmallId, change.Entity);
+
                 lock (_cacheLock)
                 {
                     _slotted.Insert(change.Slot, change.SlotIndex, change.Entity);
