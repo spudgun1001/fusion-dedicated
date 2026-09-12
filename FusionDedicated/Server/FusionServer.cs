@@ -930,6 +930,10 @@ public sealed class FusionServer : IDisposable
         Broadcast(ServerProtocol.WriteConnectionResponse(player.PlatformId, player.SmallId,
             player.Metadata, player.EquippedItems, player.AvatarBarcode, player.AvatarStats, true), reliable: true);
 
+        // 1b. The server itself as player 0, before anything that makes a client look
+        //     for the host. A client that knew no player 0 threw building constraints.
+        SendTo(connection, ServerPlayer.ConnectionResponse(HostPlatformId, Config.ServerName), reliable: true);
+
         // 2. Catch the newcomer up on everyone already here.
         foreach (var existing in Players.Players.Where(p => p.SmallId != player.SmallId))
         {
