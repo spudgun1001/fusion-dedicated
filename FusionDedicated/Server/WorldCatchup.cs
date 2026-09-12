@@ -124,11 +124,9 @@ public static class WorldCatchup
             .ToList();
 
     /// <summary>
-    /// Whether a pose shows a vehicle has a new owner: the sender sits in it and
-    /// the server still has somebody else down as the owner. Sitting in a driver seat
-    /// makes the driver the owner on every client that saw the seat without sending
-    /// anything, so the server and any client that missed it keep the old owner and
-    /// throw the driver's poses away.
+    /// Whether a pose shows a vehicle has a new owner: the sender sits in any seat of it and
+    /// the server still has somebody else down as the owner. Only the client simulating a
+    /// vehicle sends its poses, which for an Atv is the driver.
     /// </summary>
     public static bool OwnerFromSeatedPose(byte sender, byte? registryOwner, ushort? senderSeatEntity,
         ushort poseEntity)

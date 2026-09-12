@@ -83,7 +83,7 @@ public class ModuleProtocolTests
         // without understanding any of the constraint data before them.
         byte[] payload = { 7, 7, 7, 0, 0, 0, 0 };
 
-        byte[] rewritten = ModuleProtocol.WithPointIds(payload, 0x0102, 0x0304);
+        byte[]? rewritten = ModuleProtocol.WithPointIds(payload, 0x0102, 0x0304);
 
         Assert.Equal(new byte[] { 7, 7, 7, 0x01, 0x02, 0x03, 0x04 }, rewritten);
     }
