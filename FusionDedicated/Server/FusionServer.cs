@@ -2980,11 +2980,14 @@ public sealed class FusionServer : IDisposable
 
     private readonly object _deferredLock = new();
 
+    /// <summary>What deferred work counts time by. Tests set it to step through delays.</summary>
+    public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
     private void Defer(TimeSpan delay, Action work)
     {
         lock (_deferredLock)
         {
-            _deferred.Add((DateTime.UtcNow + delay, work));
+            _deferred.Add((Clock() + delay, work));
         }
     }
 
@@ -3003,7 +3006,7 @@ public sealed class FusionServer : IDisposable
                 return;
             }
 
-            var now = DateTime.UtcNow;
+            var now = Clock();
 
             due = _deferred.Where(d => d.Due <= now).Select(d => d.Work).ToList();
             _deferred.RemoveAll(d => d.Due <= now);
