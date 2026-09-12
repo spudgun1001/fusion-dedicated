@@ -12,6 +12,7 @@ public sealed class FakeTransport : ISocketTransport
     private readonly object _lock = new();
 
     private Action<HSteamNetConnection, string> _closed = (_, _) => { };
+    private Action<HSteamNetConnection> _connecting = _ => { };
     private uint _nextConnection = 1000;
 
     public ulong LocalSteamId => 90071992547409920;
@@ -21,12 +22,24 @@ public sealed class FakeTransport : ISocketTransport
     /// <summary>How long the server took over each message it was handed.</summary>
     public List<TimeSpan> HandleTimes { get; } = new();
 
-    public HSteamNetConnection Connect() => new(_nextConnection++);
+    /// <summary>Makes the connection and calls the connecting callback, the way Steam's status callback does.</summary>
+    public HSteamNetConnection Connect()
+    {
+        var connection = new HSteamNetConnection(_nextConnection++);
+        _connecting(connection);
+        return connection;
+    }
 
     public void Deliver(HSteamNetConnection connection, byte[] message)
     {
         lock (_lock)
         {
+            // Steam delivers nothing on a closed connection.
+            if (Closed.Any(entry => entry.Connection == connection.m_HSteamNetConnection))
+            {
+                return;
+            }
+
             _inbox.Enqueue((connection, message));
         }
     }
@@ -43,7 +56,10 @@ public sealed class FakeTransport : ISocketTransport
     }
 
     public void Start(Action<HSteamNetConnection> connecting, Action<HSteamNetConnection, string> closed)
-        => _closed = closed;
+    {
+        _connecting = connecting;
+        _closed = closed;
+    }
 
     public void Accept(HSteamNetConnection connection)
     {

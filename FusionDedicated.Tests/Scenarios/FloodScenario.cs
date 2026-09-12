@@ -28,6 +28,7 @@ public class FloodScenario(ITestOutputHelper output)
         var total = TimeSpan.FromTicks(handleTimes.Sum(t => t.Ticks));
         var max = handleTimes.Count > 0 ? handleTimes.Max() : TimeSpan.Zero;
         output.WriteLine($"handled {world.Transport.HandleTimes.Count} messages, total {total.TotalMilliseconds:F1} ms, slowest {max.TotalMilliseconds:F3} ms");
+        Assert.True(total < TimeSpan.FromSeconds(5), $"handling the flood took {total.TotalMilliseconds:F0} ms");
 
         Assert.Null(world.Server.Players.GetByPlatformId(76561198000000009));
 

@@ -76,12 +76,14 @@ public sealed class World : IDisposable
     /// </summary>
     public void Sync()
     {
-        // A kicked player stays a fake player here until we drop them, so their
-        // frozen view would otherwise still count in AgreeOnOwner and SlotsAgree.
-        _players.RemoveAll(p => Server.Players.GetByConnection(p.Connection) == null);
-
         for (var round = 0; ; round++)
         {
+            // A kicked player stays a fake player here until we drop them, so their
+            // frozen view would otherwise still count in AgreeOnOwner and SlotsAgree.
+            // Pruned every round, not just at entry, so a kick landing inside a round's
+            // Server.Receive drops them before the next round touches their connection.
+            _players.RemoveAll(p => Server.Players.GetByConnection(p.Connection) == null);
+
             bool delivered = false;
 
             foreach (var player in _players.ToList())
@@ -164,6 +166,20 @@ public sealed class FakePlayer
 
         _world.Server.Receive();
         _world.Sync();
+    }
+
+    /// <summary>
+    /// Grabs an entity the way a real hand does: the grab goes out, then an ownership request
+    /// unless this player already owns it or it is locked to a driver.
+    /// </summary>
+    public void Grab(ushort entity, FusionProtocol.Handedness hand = FusionProtocol.Handedness.RIGHT)
+    {
+        Send(FusionProtocol.BuildGrab(SmallId, hand, 0, entity));
+
+        if (View.Entities.TryGetValue(entity, out var seen) && seen.LockedTo == null && seen.Owner != SmallId)
+        {
+            Send(FusionProtocol.BuildOwnershipRequest(SmallId, entity));
+        }
     }
 
     /// <summary>A real client already shows what it did itself, and the server never sends relay 3 back to its sender. Poses are left out because a client never judges its own.</summary>

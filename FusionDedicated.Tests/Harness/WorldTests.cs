@@ -21,6 +21,83 @@ public class WorldTests
     }
 
     [Fact]
+    public void A_flooder_kicked_mid_sync_is_dropped_before_the_round_ends()
+    {
+        var config = new ServerConfig { CullOrphanedEntities = false, Spawning = PermissionLevel.Operator };
+        using var world = new World(config);
+        var flooder = world.Join(76561198000000009, "Flooder");
+        flooder.FinishLoading();
+        var other = world.Join(76561198000000001, "Other");
+        other.FinishLoading();
+
+        // Queued directly, not through SendMany, so nothing is received yet: the kick
+        // has to land inside Spawn's own Sync round, not before it starts.
+        foreach (byte[] spam in Enumerable.Range(0, 3400).Select(i => FusionProtocol.BuildSpawnRequest(
+            flooder.SmallId, "SLZ.BONELAB.Content.Avatar.FordBW", new Vec3(0, 0, 0), (uint)i)))
+        {
+            world.Transport.Deliver(flooder.Connection, spam);
+        }
+
+        // Other's spawn makes the flooder raise a data request in round 0, so Sync's
+        // Server.Receive there drains the queue and kicks the flooder mid-loop.
+        world.Spawn(other, 300, "Pack.Spawnable.Crate", 1, 2, 3);
+
+        Assert.DoesNotContain(flooder, world.Players);
+    }
+
+    [Fact]
+    public void A_second_join_past_max_players_is_refused_as_server_full()
+    {
+        var config = new ServerConfig { CullOrphanedEntities = false, MaxPlayers = 1 };
+        using var world = new World(config);
+        world.Join(76561198000000001, "First");
+
+        var ex = Assert.Throws<InvalidOperationException>(() => world.Join(76561198000000002, "Second"));
+        Assert.Contains("Second", ex.Message);
+
+        var closed = Assert.Single(world.Transport.Closed);
+        Assert.Equal("Server full", closed.Reason);
+    }
+
+    [Fact]
+    public void Grabbing_someone_elses_crate_asks_for_ownership_and_the_server_agrees()
+    {
+        using var world = new World();
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+        var kanza = world.Join(76561198000000002, "Kanza");
+        kanza.FinishLoading();
+
+        world.Spawn(joel, 300, "Pack.Spawnable.Crate", 1, 2, 3);
+
+        kanza.Grab(300);
+
+        Assert.Equal(kanza.SmallId, world.Server.Entities.Get(300)!.OwnerSmallId);
+    }
+
+    [Fact]
+    public void Grabbing_a_locked_vehicle_with_a_driver_seated_asks_for_no_ownership()
+    {
+        const ushort car = 400;
+        using var world = new World();
+        var driver = world.Join(76561198000000001, "s1mple");
+        var bystander = world.Join(76561198000000002, "FOLZY");
+
+        foreach (var player in world.Players)
+        {
+            player.FinishLoading();
+            player.View.DriverLockedVehicles.Add(car);
+        }
+
+        world.Spawn(driver, car, "BaBaCorp.AssortedAutomobiles.Spawnable.SendalSopperSedan", 0, 0, 0);
+        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, car, 0, true));
+
+        bystander.Grab(car);
+
+        Assert.Equal(driver.SmallId, world.Server.Entities.Get(car)!.OwnerSmallId);
+    }
+
+    [Fact]
     public void AgreeOnOwner_of_an_id_no_one_has_spawned_is_false()
     {
         using var world = new World();

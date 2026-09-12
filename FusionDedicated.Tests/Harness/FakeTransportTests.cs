@@ -25,4 +25,19 @@ public class FakeTransportTests
         Assert.Equal(b.m_HSteamNetConnection, only.Connection.m_HSteamNetConnection);
         Assert.Equal(new byte[] { 3 }, only.Message);
     }
+
+    [Fact]
+    public void Deliver_drops_a_message_for_a_connection_already_closed()
+    {
+        var transport = new FakeTransport();
+        var a = transport.Connect();
+
+        transport.Close(a, "test");
+        transport.Deliver(a, new byte[] { 1 });
+
+        var received = new List<(HSteamNetConnection Connection, byte[] Message)>();
+        transport.Receive(10, (connection, message) => received.Add((connection, message)));
+
+        Assert.Empty(received);
+    }
 }
