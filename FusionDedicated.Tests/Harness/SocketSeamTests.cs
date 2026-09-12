@@ -93,6 +93,16 @@ public class SocketSeamTests
         Assert.DoesNotContain("Math.Min(max, _messageBuffer.Length)", source);
     }
 
+    [Fact]
+    public void The_constructor_logs_unreadable_packets_and_sets_the_registry_clock()
+    {
+        string ctor = FusionServerSource.Method("public FusionServer(");
+
+        Assert.Contains("new SteamSocketTransport(", ctor);
+        Assert.Contains("Failed to read a packet", ctor);
+        Assert.Contains("Entities.Clock =", ctor);
+    }
+
     /// <summary>Reads SteamSocketTransport.cs for the same reason FusionServerSource reads FusionServer.cs.</summary>
     private static string SteamSocketTransportSource()
         => File.ReadAllText(Path.Combine(

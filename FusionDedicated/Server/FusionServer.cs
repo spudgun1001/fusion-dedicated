@@ -45,10 +45,11 @@ public sealed class FusionServer : IDisposable
 
     public FusionServer(ServerConfig config, ISocketTransport? transport = null)
     {
-        _transport = transport ?? new SteamSocketTransport();
+        _transport = transport ?? new SteamSocketTransport(message => Log("ERROR", $"Failed to read a packet: {message}"));
         Config = config;
         Players.MaxPlayers = config.MaxPlayers;
         Entities.Capacity = config.MaxEntities;
+        Entities.Clock = () => Clock();
         Guard = new SpawnGuard(config);
         _refusals = new RefusalGuard(config.RefusalKickPerSecond, TimeSpan.FromSeconds(5));
 
@@ -4242,7 +4243,7 @@ public sealed class FusionServer : IDisposable
             PushSettings();
         }
 
-        foreach (var (player, kind, count) in _refusals.Flush(DateTime.UtcNow))
+        foreach (var (player, kind, count) in _refusals.Flush(Clock()))
         {
             string name = Players.Get(player)?.DisplayName ?? $"player {player}";
             Log("WARN", $"{name}: {count} more {kind} refusal(s) held back from the log");
@@ -4274,7 +4275,7 @@ public sealed class FusionServer : IDisposable
             Log("INFO", $"Culled {removed.Count} abandoned entities " +
                         $"({Entities.Count} left in world)");
 
-            var now = DateTime.UtcNow;
+            var now = Clock();
 
             foreach (var entity in culled)
             {

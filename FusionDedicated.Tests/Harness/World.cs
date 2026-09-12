@@ -11,7 +11,7 @@ public sealed class World : IDisposable
 
     public World(ServerConfig? config = null)
     {
-        // Culling reads the wall clock, which the world does not move, so it stays off unless a scenario asks for it.
+        // Culling stays off by default so a scenario does not lose props mid-test; a scenario that wants it opts in.
         Server = new FusionServer(config ?? new ServerConfig { CullOrphanedEntities = false }, Transport)
         {
             Clock = () => Now,
@@ -66,6 +66,13 @@ public sealed class World : IDisposable
     {
         Now += by;
         Server.PumpDeferred();
+        Sync();
+    }
+
+    /// <summary>Runs the server's periodic housekeeping, including culls, then syncs the fake players.</summary>
+    public void Tick()
+    {
+        Server.Tick();
         Sync();
     }
 
