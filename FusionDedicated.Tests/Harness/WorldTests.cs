@@ -82,4 +82,26 @@ public class WorldTests
         Assert.Equal(kanza.SmallId, joel.View.Entities[300].Owner);
         Assert.Equal(kanza.SmallId, kanza.View.Entities[300].Owner);
     }
+
+    [Fact]
+    public void Building_someone_elses_prop_asks_them_for_its_state()
+    {
+        using var world = new World();
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+        var kanza = world.Join(76561198000000002, "Kanza");
+        kanza.FinishLoading();
+
+        world.Spawn(joel, 300, "Pack.Spawnable.Crate", 1, 2, 3);
+
+        Assert.Contains(world.Transport.SentTo(joel.Connection), sent =>
+            Envelope.Read(sent.Message) is { } envelope
+            && envelope.Tag == FusionProtocol.TagEntityDataRequest
+            && envelope.Sender == kanza.SmallId);
+
+        Assert.DoesNotContain(world.Transport.SentTo(kanza.Connection), sent =>
+            Envelope.Read(sent.Message) is { } envelope
+            && envelope.Tag == FusionProtocol.TagEntityDataRequest
+            && envelope.Sender == joel.SmallId);
+    }
 }

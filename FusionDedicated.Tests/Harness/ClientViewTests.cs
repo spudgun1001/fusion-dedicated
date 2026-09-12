@@ -146,4 +146,45 @@ public class ClientViewTests
         view.Receive(ClientMessages.CullStatus(1, 302, true));
         Assert.True(view.Entities[302].CulledForOwner);
     }
+
+    [Fact]
+    public void Building_a_prop_owned_by_someone_else_asks_them_for_its_state()
+    {
+        var view = Loaded();
+        view.Receive(Spawn(300, 1));
+
+        Assert.Equal(new[] { ((ushort)300, (byte)1) }, view.TakeDataRequests());
+    }
+
+    [Fact]
+    public void Building_a_prop_the_player_owns_asks_nobody()
+    {
+        var view = Loaded(smallId: 1);
+        view.Receive(Spawn(300, 1));
+
+        Assert.Empty(view.TakeDataRequests());
+    }
+
+    [Fact]
+    public void A_prop_built_from_a_held_spawn_asks_for_its_state_only_once_loaded()
+    {
+        var view = new ClientView(5);
+        view.Receive(Spawn(300, 1));
+
+        Assert.Empty(view.TakeDataRequests());
+
+        view.MarkLoaded();
+
+        Assert.Equal(new[] { ((ushort)300, (byte)1) }, view.TakeDataRequests());
+    }
+
+    [Fact]
+    public void Taking_data_requests_empties_the_list()
+    {
+        var view = Loaded();
+        view.Receive(Spawn(300, 1));
+        view.TakeDataRequests();
+
+        Assert.Empty(view.TakeDataRequests());
+    }
 }

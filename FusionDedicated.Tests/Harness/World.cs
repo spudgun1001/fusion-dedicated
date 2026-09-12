@@ -68,12 +68,33 @@ public sealed class World : IDisposable
         Sync();
     }
 
-    /// <summary>Feeds every player's view whatever the server has sent them since last time.</summary>
+    /// <summary>
+    /// Feeds every player's view whatever the server has sent them since last time, then
+    /// delivers whatever data requests that raised and lets the server answer them, until
+    /// nobody has anything left to ask.
+    /// </summary>
     public void Sync()
     {
-        foreach (var player in _players)
+        for (var round = 0; ; round++)
         {
-            player.CatchUp();
+            bool delivered = false;
+
+            foreach (var player in _players.ToList())
+            {
+                delivered |= player.CatchUp();
+            }
+
+            if (!delivered)
+            {
+                return;
+            }
+
+            if (round == 16)
+            {
+                throw new InvalidOperationException("players kept asking for entity data after 16 rounds");
+            }
+
+            Server.Receive();
         }
     }
 
@@ -148,10 +169,11 @@ public sealed class FakePlayer
     public void FinishLoading()
     {
         View.MarkLoaded();
+        DeliverDataRequests();
         Send(ClientMessages.FinishedLoading(SmallId));
     }
 
-    internal void CatchUp()
+    internal bool CatchUp()
     {
         var sent = _world.Transport.SentTo(Connection);
 
@@ -161,5 +183,20 @@ public sealed class FakePlayer
             BytesReceived += sent[_read].Message.Length;
             View.Receive(sent[_read].Message);
         }
+
+        return DeliverDataRequests();
+    }
+
+    /// <summary>A real client asks a prop's owner for its state as soon as it builds the prop.</summary>
+    private bool DeliverDataRequests()
+    {
+        var requests = View.TakeDataRequests();
+
+        foreach (var (entity, owner) in requests)
+        {
+            _world.Transport.Deliver(Connection, FusionProtocol.BuildEntityDataRequest(SmallId, owner, entity));
+        }
+
+        return requests.Count > 0;
     }
 }

@@ -19,6 +19,7 @@ public sealed class ViewEntity
 public sealed class ClientView
 {
     private readonly List<byte[]> _heldForLoading = new();
+    private readonly List<(ushort Entity, byte Owner)> _pendingDataRequests = new();
 
     public ClientView(byte smallId) => SmallId = smallId;
 
@@ -38,6 +39,14 @@ public sealed class ClientView
     public int DroppedWhileLoading { get; private set; }
 
     public int PosesRejected { get; private set; }
+
+    /// <summary>A real client asks a prop's owner for its state as soon as it builds the prop.</summary>
+    public IReadOnlyList<(ushort Entity, byte Owner)> TakeDataRequests()
+    {
+        var taken = _pendingDataRequests.ToList();
+        _pendingDataRequests.Clear();
+        return taken;
+    }
 
     /// <summary>DelayWhileTargetLoading messages wait here, the rest of skip-while-loading ones are dropped.</summary>
     public void MarkLoaded()
@@ -123,6 +132,11 @@ public sealed class ClientView
         }
 
         Entities[spawn.EntityId] = new ViewEntity { Id = spawn.EntityId, Barcode = spawn.Barcode ?? "", Owner = spawn.OwnerId };
+
+        if (spawn.OwnerId != SmallId)
+        {
+            _pendingDataRequests.Add((spawn.EntityId, spawn.OwnerId));
+        }
     }
 
     private void Despawn(Envelope envelope)
