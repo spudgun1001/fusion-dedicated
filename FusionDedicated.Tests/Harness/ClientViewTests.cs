@@ -6,8 +6,8 @@ namespace FusionDedicated.Tests.Harness;
 /// <summary>
 /// The client rules a view applies, each from the LabFusion 1.14.1 decompile:
 /// SpawnResponseMessage, DespawnResponseMessage, EntityOwnershipResponseMessage,
-/// EntityPoseUpdateMessage, EntityCullStatusMessage, PlayerRepSeatMessage, AtvExtender
-/// and the InventorySlot messages.
+/// EntityPoseUpdateMessage, EntityCullStatusMessage, PlayerRepSeatMessage, AtvExtender,
+/// DisconnectMessage and the InventorySlot messages.
 /// </summary>
 public class ClientViewTests
 {
@@ -132,6 +132,70 @@ public class ClientViewTests
         view.Receive(ServerProtocol.WriteDespawnResponse(2, 300, false));
 
         Assert.False(view.Entities.ContainsKey(300));
+    }
+
+    private static byte[] Connected(byte smallId, ulong platformId)
+        => ServerProtocol.WriteConnectionResponse(platformId, smallId,
+            new Dictionary<string, string> { ["Username"] = $"Player{smallId}" },
+            new List<string>(), "SLZ.BONELAB.Content.Avatar.FordBW", Array.Empty<byte>(), false);
+
+    [Fact]
+    public void A_despawn_empties_the_slot_holding_the_entity()
+    {
+        var view = Loaded();
+        view.Receive(Spawn(500, 3));
+        view.Receive(ClientMessages.SlotInsert(3, slot: 3, weapon: 500, index: 0));
+
+        view.Receive(ServerProtocol.WriteDespawnResponse(3, 500, false));
+
+        Assert.Empty(view.Slots);
+    }
+
+    [Fact]
+    public void A_player_leaving_clears_what_they_owned_rode_and_locked()
+    {
+        var view = Loaded();
+        view.Receive(Connected(2, 76561198000000002));
+        view.Receive(Connected(3, 76561198000000003));
+        view.DriverLockedVehicles.Add(400);
+        view.Receive(Spawn(300, 2));
+        view.Receive(Spawn(301, 3));
+        view.Receive(Spawn(400, 1));
+        view.Receive(FusionProtocol.BuildSeat(rider: 2, seatId: 400, index: 0, ingress: true));
+        view.Receive(FusionProtocol.BuildSeat(rider: 3, seatId: 400, index: 1, ingress: true));
+
+        view.Receive(ServerProtocol.WriteDisconnect(76561198000000002, "Player left"));
+
+        Assert.Null(view.Entities[300].Owner);
+        Assert.Null(view.Entities[400].Owner);
+        Assert.Null(view.Entities[400].LockedTo);
+        Assert.False(view.Seats.ContainsKey(2));
+        Assert.False(view.Players.ContainsKey(2));
+        Assert.Equal((byte)3, view.Entities[301].Owner);
+        Assert.Equal(((ushort)400, (byte)1), view.Seats[3]);
+        Assert.True(view.Players.ContainsKey(3));
+    }
+
+    [Fact]
+    public void A_player_leaving_is_handled_while_still_loading()
+    {
+        var view = new ClientView(5);
+        view.Receive(Connected(2, 76561198000000002));
+
+        view.Receive(ServerProtocol.WriteDisconnect(76561198000000002, "Player left"));
+
+        Assert.False(view.Players.ContainsKey(2));
+    }
+
+    [Fact]
+    public void A_disconnect_naming_this_player_changes_nothing_here()
+    {
+        var view = Loaded(smallId: 5);
+        view.Receive(Connected(5, 76561198000000005));
+
+        view.Receive(ServerProtocol.WriteDisconnect(76561198000000005, "Kicked"));
+
+        Assert.True(view.Players.ContainsKey(5));
     }
 
     [Fact]

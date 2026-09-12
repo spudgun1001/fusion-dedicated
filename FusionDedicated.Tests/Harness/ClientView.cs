@@ -90,6 +90,10 @@ public sealed class ClientView
                 MetadataChanged(envelope);
                 return;
 
+            case FusionProtocol.TagDisconnect:
+                Left(envelope);
+                return;
+
             case FusionProtocol.TagSpawnResponse:
             case ServerProtocol.TagDespawnResponse:
                 if (!Loaded)
@@ -195,11 +199,50 @@ public sealed class ClientView
         }
     }
 
+    /// <summary>
+    /// A player leaving, in LabFusion's order: the player goes, their seat empties and unlocks the
+    /// vehicle, then anything they still owned is left with no owner.
+    /// </summary>
+    private void Left(Envelope envelope)
+    {
+        ulong platformId = new FusionNetReader(envelope.Payload).ReadUInt64();
+
+        if (Players.Values.FirstOrDefault(p => p.PlatformId == platformId) is not { } player
+            || player.SmallId == SmallId)
+        {
+            return;
+        }
+
+        byte smallId = player.SmallId;
+        Players.Remove(smallId);
+        Seats.Remove(smallId);
+
+        foreach (var entity in Entities.Values)
+        {
+            if (entity.LockedTo == smallId)
+            {
+                entity.LockedTo = null;
+            }
+
+            if (entity.Owner == smallId && entity.LockedTo == null)
+            {
+                entity.Owner = null;
+            }
+        }
+    }
+
     private void Despawn(Envelope envelope)
     {
         var reader = new FusionNetReader(envelope.Payload);
         reader.ReadByte(); // despawner
-        Entities.Remove(reader.ReadUInt16());
+        ushort id = reader.ReadUInt16();
+
+        Entities.Remove(id);
+
+        foreach (var key in Slots.Where(s => s.Value == id).Select(s => s.Key).ToList())
+        {
+            Slots.Remove(key);
+        }
     }
 
     private void Ownership(Envelope envelope)

@@ -9,7 +9,6 @@ namespace FusionDedicated.Tests.Harness;
 public static class ClientMessages
 {
     private const byte ToServer = 1;
-    private const byte ToClients = 2;
     private const byte ToOtherClients = 3;
     private const byte Reliable = 0;
 
