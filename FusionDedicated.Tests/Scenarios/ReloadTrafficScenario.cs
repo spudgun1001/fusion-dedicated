@@ -50,6 +50,8 @@ public class ReloadTrafficScenario(ITestOutputHelper output)
 
             output.WriteLine($"{player.Name}: {rpcs.Count} messages, {rpcs.Sum(m => m.Message.Length)} bytes");
 
+            // This is today's count: every announce resends every value. It should fall once
+            // the server stops resending values that already match what it has cached.
             Assert.Equal(47 * 7 * 5, rpcs.Count);
         }
     }

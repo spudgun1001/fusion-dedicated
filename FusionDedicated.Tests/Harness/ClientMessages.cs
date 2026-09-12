@@ -49,9 +49,6 @@ public static class ClientMessages
         return Wrap(FusionProtocol.TagEntityCullStatus, ToOtherClients, player, payload.ToArray());
     }
 
-    public static byte[] Module(byte player, long handler, byte[] handlerPayload)
-        => Module(player, handler, handlerPayload, ToClients);
-
     public static byte[] SlotInsert(byte player, ushort slot, ushort weapon, byte index)
         => Module(player, ModuleProtocol.InventorySlotInsertTag, ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index), ToOtherClients);
 

@@ -2,11 +2,12 @@ using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 using FusionDedicated.Tests.Harness;
+using Xunit.Abstractions;
 
 namespace FusionDedicated.Tests.Scenarios;
 
 /// <summary>Scenarios 2 and 7: a client sending thousands of refused spawns a second.</summary>
-public class FloodScenario
+public class FloodScenario(ITestOutputHelper output)
 {
     private static ServerConfig Locked() => new() { CullOrphanedEntities = false, Spawning = PermissionLevel.Operator };
 
@@ -23,8 +24,17 @@ public class FloodScenario
 
         freeman.SendMany(Flood(freeman, 3400));
 
+        var handleTimes = world.Transport.HandleTimes;
+        var total = TimeSpan.FromTicks(handleTimes.Sum(t => t.Ticks));
+        var max = handleTimes.Count > 0 ? handleTimes.Max() : TimeSpan.Zero;
+        output.WriteLine($"handled {world.Transport.HandleTimes.Count} messages, total {total.TotalMilliseconds:F1} ms, slowest {max.TotalMilliseconds:F3} ms");
+
         Assert.Null(world.Server.Players.GetByPlatformId(76561198000000009));
-        Assert.True(world.Server.RecentLog(2000).Count(e => e.Message.Contains("denied")) <= 5);
+
+        // The first refusal logs a "denied" line, the rest inside the 5s window are only
+        // counted (RefusalGuard.Note), the kick line itself has no "denied", and every
+        // later spawn request is dropped at the _closing gate before it reaches Refuse.
+        Assert.Equal(1, world.Server.RecentLog(2000).Count(e => e.Message.Contains("denied")));
     }
 
     [Fact]

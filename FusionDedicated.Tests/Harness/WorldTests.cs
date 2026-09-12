@@ -1,10 +1,35 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Harness;
 
 public class WorldTests
 {
+    [Fact]
+    public void A_flooder_kicked_by_the_refusal_guard_is_dropped_from_the_world()
+    {
+        var config = new ServerConfig { CullOrphanedEntities = false, Spawning = PermissionLevel.Operator };
+        using var world = new World(config);
+        var flooder = world.Join(76561198000000009, "Flooder");
+        flooder.FinishLoading();
+
+        flooder.SendMany(Enumerable.Range(0, 3400).Select(i => FusionProtocol.BuildSpawnRequest(
+            flooder.SmallId, "SLZ.BONELAB.Content.Avatar.FordBW", new Vec3(0, 0, 0), (uint)i)));
+
+        Assert.DoesNotContain(flooder, world.Players);
+    }
+
+    [Fact]
+    public void AgreeOnOwner_of_an_id_no_one_has_spawned_is_false()
+    {
+        using var world = new World();
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+
+        Assert.False(world.AgreeOnOwner(999));
+    }
+
     [Fact]
     public void A_late_joiner_learns_who_owns_a_prop()
     {

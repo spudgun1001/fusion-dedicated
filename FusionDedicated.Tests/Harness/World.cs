@@ -11,6 +11,7 @@ public sealed class World : IDisposable
 
     public World(ServerConfig? config = null)
     {
+        // Culling reads the wall clock, which the world does not move, so it stays off unless a scenario asks for it.
         Server = new FusionServer(config ?? new ServerConfig { CullOrphanedEntities = false }, Transport)
         {
             Clock = () => Now,
@@ -75,6 +76,10 @@ public sealed class World : IDisposable
     /// </summary>
     public void Sync()
     {
+        // A kicked player stays a fake player here until we drop them, so their
+        // frozen view would otherwise still count in AgreeOnOwner and SlotsAgree.
+        _players.RemoveAll(p => Server.Players.GetByConnection(p.Connection) == null);
+
         for (var round = 0; ; round++)
         {
             bool delivered = false;
@@ -102,7 +107,11 @@ public sealed class World : IDisposable
         => _players.ToDictionary(p => p.Name,
             p => p.View.Entities.TryGetValue(entity, out var seen) ? seen.Owner : null);
 
-    public bool AgreeOnOwner(ushort entity) => OwnersOf(entity).Values.Distinct().Count() == 1;
+    public bool AgreeOnOwner(ushort entity)
+    {
+        var owners = OwnersOf(entity).Values.ToList();
+        return owners.Count > 0 && owners.All(o => o.HasValue) && owners.Distinct().Count() == 1;
+    }
 
     public bool SlotsAgree()
         => _players.Select(p => string.Join(";", p.View.Slots.OrderBy(s => s.Key).Select(s => $"{s.Key}={s.Value}")))

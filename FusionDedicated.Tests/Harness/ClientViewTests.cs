@@ -135,6 +135,18 @@ public class ClientViewTests
     }
 
     [Fact]
+    public void A_spawn_and_despawn_received_while_loading_leave_the_entity_gone_once_loaded()
+    {
+        var view = new ClientView(5);
+        view.Receive(Spawn(300, 1));
+        view.Receive(ServerProtocol.WriteDespawnResponse(2, 300, false));
+
+        view.MarkLoaded();
+
+        Assert.False(view.Entities.ContainsKey(300));
+    }
+
+    [Fact]
     public void A_cull_status_counts_only_from_the_owner()
     {
         var view = Loaded();

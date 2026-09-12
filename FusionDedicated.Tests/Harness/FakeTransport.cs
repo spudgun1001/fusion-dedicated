@@ -54,6 +54,16 @@ public sealed class FakeTransport : ISocketTransport
         lock (_lock)
         {
             Closed.Add((connection.m_HSteamNetConnection, reason));
+
+            // Steam delivers nothing once a connection is closed, so drop whatever
+            // of theirs is still queued rather than handing it to Receive later.
+            var kept = _inbox.Where(entry => entry.Connection.m_HSteamNetConnection != connection.m_HSteamNetConnection).ToList();
+            _inbox.Clear();
+
+            foreach (var entry in kept)
+            {
+                _inbox.Enqueue(entry);
+            }
         }
     }
 

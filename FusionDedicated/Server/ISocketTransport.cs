@@ -18,7 +18,7 @@ public interface ISocketTransport : IDisposable
     /// <summary>The Steam ID on the other end, or zero when it is not known.</summary>
     ulong RemoteSteamId(HSteamNetConnection connection);
 
-    /// <returns>Whether the message actually went out.</returns>
+    /// <returns>False when the send threw.</returns>
     bool Send(HSteamNetConnection connection, byte[] message, bool reliable);
 
     /// <summary>Hands up to <paramref name="max"/> waiting messages to the handler.</summary>
