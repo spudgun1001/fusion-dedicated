@@ -56,17 +56,20 @@ public class SeatedOwnerTests
     }
 
     [Fact]
-    public void The_pose_glue_sets_the_owner_then_tells_everyone()
+    public void The_pose_glue_sets_the_owner_before_judging_whose_pose_it_is()
     {
+        // The owner-gate fix needs the seated driver to become the owner before
+        // the pose is weighed against the registry, or their own first pose as
+        // driver would be thrown away as a non-owner's.
         string track = FusionServerSource.Method("private void TrackEntityPose(");
 
-        int noted = track.IndexOf("Entities.NotePose(", StringComparison.Ordinal);
         int rule = track.IndexOf("WorldCatchup.OwnerFromSeatedPose(", StringComparison.Ordinal);
+        int noted = track.IndexOf("Entities.NotePose(", StringComparison.Ordinal);
         int set = track.IndexOf("Entities.SetOwner(vehicleId, sender.SmallId);", StringComparison.Ordinal);
         int announce = track.IndexOf("AnnounceOwner(vehicleId, sender.SmallId);", StringComparison.Ordinal);
 
-        Assert.True(noted > 0, "the pose is no longer noted here");
-        Assert.True(rule > noted, "the owner rule must run after the pose is noted");
+        Assert.True(rule > 0, "the owner rule is no longer here");
+        Assert.True(noted > rule, "the pose must be noted after the owner rule, not before");
         Assert.True(set > rule && announce > set,
             "the registry owner must be set before the announcement, or every pose announces again");
     }

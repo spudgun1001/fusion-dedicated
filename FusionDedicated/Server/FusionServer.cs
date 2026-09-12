@@ -3631,6 +3631,9 @@ public sealed class FusionServer : IDisposable
         Log(CombatLog.Level, CombatLog.Describe(sender.DisplayName, name, damage), console: false);
     }
 
+    /// <summary>Keeps the ignored-pose and kept-prop-moved log lines from repeating every tick.</summary>
+    private readonly PoseLogThrottle _poseLog = new();
+
     private void TrackEntityPose(ConnectedPlayer sender, byte[] message)
     {
         var pose = FusionProtocol.TryReadEntityPose(message);
@@ -3640,29 +3643,14 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        // A pose for an id we never handed out is a client-made entity telling us it
-        // exists. Registering it is what makes it visible; removing it is not safe
-        // without knowing whether it is a scene prop, so that stays opt-in.
-        // How far the sender stood from it, for the ammo cull's log line.
-        float? ownerDistance = sender.HasPosition
-            ? new Vec3(
-                pose.Value.Position.X - sender.LastPosition.X,
-                pose.Value.Position.Y - sender.LastPosition.Y,
-                pose.Value.Position.Z - sender.LastPosition.Z).Magnitude
-            : null;
-
-        Entities.NotePose(pose.Value.EntityId, sender.SmallId,
-            pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
-            pose.Value.Rotation,
-            pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z,
-            ownerDistance);
-
         ushort vehicleId = pose.Value.EntityId;
 
         // Only a client that believes it owns a vehicle sends its poses, and
         // Fusion's AtvExtender makes that the driver. So this follows who drives
         // rather than deciding it. MayHold goes last, so it only runs when the owner
-        // is about to change.
+        // is about to change. This runs before the pose below is judged, so a
+        // driver who has just sat down owns the vehicle before their own pose is
+        // weighed against the registry.
         if (_seats.SeatOf(sender.SmallId) is { } seat
             && Entities.Get(vehicleId) is { } vehicle
             && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId)
@@ -3673,6 +3661,54 @@ public sealed class FusionServer : IDisposable
 
             Log("INFO", $"Entity {vehicleId} now owned by {sender.DisplayName} (player {sender.SmallId}), " +
                         "who sits in it", console: false);
+        }
+
+        var known = Entities.Get(vehicleId);
+
+        // A pose from anybody but the entity's current owner is a stale or racing
+        // copy: a client only applies a pose from the owner it was told about, so
+        // recording this one would silently move the entity for whoever catches up
+        // next. A pose for an id nobody spawned is exempt, since that is how scene
+        // props are noticed in the first place.
+        if (known != null && known.OwnerSmallId != sender.SmallId)
+        {
+            if (_poseLog.AllowIgnored(vehicleId, sender.SmallId, Clock()))
+            {
+                string ownerName = known.OwnerSmallId is { } ownerId
+                    ? Players.Get(ownerId)?.DisplayName ?? "nobody"
+                    : "nobody";
+
+                Log("INFO", $"Ignored a pose for entity {vehicleId} ('{known.ShortName}') from " +
+                            $"{sender.DisplayName}, owned by {ownerName}", console: false);
+            }
+
+            return;
+        }
+
+        // How far the sender stood from it, for the ammo cull's log line.
+        float? ownerDistance = sender.HasPosition
+            ? new Vec3(
+                pose.Value.Position.X - sender.LastPosition.X,
+                pose.Value.Position.Y - sender.LastPosition.Y,
+                pose.Value.Position.Z - sender.LastPosition.Z).Magnitude
+            : null;
+
+        Entities.NotePose(vehicleId, sender.SmallId,
+            pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
+            pose.Value.Rotation,
+            pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z,
+            ownerDistance);
+
+        if (known is { Persistent: true, KeptAt: { } keptAt })
+        {
+            float moved = new Vec3(
+                known.X - keptAt.X, known.Y - keptAt.Y, known.Z - keptAt.Z).Magnitude;
+
+            if (moved > 0.5f && _poseLog.AllowKeptMoved(vehicleId, Clock()))
+            {
+                Log("INFO", $"Kept '{known.ShortName}' (entity {vehicleId}) is {moved:0.0} m from where " +
+                            $"it was kept, pose from {sender.DisplayName}", console: false);
+            }
         }
     }
 
