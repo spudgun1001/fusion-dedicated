@@ -1722,7 +1722,7 @@ public sealed class FusionServer : IDisposable
     /// <summary>Logs a refused request without letting a flood of them stall the server, and kicks whoever floods.</summary>
     private void Refuse(ConnectedPlayer sender, string kind, string line)
     {
-        var verdict = _refusals.Note(sender.SmallId, kind, DateTime.UtcNow);
+        var verdict = _refusals.Note(sender.SmallId, kind, Clock());
 
         if (verdict.Log)
         {
