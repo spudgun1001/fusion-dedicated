@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server.Audit;
@@ -34,9 +33,7 @@ public sealed class FusionServer : IDisposable
     public long BytesIn { get; private set; }
     public long BytesOut { get; private set; }
 
-    private HSteamListenSocket _listenSocket;
-    private HSteamNetPollGroup _pollGroup;
-    private Callback<SteamNetConnectionStatusChangedCallback_t>? _statusCallback;
+    private readonly ISocketTransport _transport;
 
     private readonly List<ServerLogEntry> _log = new();
     private readonly object _logLock = new();
@@ -46,8 +43,9 @@ public sealed class FusionServer : IDisposable
     private RefusalGuard _refusals = new(0, TimeSpan.FromSeconds(5));
     private NicknameGuard _nicknames = new(0, Array.Empty<string>());
 
-    public FusionServer(ServerConfig config)
+    public FusionServer(ServerConfig config, ISocketTransport? transport = null)
     {
+        _transport = transport ?? new SteamSocketTransport();
         Config = config;
         Players.MaxPlayers = config.MaxPlayers;
         Entities.Capacity = config.MaxEntities;
@@ -67,17 +65,11 @@ public sealed class FusionServer : IDisposable
 
     public void Start()
     {
-        // A poll group lets every connection be drained with one call.
-        _pollGroup = SteamNetworkingSockets.CreatePollGroup();
-
-        _listenSocket = SteamNetworkingSockets.CreateListenSocketP2P(0, 0, null);
-
-        _statusCallback = Callback<SteamNetConnectionStatusChangedCallback_t>
-            .Create(OnConnectionStatusChanged);
+        _transport.Start(OnConnecting, HandleDisconnect);
 
         RebuildBlocklist();
 
-        Log("INFO", $"Relay socket listening as SteamID {SteamUser.GetSteamID().m_SteamID}");
+        Log("INFO", $"Relay socket listening as SteamID {_transport.LocalSteamId}");
     }
 
     public SafetyListStore? SafetyLists { get; set; }
@@ -145,17 +137,7 @@ public sealed class FusionServer : IDisposable
     public void Dispose()
     {
         _logFile?.Dispose();
-        _statusCallback?.Dispose();
-
-        if (_pollGroup.m_HSteamNetPollGroup != 0)
-        {
-            SteamNetworkingSockets.DestroyPollGroup(_pollGroup);
-        }
-
-        if (_listenSocket.m_HSteamListenSocket != 0)
-        {
-            SteamNetworkingSockets.CloseListenSocket(_listenSocket);
-        }
+        _transport.Dispose();
     }
 
     // ---- logging ----
@@ -249,33 +231,18 @@ public sealed class FusionServer : IDisposable
 
     // ---- connection lifecycle ----
 
-    private void OnConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t info)
+    private void OnConnecting(HSteamNetConnection connection)
     {
-        var connection = info.m_hConn;
-
-        switch (info.m_info.m_eState)
+        if (Players.IsFull)
         {
-            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connecting:
-                if (Players.IsFull)
-                {
-                    Log("WARN", $"Refused a connection: server is full ({Players.Count}/{Players.MaxPlayers})");
-                    SteamNetworkingSockets.CloseConnection(connection, 0, "Server full", false);
-                    return;
-                }
-
-                SteamNetworkingSockets.AcceptConnection(connection);
-                SteamNetworkingSockets.SetConnectionPollGroup(connection, _pollGroup);
-
-                Log("INFO", $"Transport connected (conn {connection.m_HSteamNetConnection}), " +
-                            "awaiting ConnectionRequest");
-                return;
-
-            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ClosedByPeer:
-            case ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
-                HandleDisconnect(connection, info.m_info.m_szEndDebug);
-                SteamNetworkingSockets.CloseConnection(connection, 0, null, false);
-                return;
+            Log("WARN", $"Refused a connection: server is full ({Players.Count}/{Players.MaxPlayers})");
+            _transport.Close(connection, "Server full");
+            return;
         }
+
+        _transport.Accept(connection);
+
+        Log("INFO", $"Transport connected (conn {connection.m_HSteamNetConnection}), awaiting ConnectionRequest");
     }
 
     private void HandleDisconnect(HSteamNetConnection connection, string reason)
@@ -523,8 +490,6 @@ public sealed class FusionServer : IDisposable
 
     // ---- receive pump ----
 
-    private readonly IntPtr[] _messageBuffer = new IntPtr[128];
-
     /// <summary>
     /// Drains the poll group. One pass returns at most a bufferful, which at a 16ms
     /// tick caps throughput around 8000 messages a second, reachable on a busy
@@ -535,7 +500,7 @@ public sealed class FusionServer : IDisposable
     {
         for (var pass = 0; pass < MaxReceivePasses; pass++)
         {
-            if (ReceiveBatch() < _messageBuffer.Length)
+            if (_transport.Receive(ReceiveBatchSize, HandlePacket) < ReceiveBatchSize)
             {
                 return;
             }
@@ -545,35 +510,21 @@ public sealed class FusionServer : IDisposable
     /// <summary>Bounds one tick at 2048 messages, leaving room for ticks and lobby updates.</summary>
     private const int MaxReceivePasses = 16;
 
-    private int ReceiveBatch()
+    private const int ReceiveBatchSize = 128;
+
+    private void HandlePacket(HSteamNetConnection connection, byte[] bytes)
     {
-        int count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(_pollGroup, _messageBuffer, _messageBuffer.Length);
+        PacketsIn++;
+        BytesIn += bytes.Length;
 
-        for (var i = 0; i < count; i++)
+        try
         {
-            try
-            {
-                var native = Marshal.PtrToStructure<SteamNetworkingMessage_t>(_messageBuffer[i]);
-
-                var bytes = new byte[native.m_cbSize];
-                Marshal.Copy(native.m_pData, bytes, 0, native.m_cbSize);
-
-                PacketsIn++;
-                BytesIn += bytes.Length;
-
-                HandleMessage(native.m_conn, bytes);
-            }
-            catch (Exception ex)
-            {
-                Log("ERROR", $"Failed to handle a packet: {ex.Message}");
-            }
-            finally
-            {
-                SteamNetworkingMessage_t.Release(_messageBuffer[i]);
-            }
+            HandleMessage(connection, bytes);
         }
-
-        return count;
+        catch (Exception ex)
+        {
+            Log("ERROR", $"Failed to handle a packet: {ex.Message}");
+        }
     }
 
     private void HandleMessage(HSteamNetConnection connection, byte[] message)
@@ -849,17 +800,18 @@ public sealed class FusionServer : IDisposable
         if (request == null)
         {
             Log("WARN", "ConnectionRequest did not parse, rejecting");
-            SteamNetworkingSockets.CloseConnection(connection, 0, "Bad request", false);
+            _transport.Close(connection, "Bad request");
             return;
         }
 
         // The identity on the connection is authoritative; the payload's id is a fallback.
         ulong platformId = request.PlatformId;
 
-        if (SteamNetworkingSockets.GetConnectionInfo(connection, out var info)
-            && info.m_identityRemote.GetSteamID64() != 0)
+        ulong remote = _transport.RemoteSteamId(connection);
+
+        if (remote != 0)
         {
-            platformId = info.m_identityRemote.GetSteamID64();
+            platformId = remote;
         }
 
         void Reject(string reason)
@@ -883,14 +835,14 @@ public sealed class FusionServer : IDisposable
         if (Members is { Enabled: true } members && !members.MayJoin(platformId))
         {
             Log("WARN", $"Refused {platformId}: not on the whitelist");
-            SteamNetworkingSockets.CloseConnection(connection, 0, "Not on this server's whitelist", false);
+            _transport.Close(connection, "Not on this server's whitelist");
             return;
         }
 
         if (BanList?.Find(platformId) is { } fileBan)
         {
             Log("WARN", $"Refused {platformId}: banned ({fileBan.Reason})");
-            SteamNetworkingSockets.CloseConnection(connection, 0, fileBan.Reason, false);
+            _transport.Close(connection, fileBan.Reason);
             return;
         }
 
@@ -4082,29 +4034,10 @@ public sealed class FusionServer : IDisposable
 
     public void SendTo(HSteamNetConnection connection, byte[] message, bool reliable)
     {
-        var buffer = Marshal.AllocHGlobal(message.Length);
-
-        try
+        if (_transport.Send(connection, message, reliable))
         {
-            Marshal.Copy(message, 0, buffer, message.Length);
-
-            int flags = reliable
-                ? Constants.k_nSteamNetworkingSend_Reliable
-                : Constants.k_nSteamNetworkingSend_Unreliable;
-
-            SteamNetworkingSockets.SendMessageToConnection(connection, buffer, (uint)message.Length,
-                flags, out _);
-
             PacketsOut++;
             BytesOut += message.Length;
-        }
-        catch
-        {
-            // A closing connection throws; the status callback handles cleanup.
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
         }
     }
 
@@ -4149,7 +4082,7 @@ public sealed class FusionServer : IDisposable
             // left behind here silently refuses whoever lands on it next.
             try
             {
-                SteamNetworkingSockets.CloseConnection(connection, 0, reason, false);
+                _transport.Close(connection, reason);
             }
             finally
             {

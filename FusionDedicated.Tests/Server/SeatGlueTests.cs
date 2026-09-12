@@ -60,7 +60,7 @@ public class SeatGlueTests
     {
         Assert.Contains("ForgetRider(player.SmallId);", FusionServerSource.Method("private void Depart("));
         Assert.Contains("Entities.Removed += id => _seats.ForgetEntity(id);",
-            FusionServerSource.Method("public FusionServer(ServerConfig config)"));
+            FusionServerSource.Method("public FusionServer(ServerConfig config, ISocketTransport? transport = null)"));
     }
 
     [Fact]
