@@ -74,6 +74,16 @@ public sealed class GrabBook
         }
     }
 
+    /// <summary>Empties a player's hands of one item, for when they put it somewhere else.</summary>
+    /// <returns>How many of their hands were holding it.</returns>
+    public int ReleaseEntity(byte player, ushort entityId)
+    {
+        lock (_lock)
+        {
+            return _held.RemoveAll(h => h.Player == player && h.EntityId == entityId);
+        }
+    }
+
     /// <summary>Empties every hand, for a level change, where clients send no releases.</summary>
     public void Clear()
     {

@@ -132,6 +132,30 @@ public class GrabBookTests
     }
 
     [Fact]
+    public void Releasing_an_item_empties_only_that_players_hands_holding_it()
+    {
+        var book = new GrabBook();
+        book.Grab(player: 3, hand: 1, entityId: 500);
+        book.Grab(player: 3, hand: 2, entityId: 500);
+        book.Grab(player: 4, hand: 1, entityId: 500);
+        book.Grab(player: 3, hand: 1, entityId: 501);
+
+        Assert.Equal(1, book.ReleaseEntity(player: 3, entityId: 500));
+        Assert.Equal(new byte[] { 4 }, book.HoldersOf(500));
+        Assert.Equal(new byte[] { 3 }, book.HoldersOf(501));
+    }
+
+    [Fact]
+    public void Releasing_an_item_the_player_does_not_hold_changes_nothing()
+    {
+        var book = new GrabBook();
+        book.Grab(player: 4, hand: 1, entityId: 500);
+
+        Assert.Equal(0, book.ReleaseEntity(player: 3, entityId: 500));
+        Assert.Equal(new byte[] { 4 }, book.HoldersOf(500));
+    }
+
+    [Fact]
     public void A_level_change_empties_every_hand()
     {
         // Clients send no releases when the scene unloads.
