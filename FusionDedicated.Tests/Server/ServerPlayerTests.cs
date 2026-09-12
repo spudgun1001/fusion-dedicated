@@ -128,4 +128,19 @@ public class ServerPlayerTests
         Assert.Equal(before + 1, Renames());
         Assert.Equal("Northside RP", joel.View.Players[0].Metadata["Username"]);
     }
+
+    [Fact]
+    public void Joining_tells_players_player_0s_name_rather_than_recording_it_silently()
+    {
+        using var world = NewWorld();
+        var joel = world.Join(76561198000000001, "Joel");
+
+        int Renames() => world.Transport.SentTo(joel.Connection).Count(s =>
+            Envelope.Read(s.Message) is { Tag: FusionProtocol.TagPlayerMetadataResponse } envelope
+            && envelope.Payload[0] == 0);
+
+        // The join's own settings push is the first, and it must send the name it records.
+        Assert.Equal(1, Renames());
+        Assert.Equal("Southside RP", joel.View.Players[0].Metadata["Username"]);
+    }
 }

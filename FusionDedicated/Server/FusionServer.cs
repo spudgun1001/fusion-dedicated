@@ -2663,7 +2663,7 @@ public sealed class FusionServer : IDisposable
     /// <summary>Last mortality warning said, so it is not repeated every tick.</summary>
     private string? _mortalityWarning;
 
-    /// <summary>The name clients were last given for player 0, so a rename in the panel reaches them.</summary>
+    /// <summary>The name last sent for player 0, so a rename in the panel reaches connected players.</summary>
     private string? _serverPlayerName;
 
     public void PushSettings()
@@ -2686,17 +2686,15 @@ public sealed class FusionServer : IDisposable
 
         Broadcast(ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
 
-        // A joiner is given the current name. Everybody already here hears a change on the next push.
-        if (_serverPlayerName == null)
+        // Player 0 carries the server's name. Stored only when it is sent, so a rename from the panel thread cannot be recorded without reaching players.
+        string serverName = Config.ServerName;
+
+        if (_serverPlayerName != serverName)
         {
-            _serverPlayerName = Config.ServerName;
-        }
-        else if (_serverPlayerName != Config.ServerName)
-        {
-            _serverPlayerName = Config.ServerName;
+            _serverPlayerName = serverName;
 
             Broadcast(FusionProtocol.BuildMetadataResponse(
-                PlayerRegistry.ServerSmallId, "Username", Config.ServerName), reliable: true);
+                PlayerRegistry.ServerSmallId, "Username", serverName), reliable: true);
         }
     }
 
