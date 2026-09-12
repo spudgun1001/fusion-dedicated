@@ -107,4 +107,25 @@ public class ServerPlayerTests
         Assert.Contains(world.Server.RecentLog(), entry => entry.Message.Contains("which is the server"));
         Assert.Contains(joel, world.Players);
     }
+
+    [Fact]
+    public void Renaming_the_server_renames_player_0_once()
+    {
+        using var world = NewWorld();
+        var joel = world.Join(76561198000000001, "Joel");
+
+        int Renames() => world.Transport.SentTo(joel.Connection).Count(s =>
+            Envelope.Read(s.Message) is { Tag: FusionProtocol.TagPlayerMetadataResponse } envelope
+            && envelope.Payload[0] == 0);
+
+        int before = Renames();
+
+        world.Server.Config.ServerName = "Northside RP";
+        world.Server.PushSettings();
+        world.Server.PushSettings();
+        world.Sync();
+
+        Assert.Equal(before + 1, Renames());
+        Assert.Equal("Northside RP", joel.View.Players[0].Metadata["Username"]);
+    }
 }
