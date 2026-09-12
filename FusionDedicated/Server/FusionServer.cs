@@ -61,6 +61,9 @@ public sealed class FusionServer : IDisposable
 
         Entities.Removed += id => _seats.ForgetEntity(id);
         Entities.Removed += ForgetAttachments;
+
+        // A removed id can be handed out again, so its throttle history must not linger.
+        Entities.Removed += id => _poseLog.Forget(id);
     }
 
     public void Start()
@@ -3647,15 +3650,21 @@ public sealed class FusionServer : IDisposable
 
         // Only a client that believes it owns a vehicle sends its poses, and
         // Fusion's AtvExtender makes that the driver. So this follows who drives
-        // rather than deciding it. MayHold goes last, so it only runs when the owner
-        // is about to change. This runs before the pose below is judged, so a
-        // driver who has just sat down owns the vehicle before their own pose is
-        // weighed against the registry.
+        // rather than deciding it. This runs before the pose below is judged, so
+        // a driver who has just sat down owns the vehicle before their own pose
+        // is weighed against the registry.
         if (_seats.SeatOf(sender.SmallId) is { } seat
             && Entities.Get(vehicleId) is { } vehicle
-            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId)
-            && MayHold(sender, vehicleId))
+            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId))
         {
+            // MayHold can remove the entity outright, so a refusal must stop
+            // here rather than fall into the pose gate below and register the
+            // id again as a fresh discovered entity.
+            if (!MayHold(sender, vehicleId))
+            {
+                return;
+            }
+
             Entities.SetOwner(vehicleId, sender.SmallId);
             AnnounceOwner(vehicleId, sender.SmallId);
 

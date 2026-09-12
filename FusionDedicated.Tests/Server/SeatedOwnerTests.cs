@@ -77,13 +77,26 @@ public class SeatedOwnerTests
     [Fact]
     public void A_rider_only_takes_the_vehicle_when_they_may_hold_it()
     {
-        // Last, so the rank and plugin checks only run when the owner is about to change.
+        // MayHold runs inside the owner-follows block, so the rank and plugin
+        // checks only happen when the owner is about to change. MayHold can
+        // remove the entity, so a refusal must return before the pose below is
+        // ever noted.
         string track = FusionServerSource.Method("private void TrackEntityPose(");
 
         int rule = track.IndexOf("WorldCatchup.OwnerFromSeatedPose(", StringComparison.Ordinal);
         int body = track.IndexOf("\n        {", rule, StringComparison.Ordinal);
+        int mayHold = track.IndexOf("MayHold(sender, vehicleId)", body, StringComparison.Ordinal);
+        int set = track.IndexOf("Entities.SetOwner(vehicleId, sender.SmallId);", StringComparison.Ordinal);
+        int noted = track.IndexOf("Entities.NotePose(", StringComparison.Ordinal);
 
         Assert.True(rule > 0 && body > rule, "the owner-follows condition is no longer here");
-        Assert.EndsWith("&& MayHold(sender, vehicleId))", track[rule..body].TrimEnd());
+        Assert.DoesNotContain("MayHold", track[rule..body]);
+
+        Assert.True(mayHold > body && mayHold < set,
+            "MayHold must run inside the owner-follows block, before the owner is set");
+
+        int refusalReturn = track.IndexOf("return;", mayHold, StringComparison.Ordinal);
+        Assert.True(refusalReturn > mayHold && refusalReturn < set && refusalReturn < noted,
+            "a MayHold refusal must return before the owner is set and before the pose is noted");
     }
 }

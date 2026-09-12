@@ -121,6 +121,28 @@ public class PoseOwnershipTests
     }
 
     [Fact]
+    public void A_seated_driver_refused_the_vehicle_does_not_resurrect_it()
+    {
+        // Raising the constrainer rank past Default makes ToolGate refuse a
+        // barcode naming a constrainer, which is what MayHold checks a seated
+        // rider against before letting them take the vehicle.
+        var config = new ServerConfig { CullOrphanedEntities = false, Constrainer = PermissionLevel.Operator };
+        using var world = new World(config);
+        var driver = world.Join(76561198000000001, "Driver");
+        var passenger = world.Join(76561198000000002, "Passenger");
+        driver.FinishLoading();
+        passenger.FinishLoading();
+
+        world.Spawn(passenger, Car, "Test.Spawnable.ConstrainerCar", 0, 0, 0);
+        Assert.Equal(passenger.SmallId, world.Server.Entities.Get(Car)!.OwnerSmallId);
+
+        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, Car, 0, true));
+        driver.Send(FusionProtocol.BuildEntityPoseUpdate(driver.SmallId, Car, new Vec3(4, 0, 4), default, default, default));
+
+        Assert.Null(world.Server.Entities.Get(Car));
+    }
+
+    [Fact]
     public void A_pose_for_an_id_nobody_spawned_still_registers()
     {
         using var world = new World();

@@ -44,4 +44,15 @@ public sealed class PoseLogThrottle
         _lastKeptMoved[entityId] = now;
         return true;
     }
+
+    /// <summary>Drops every record for an entity that no longer exists, so a later id reusing it starts fresh.</summary>
+    public void Forget(ushort entityId)
+    {
+        foreach (var key in _lastIgnored.Keys.Where(k => k.Entity == entityId).ToList())
+        {
+            _lastIgnored.Remove(key);
+        }
+
+        _lastKeptMoved.Remove(entityId);
+    }
 }
