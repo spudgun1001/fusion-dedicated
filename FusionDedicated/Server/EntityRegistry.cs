@@ -21,7 +21,7 @@ public sealed class TrackedEntity
     /// </summary>
     public bool Discovered { get; set; }
 
-    public DateTime SpawnedAt { get; } = DateTime.UtcNow;
+    public DateTime SpawnedAt { get; init; } = DateTime.UtcNow;
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
     public float X { get; set; }
@@ -143,6 +143,9 @@ public sealed class EntityRegistry
 
     private ushort _nextId = FirstEntityId;
 
+    /// <summary>The clock every stamp and cutoff reads, swappable so tests can move it.</summary>
+    public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
     public int Count
     {
         get
@@ -262,6 +265,8 @@ public sealed class EntityRegistry
     public TrackedEntity Register(ushort id, string barcode, byte owner, float x, float y, float z,
         byte[]? rotation = null)
     {
+        var spawnedAt = Clock();
+
         var entity = new TrackedEntity
         {
             Id = id,
@@ -271,6 +276,8 @@ public sealed class EntityRegistry
             Y = y,
             Z = z,
             Rotation = rotation ?? Array.Empty<byte>(),
+            SpawnedAt = spawnedAt,
+            LastUpdate = spawnedAt,
         };
 
         lock (_lock)
@@ -328,7 +335,7 @@ public sealed class EntityRegistry
 
             if (entity.Occupied && !occupied)
             {
-                entity.LastUpdate = DateTime.UtcNow;
+                entity.LastUpdate = Clock();
             }
 
             entity.Occupied = occupied;
@@ -342,7 +349,7 @@ public sealed class EntityRegistry
             if (_entities.TryGetValue(id, out var entity))
             {
                 entity.OwnerSmallId = owner;
-                entity.LastUpdate = DateTime.UtcNow;
+                entity.LastUpdate = Clock();
             }
         }
     }
@@ -356,7 +363,7 @@ public sealed class EntityRegistry
                 entity.X = x;
                 entity.Y = y;
                 entity.Z = z;
-                entity.LastUpdate = DateTime.UtcNow;
+                entity.LastUpdate = Clock();
             }
         }
     }
@@ -397,7 +404,7 @@ public sealed class EntityRegistry
 
                 entity.OwnerDistanceAtPose = ownerDistance;
                 entity.PositionKnown = true;
-                entity.LastUpdate = DateTime.UtcNow;
+                entity.LastUpdate = Clock();
                 return;
             }
 
@@ -409,6 +416,8 @@ public sealed class EntityRegistry
             {
                 return;
             }
+
+            var discoveredAt = Clock();
 
             _entities[id] = new TrackedEntity
             {
@@ -424,6 +433,8 @@ public sealed class EntityRegistry
                 VelocityZ = vz,
                 OwnerDistanceAtPose = ownerDistance,
                 PositionKnown = true,
+                SpawnedAt = discoveredAt,
+                LastUpdate = discoveredAt,
             };
         }
     }
@@ -476,7 +487,7 @@ public sealed class EntityRegistry
 
                 entity.OwnerSmallId = heir;
                 entity.Inherited = heir.HasValue;
-                entity.LastUpdate = DateTime.UtcNow;
+                entity.LastUpdate = Clock();
                 affected.Add(entity);
             }
         }
@@ -491,7 +502,7 @@ public sealed class EntityRegistry
     public List<ushort> CullOrphans(TimeSpan olderThan)
     {
         var removed = new List<ushort>();
-        var cutoff = DateTime.UtcNow - olderThan;
+        var cutoff = Clock() - olderThan;
 
         lock (_lock)
         {
@@ -541,7 +552,7 @@ public sealed class EntityRegistry
         TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null)
     {
         var removed = new List<TrackedEntity>();
-        var now = DateTime.UtcNow;
+        var now = Clock();
 
         lock (_lock)
         {
@@ -671,7 +682,7 @@ public sealed class EntityRegistry
         IReadOnlySet<ushort>? inUse = null)
     {
         var removed = new List<ushort>();
-        var cutoff = DateTime.UtcNow - (idleFor == default ? TimeSpan.FromMinutes(2) : idleFor);
+        var cutoff = Clock() - (idleFor == default ? TimeSpan.FromMinutes(2) : idleFor);
 
         lock (_lock)
         {
