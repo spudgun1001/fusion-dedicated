@@ -76,21 +76,21 @@ public class WorldTests
     }
 
     [Fact]
-    public void Grabbing_a_locked_vehicle_with_a_driver_seated_asks_for_no_ownership()
+    public void Grabbing_a_vehicle_locked_in_this_players_view_asks_for_no_ownership()
     {
         const ushort car = 400;
         using var world = new World();
         var driver = world.Join(76561198000000001, "s1mple");
         var bystander = world.Join(76561198000000002, "FOLZY");
-
-        foreach (var player in world.Players)
-        {
-            player.FinishLoading();
-            player.View.DriverLockedVehicles.Add(car);
-        }
+        driver.FinishLoading();
+        bystander.FinishLoading();
+        bystander.View.DriverLockedVehicles.Add(car);
 
         world.Spawn(driver, car, "BaBaCorp.AssortedAutomobiles.Spawnable.SendalSopperSedan", 0, 0, 0);
-        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, car, 0, true));
+
+        // Fed to the bystander's own view only, never sent to the server: the server
+        // never seats the driver, so a request that did go out would be granted.
+        bystander.View.Receive(FusionProtocol.BuildSeat(driver.SmallId, car, 0, true));
 
         bystander.Grab(car);
 
