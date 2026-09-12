@@ -142,4 +142,29 @@ public class RpcVariableCacheTests
     [Fact]
     public void A_prop_with_no_variables_has_nothing_to_send()
         => Assert.Empty(new RpcVariableCache().ForEntity(300));
+
+    private static readonly byte[] Path = { 1, 2, 3, 4 };
+
+    [Fact]
+    public void A_value_never_held_is_not_unchanged()
+        => Assert.False(new RpcVariableCache().IsUnchanged(213, new byte[] { 9 }, Path));
+
+    [Fact]
+    public void The_same_body_on_the_same_path_is_unchanged()
+    {
+        var cache = new RpcVariableCache();
+        cache.Set(213, 0, new byte[] { 9, 8 }, Path);
+
+        Assert.True(cache.IsUnchanged(213, new byte[] { 9, 8 }, Path));
+    }
+
+    [Fact]
+    public void A_different_body_or_kind_is_a_change()
+    {
+        var cache = new RpcVariableCache();
+        cache.Set(213, 0, new byte[] { 9, 8 }, Path);
+
+        Assert.False(cache.IsUnchanged(213, new byte[] { 9, 7 }, Path));
+        Assert.False(cache.IsUnchanged(212, new byte[] { 9, 8 }, Path));
+    }
 }

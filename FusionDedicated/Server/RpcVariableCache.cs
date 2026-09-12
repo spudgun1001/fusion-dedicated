@@ -42,6 +42,17 @@ public sealed class RpcVariableCache
         }
     }
 
+    /// <summary>Whether this exact value is already held, so sending it again would change nothing.</summary>
+    public bool IsUnchanged(byte tag, byte[] body, ReadOnlySpan<byte> path)
+    {
+        var key = (tag, KeyFor(path));
+
+        lock (_lock)
+        {
+            return _values.TryGetValue(key, out var held) && held.Body.AsSpan().SequenceEqual(body);
+        }
+    }
+
     /// <summary>Drops every variable on one prop, for when it has gone.</summary>
     /// <returns>How many went.</returns>
     public int ForgetEntity(ushort entityId)
