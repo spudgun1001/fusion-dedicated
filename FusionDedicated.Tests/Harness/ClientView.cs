@@ -15,6 +15,15 @@ public sealed class ViewEntity
     public bool CulledForOwner { get; set; }
 }
 
+public sealed class ViewPlayer
+{
+    public required byte SmallId { get; init; }
+    public ulong PlatformId { get; init; }
+    public string AvatarBarcode { get; init; } = "";
+    public bool IsInitialJoin { get; init; }
+    public Dictionary<string, string> Metadata { get; } = new();
+}
+
 /// <summary>What one player's game believes, built by replaying what the server sent it.</summary>
 public sealed class ClientView
 {
@@ -28,6 +37,9 @@ public sealed class ClientView
     public bool Loaded { get; private set; }
 
     public Dictionary<ushort, ViewEntity> Entities { get; } = new();
+
+    /// <summary>Everyone this game has been told about, the server's player 0 included.</summary>
+    public Dictionary<byte, ViewPlayer> Players { get; } = new();
 
     public Dictionary<byte, (ushort Entity, byte Index)> Seats { get; } = new();
 
@@ -70,6 +82,14 @@ public sealed class ClientView
 
         switch (envelope.Tag)
         {
+            case FusionProtocol.TagConnectionResponse:
+                Join(message);
+                return;
+
+            case FusionProtocol.TagPlayerMetadataResponse:
+                MetadataChanged(envelope);
+                return;
+
             case FusionProtocol.TagSpawnResponse:
             case ServerProtocol.TagDespawnResponse:
                 if (!Loaded)
@@ -136,6 +156,42 @@ public sealed class ClientView
         if (spawn.OwnerId != SmallId)
         {
             _pendingDataRequests.Add((spawn.EntityId, spawn.OwnerId));
+        }
+    }
+
+    private void Join(byte[] message)
+    {
+        if (FusionProtocol.TryReadConnectionResponse(message) is not { } response)
+        {
+            return;
+        }
+
+        var player = new ViewPlayer
+        {
+            SmallId = response.SmallID,
+            PlatformId = response.PlatformID,
+            AvatarBarcode = response.AvatarBarcode ?? "",
+            IsInitialJoin = response.IsInitialJoin,
+        };
+
+        foreach (var (key, value) in response.Metadata)
+        {
+            player.Metadata[key] = value;
+        }
+
+        Players[response.SmallID] = player;
+    }
+
+    private void MetadataChanged(Envelope envelope)
+    {
+        var reader = new FusionNetReader(envelope.Payload);
+        byte smallId = reader.ReadByte();
+        string? key = reader.ReadString();
+        string? value = reader.ReadString();
+
+        if (key != null && Players.TryGetValue(smallId, out var player))
+        {
+            player.Metadata[key] = value ?? "";
         }
     }
 

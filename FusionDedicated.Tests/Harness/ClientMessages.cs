@@ -19,14 +19,26 @@ public static class ClientMessages
             "SLZ.BONELAB.Content.Avatar.FordBW",
             new Dictionary<string, string> { ["Username"] = name }, new List<string>());
 
-    public static byte[] Metadata(byte player, string key, string value)
+    public static byte[] Metadata(byte player, string key, string value) => MetadataFor(player, player, key, value);
+
+    /// <summary>A metadata request naming somebody other than the sender.</summary>
+    public static byte[] MetadataFor(byte sender, byte target, string key, string value)
     {
         var payload = new FusionNetWriter(64);
-        payload.Write(player);
+        payload.Write(target);
         payload.Write(key);
         payload.Write(value);
 
-        return Wrap(GateProtocol.TagPlayerMetadataRequest, ToServer, player, payload.ToArray());
+        return Wrap(GateProtocol.TagPlayerMetadataRequest, ToServer, sender, payload.ToArray());
+    }
+
+    public static byte[] PermissionCommand(byte player, ServerProtocol.PermissionCommand command, byte target)
+    {
+        var payload = new FusionNetWriter(8);
+        payload.Write((byte)command);
+        payload.WriteNullable(target);
+
+        return Wrap(ServerProtocol.TagPermissionCommandRequest, ToServer, player, payload.ToArray());
     }
 
     public static byte[] FinishedLoading(byte player) => Metadata(player, "Loading", "False");

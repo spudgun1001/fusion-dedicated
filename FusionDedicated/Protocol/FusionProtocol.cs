@@ -1249,7 +1249,8 @@ public static class FusionProtocol
         byte SmallID,
         string? AvatarBarcode,
         byte[] AvatarStats,
-        bool IsInitialJoin);
+        bool IsInitialJoin,
+        IReadOnlyDictionary<string, string> Metadata);
 
     /// <summary>
     /// Parses a ConnectionResponse. The host sends one of these for the joining client
@@ -1276,11 +1277,12 @@ public static class FusionProtocol
             byte smallId = reader.ReadByte();
 
             int metadataCount = reader.ReadInt32();
+            var metadata = new Dictionary<string, string>();
 
             for (var i = 0; i < metadataCount; i++)
             {
-                reader.ReadString();
-                reader.ReadString();
+                string key = reader.ReadString() ?? "";
+                metadata[key] = reader.ReadString() ?? "";
             }
 
             int equippedCount = reader.ReadInt32();
@@ -1296,7 +1298,7 @@ public static class FusionProtocol
 
             bool isInitialJoin = reader.ReadBool();
 
-            return new ConnectionResponseInfo(platformId, smallId, barcode, stats, isInitialJoin);
+            return new ConnectionResponseInfo(platformId, smallId, barcode, stats, isInitialJoin, metadata);
         }
         catch
         {

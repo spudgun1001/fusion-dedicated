@@ -199,4 +199,33 @@ public class ClientViewTests
 
         Assert.Empty(view.TakeDataRequests());
     }
+
+    [Fact]
+    public void A_connection_response_tells_the_view_about_a_player()
+    {
+        var view = new ClientView(5);
+
+        view.Receive(ServerProtocol.WriteConnectionResponse(76561198000000001, 3,
+            new Dictionary<string, string> { ["Username"] = "Joel", ["Loading"] = "False" },
+            new List<string>(), "SLZ.BONELAB.Content.Avatar.FordBW", Array.Empty<byte>(), true));
+
+        Assert.Equal(76561198000000001UL, view.Players[3].PlatformId);
+        Assert.Equal("Joel", view.Players[3].Metadata["Username"]);
+        Assert.Equal("SLZ.BONELAB.Content.Avatar.FordBW", view.Players[3].AvatarBarcode);
+        Assert.True(view.Players[3].IsInitialJoin);
+    }
+
+    [Fact]
+    public void A_metadata_response_changes_a_known_players_key()
+    {
+        var view = new ClientView(5);
+
+        view.Receive(ServerProtocol.WriteConnectionResponse(76561198000000001, 3,
+            new Dictionary<string, string> { ["Username"] = "Joel" },
+            new List<string>(), "", Array.Empty<byte>(), false));
+
+        view.Receive(FusionProtocol.BuildMetadataResponse(3, "Username", "Joel2"));
+
+        Assert.Equal("Joel2", view.Players[3].Metadata["Username"]);
+    }
 }
