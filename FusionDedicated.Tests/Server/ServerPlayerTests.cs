@@ -87,10 +87,19 @@ public class ServerPlayerTests
         var joel = world.Join(76561198000000001, "Joel");
         joel.FinishLoading();
 
+        int Responses() => world.Transport.SentTo(joel.Connection).Count(s =>
+            Envelope.Read(s.Message) is { Tag: FusionProtocol.TagPlayerMetadataResponse } envelope
+            && envelope.Payload[0] == 0);
+
+        int before = Responses();
+
         // Loading false would build the server a body on every screen.
         joel.Send(ClientMessages.MetadataFor(joel.SmallId, 0, "Loading", "False"));
+        joel.Send(ClientMessages.MetadataFor(joel.SmallId, 0, "Username", "Hijacked"));
 
+        Assert.Equal(before, Responses());
         Assert.Equal("True", joel.View.Players[0].Metadata["Loading"]);
+        Assert.Equal("Southside RP", joel.View.Players[0].Metadata["Username"]);
     }
 
     [Fact]
@@ -130,7 +139,7 @@ public class ServerPlayerTests
     }
 
     [Fact]
-    public void Joining_tells_players_player_0s_name_rather_than_recording_it_silently()
+    public void The_first_settings_push_sends_player_0s_name()
     {
         using var world = NewWorld();
         var joel = world.Join(76561198000000001, "Joel");
@@ -139,7 +148,7 @@ public class ServerPlayerTests
             Envelope.Read(s.Message) is { Tag: FusionProtocol.TagPlayerMetadataResponse } envelope
             && envelope.Payload[0] == 0);
 
-        // The join's own settings push is the first, and it must send the name it records.
+        // The join's settings push is the first, so it sends player 0's name once.
         Assert.Equal(1, Renames());
         Assert.Equal("Southside RP", joel.View.Players[0].Metadata["Username"]);
     }

@@ -2656,16 +2656,16 @@ public sealed class FusionServer : IDisposable
     public string BuildLobbyInfoJson()
         => LobbyInfoBuilder.Serialize(Config, Players.Players, HostPlatformId);
 
-    /// <summary>
-    /// Pushes the current settings to everyone connected. Without this a change made
-    /// in the panel would only reach players who join afterwards.
-    /// </summary>
     /// <summary>Last mortality warning said, so it is not repeated every tick.</summary>
     private string? _mortalityWarning;
 
     /// <summary>The name last sent for player 0, so a rename in the panel reaches connected players.</summary>
     private string? _serverPlayerName;
 
+    /// <summary>
+    /// Pushes the current settings to everyone connected. Without this a change made
+    /// in the panel would only reach players who join afterwards.
+    /// </summary>
     public void PushSettings()
     {
         Players.MaxPlayers = Config.MaxPlayers;
@@ -2686,7 +2686,8 @@ public sealed class FusionServer : IDisposable
 
         Broadcast(ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
 
-        // Player 0 carries the server's name. Stored only when it is sent, so a rename from the panel thread cannot be recorded without reaching players.
+        // Player 0 carries the server's name. Stored only when it is sent, so a rename
+        // from the panel thread cannot be recorded without reaching players.
         string serverName = Config.ServerName;
 
         if (_serverPlayerName != serverName)
