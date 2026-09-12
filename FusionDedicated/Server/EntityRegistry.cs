@@ -112,9 +112,9 @@ public sealed class TrackedEntity
     public bool IsOrphaned => OwnerSmallId == null;
 
     /// <summary>
-    /// A persistent prop is deliberately ownerless, so nobody simulates it and it
-    /// stays where it was put. That would normally make it an orphan to be culled,
-    /// which is why every cull asks this first.
+    /// A persistent prop is registered ownerless, like any other entity waiting for
+    /// the join catch-up to adopt it. That would normally make it an orphan to be
+    /// culled, which is why every cull asks this first.
     /// </summary>
     public bool Removable => !Persistent;
 

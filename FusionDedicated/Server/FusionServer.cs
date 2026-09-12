@@ -2157,9 +2157,9 @@ public sealed class FusionServer : IDisposable
     /// Puts this level's placed props in front of somebody who just joined.
     ///
     /// They are registered once, the first time anybody needs them, and sent to
-    /// everyone after that, so every client agrees on the ids. They are left
-    /// ownerless on purpose: nobody simulates them, so they stay exactly where
-    /// they were put, and being persistent is what stops a cull taking them.
+    /// everyone after that, so every client agrees on the ids. They are registered
+    /// ownerless; the catch-up below then adopts them to an online player like any
+    /// other ownerless entity, and being persistent is what stops a cull taking them.
     /// </summary>
     /// <summary>
     /// Puts the world in front of somebody who has just arrived.
@@ -2236,9 +2236,8 @@ public sealed class FusionServer : IDisposable
     ///
     /// Only registering. The catch-up above sends every entity it knows about,
     /// props included, so sending them here as well put each prop on a client
-    /// twice. They are left ownerless on purpose: nobody simulates them, so they
-    /// stay where they were put, and being persistent is what stops a cull
-    /// taking them.
+    /// twice. They are registered ownerless; the catch-up adopts each one to an
+    /// online player, and being persistent is what stops a cull taking them.
     /// </summary>
     private void EnsurePersistentProps(ConnectedPlayer player)
     {
@@ -2253,6 +2252,7 @@ public sealed class FusionServer : IDisposable
                 e.Persistent
                 && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
                 && Math.Abs(e.X - prop.X) < 0.5f
+                && Math.Abs(e.Y - prop.Y) < 0.5f
                 && Math.Abs(e.Z - prop.Z) < 0.5f);
 
             ushort id;
@@ -2310,8 +2310,8 @@ public sealed class FusionServer : IDisposable
 
         store.Save();
 
-        // Ownerless from here on, so nobody's physics moves it and nobody's
-        // leaving orphans it.
+        // Ownerless from here on. The next join catch-up adopts it to an online
+        // player, the same as any other ownerless entity.
         Entities.SetOwner(entityId, null);
 
         Log("INFO", $"'{entity.ShortName}' will be put back on {Config.LevelTitle}");
