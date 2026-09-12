@@ -122,6 +122,18 @@ public class PersistentPropTests : IDisposable
     }
 
     [Fact]
+    public void Removing_takes_the_closest_of_two_props_side_by_side()
+    {
+        var store = new PersistentPropStore(Path_);
+        store.Add(Bodymall(x: 8.3f));
+        store.Add(Bodymall(x: 8.5f));
+
+        Assert.True(store.Remove("DayTrip.PortableBodymall.Spawnable.Bodymall", "Museum", 8.5f, 5.2f, -14f));
+
+        Assert.Equal(8.3f, store.All.Single().X);
+    }
+
+    [Fact]
     public void A_file_that_will_not_parse_keeps_what_is_already_loaded()
     {
         var store = new PersistentPropStore(Path_);

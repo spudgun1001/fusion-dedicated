@@ -96,17 +96,19 @@ public sealed class PersistentPropStore
     }
 
     /// <summary>
-    /// Removes the first prop matching a barcode and place on this level. Position
+    /// Removes the closest prop matching a barcode and place on this level. Position
     /// is compared loosely, because a prop settles a little after it is dropped.
     /// </summary>
     public bool Remove(string barcode, string level, float x, float y, float z)
     {
         lock (_lock)
         {
-            var found = _props.FirstOrDefault(p =>
-                string.Equals(p.Barcode, barcode, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(p.Level, level, StringComparison.OrdinalIgnoreCase)
-                && Near(p.X, x) && Near(p.Y, y) && Near(p.Z, z));
+            var found = _props
+                .Where(p => string.Equals(p.Barcode, barcode, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(p.Level, level, StringComparison.OrdinalIgnoreCase)
+                    && Near(p.X, x) && Near(p.Y, y) && Near(p.Z, z))
+                .OrderBy(p => (p.X - x) * (p.X - x) + (p.Y - y) * (p.Y - y) + (p.Z - z) * (p.Z - z))
+                .FirstOrDefault();
 
             return found != null && _props.Remove(found);
         }

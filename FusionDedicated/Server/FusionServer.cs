@@ -2247,12 +2247,18 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        var claimed = new HashSet<ushort>();
+
         foreach (var prop in store.For(Config.LevelBarcode))
         {
-            var existing = Entities.Entities.FirstOrDefault(e =>
-                e.Persistent
-                && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
-                && MatchesKeptPosition(e, prop));
+            // Props side by side can both be in range of one entity, so each record takes the closest one not yet taken.
+            var existing = Entities.Entities
+                .Where(e => e.Persistent
+                    && !claimed.Contains(e.Id)
+                    && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
+                    && MatchesKeptPosition(e, prop))
+                .OrderBy(e => KeptDistanceSquared(e, prop))
+                .FirstOrDefault();
 
             ushort id;
 
@@ -2271,6 +2277,8 @@ public sealed class FusionServer : IDisposable
                 tracked.KeptAt = (prop.X, prop.Y, prop.Z);
                 Entities.SetOwner(id, null);
             }
+
+            claimed.Add(id);
         }
     }
 
@@ -2285,6 +2293,13 @@ public sealed class FusionServer : IDisposable
         return Math.Abs(x - prop.X) < 0.5f
             && Math.Abs(y - prop.Y) < 0.5f
             && Math.Abs(z - prop.Z) < 0.5f;
+    }
+
+    private static float KeptDistanceSquared(TrackedEntity entity, Props.PersistentProp prop)
+    {
+        var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
+
+        return (x - prop.X) * (x - prop.X) + (y - prop.Y) * (y - prop.Y) + (z - prop.Z) * (z - prop.Z);
     }
 
     /// <summary>Marks a tracked entity to be put back after a restart.</summary>
