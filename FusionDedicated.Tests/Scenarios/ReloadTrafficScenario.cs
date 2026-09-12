@@ -5,7 +5,7 @@ using Xunit.Abstractions;
 
 namespace FusionDedicated.Tests.Scenarios;
 
-/// <summary>Scenario 6: what a phones plugin reload sends, 47 payphones each told their state five times.</summary>
+/// <summary>Scenario 6: what a phones plugin reload sends, 47 payphones told their state once no matter how many times the reload repeats it.</summary>
 public class ReloadTrafficScenario(ITestOutputHelper output)
 {
     [Fact]
@@ -50,9 +50,8 @@ public class ReloadTrafficScenario(ITestOutputHelper output)
 
             output.WriteLine($"{player.Name}: {rpcs.Count} messages, {rpcs.Sum(m => m.Message.Length)} bytes");
 
-            // This is today's count: every announce resends every value. It should fall once
-            // the server stops resending values that already match what it has cached.
-            Assert.Equal(47 * 7 * 5, rpcs.Count);
+            // Only the first announce sends anything; the four repeats carry values every client already has.
+            Assert.Equal(47 * 7, rpcs.Count);
         }
     }
 }

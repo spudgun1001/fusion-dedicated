@@ -2893,13 +2893,21 @@ public sealed class FusionServer : IDisposable
 
         byte[] payload = RpcProtocol.WriteValue(kind, pathBytes, value);
 
-        // Held so somebody who joins afterwards is told it too. Without this a
-        // value the server set was only ever heard by whoever was already here.
+        // Held so somebody who joins afterwards is told it too. An unchanged
+        // broadcast is skipped, so a plugin undoes a per-player value with another per-player send.
         if (platformId == null
             && kind != BonelabServerBrowser.Fusion.RpcKind.Event
             && payload.Length <= MaxCachedBody)
         {
-            CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
+            lock (_cacheLock)
+            {
+                if (_rpcVariables.IsUnchanged((byte)kind, payload, pathBytes))
+                {
+                    return;
+                }
+
+                CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
+            }
         }
 
         // Stamped as the player being told rather than as the server, which is
