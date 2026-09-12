@@ -2251,9 +2251,7 @@ public sealed class FusionServer : IDisposable
             var existing = Entities.Entities.FirstOrDefault(e =>
                 e.Persistent
                 && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
-                && Math.Abs(e.X - prop.X) < 0.5f
-                && Math.Abs(e.Y - prop.Y) < 0.5f
-                && Math.Abs(e.Z - prop.Z) < 0.5f);
+                && MatchesKeptPosition(e, prop));
 
             ushort id;
 
@@ -2273,6 +2271,19 @@ public sealed class FusionServer : IDisposable
                 Entities.SetOwner(id, null);
             }
         }
+    }
+
+    /// <summary>
+    /// Matches a kept record against where the entity was kept, not where it has
+    /// since settled to, falling back to its live position for one with no record.
+    /// </summary>
+    private static bool MatchesKeptPosition(TrackedEntity entity, Props.PersistentProp prop)
+    {
+        var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
+
+        return Math.Abs(x - prop.X) < 0.5f
+            && Math.Abs(y - prop.Y) < 0.5f
+            && Math.Abs(z - prop.Z) < 0.5f;
     }
 
     /// <summary>Marks a tracked entity to be put back after a restart.</summary>
