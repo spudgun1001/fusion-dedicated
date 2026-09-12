@@ -50,6 +50,26 @@ public class SocketSeamTests
     }
 
     [Fact]
+    public void A_failed_broadcast_does_not_count_as_bytes_out()
+    {
+        var transport = new FailingSendTransport();
+        using var server = new FusionServer(new ServerConfig(), transport);
+        server.Start();
+
+        var player = new ConnectedPlayer
+        {
+            Connection = new Steamworks.HSteamNetConnection(1),
+            PlatformId = 76561198000000001UL,
+            SmallId = 1,
+        };
+        server.Players.Add(player);
+
+        server.Broadcast(new byte[] { 1, 2, 3 }, reliable: true);
+
+        Assert.Equal(0L, player.BytesOut);
+    }
+
+    [Fact]
     public void The_steam_transport_accepts_a_read_failure_callback()
     {
         string source = SteamSocketTransportSource();

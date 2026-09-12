@@ -3750,7 +3750,7 @@ public sealed class FusionServer : IDisposable
             AnnounceOwner(vehicleId, sender.SmallId);
 
             Log("INFO", $"Entity {vehicleId} now owned by {sender.DisplayName} (player {sender.SmallId}), " +
-                        "who sits in it", console: false);
+                        $"who sits in it in seat {seat.Index}", console: false);
         }
 
         var known = Entities.Get(vehicleId);
@@ -4156,18 +4156,24 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            SendTo(player.Connection, message, reliable);
-            player.BytesOut += message.Length;
+            if (SendTo(player.Connection, message, reliable))
+            {
+                player.BytesOut += message.Length;
+            }
         }
     }
 
-    public void SendTo(HSteamNetConnection connection, byte[] message, bool reliable)
+    public bool SendTo(HSteamNetConnection connection, byte[] message, bool reliable)
     {
-        if (_transport.Send(connection, message, reliable))
+        bool sent = _transport.Send(connection, message, reliable);
+
+        if (sent)
         {
             PacketsOut++;
             BytesOut += message.Length;
         }
+
+        return sent;
     }
 
     public void Kick(byte smallId, string reason)

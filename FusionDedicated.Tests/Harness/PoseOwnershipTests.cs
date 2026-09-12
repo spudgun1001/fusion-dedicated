@@ -121,6 +121,28 @@ public class PoseOwnershipTests
     }
 
     [Fact]
+    public void A_seated_driver_taking_ownership_is_logged_with_the_seat()
+    {
+        using var world = new World();
+        var driver = world.Join(76561198000000001, "Driver");
+        var passenger = world.Join(76561198000000002, "Passenger");
+        driver.FinishLoading();
+        passenger.FinishLoading();
+
+        world.Spawn(driver, Car, "BaBaCorp.AssortedAutomobiles.Spawnable.SendalSopperSedan", 0, 0, 0);
+
+        // The passenger takes the car before anyone drives it.
+        passenger.Send(FusionProtocol.BuildOwnershipRequest(passenger.SmallId, Car));
+        Assert.Equal(passenger.SmallId, world.Server.Entities.Get(Car)!.OwnerSmallId);
+
+        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, Car, 0, true));
+        driver.Send(FusionProtocol.BuildEntityPoseUpdate(driver.SmallId, Car, new Vec3(4, 0, 4), default, default, default));
+
+        // HandleSeat also logs "sat in seat 0", so this checks the owner line specifically.
+        Assert.Contains(world.Server.RecentLog(2000), e => e.Message.Contains("now owned by") && e.Message.Contains("in seat 0"));
+    }
+
+    [Fact]
     public void A_seated_driver_refused_the_vehicle_does_not_resurrect_it()
     {
         // Raising the constrainer rank past Default makes ToolGate refuse a
