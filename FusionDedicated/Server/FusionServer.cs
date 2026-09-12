@@ -707,8 +707,13 @@ public sealed class FusionServer : IDisposable
                     return;
                 }
 
+                var (_, _, hitTarget) = ServerProtocol.ReadRoute(message);
+                ulong targetPlatformId = hitTarget is { } targetSmall
+                    ? Players.Get(targetSmall)?.PlatformId ?? 0UL
+                    : 0UL;
+
                 var pluginDamage = Plugins?.Damage.Raise(new Plugins.DamageEvent(
-                    sender.PlatformId, sender.DisplayName, 0,
+                    sender.PlatformId, sender.DisplayName, targetPlatformId,
                     GateProtocol.TryReadDamage(message) ?? 0f));
 
                 if (pluginDamage is { Allowed: false })
