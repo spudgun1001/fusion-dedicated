@@ -50,6 +50,17 @@ public sealed class World : IDisposable
         Sync();
     }
 
+    /// <summary>Puts a prop in the world the way a spawn does: the server keeps it and tells everyone here.</summary>
+    public void Spawn(FakePlayer owner, ushort id, string barcode, float x, float y, float z)
+    {
+        var entity = Server.Entities.Register(id, barcode, owner.SmallId, x, y, z);
+        entity.Source = FusionProtocol.SourcePlayer;
+
+        Server.Broadcast(FusionProtocol.BuildSpawnResponse(owner.SmallId, owner.SmallId, id, barcode,
+            new Vec3(x, y, z), rotation: null, trackerId: 0), reliable: true);
+        Sync();
+    }
+
     public void Advance(TimeSpan by)
     {
         Now += by;

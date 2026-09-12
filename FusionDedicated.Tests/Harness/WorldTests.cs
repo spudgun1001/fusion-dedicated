@@ -67,4 +67,19 @@ public class WorldTests
 
         Assert.Null(world.Server.Players.GetByPlatformId(76561198000000001));
     }
+
+    [Fact]
+    public void A_prop_spawned_while_players_are_here_is_seen_by_them_all()
+    {
+        using var world = new World();
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+        var kanza = world.Join(76561198000000002, "Kanza");
+        kanza.FinishLoading();
+
+        world.Spawn(kanza, 300, "Pack.Spawnable.Crate", 1, 2, 3);
+
+        Assert.Equal(kanza.SmallId, joel.View.Entities[300].Owner);
+        Assert.Equal(kanza.SmallId, kanza.View.Entities[300].Owner);
+    }
 }
