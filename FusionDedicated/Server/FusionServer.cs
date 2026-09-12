@@ -1345,6 +1345,13 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Player 0 is the server. Loading false on it would build it a body.
+        if (request.Value.PlayerSmallId == PlayerRegistry.ServerSmallId)
+        {
+            Refuse(sender, "metadata", $"{sender.DisplayName} tried to set metadata on the server's player 0");
+            return;
+        }
+
         if (request.Value.PlayerSmallId != sender.SmallId
             && !sender.Permission.IsAtLeast(PermissionLevel.Operator))
         {
@@ -1745,6 +1752,12 @@ public sealed class FusionServer : IDisposable
         if (!targetId.HasValue)
         {
             Log("WARN", $"{sender.DisplayName} sent a {command} naming nobody");
+            return;
+        }
+
+        if (targetId.Value == PlayerRegistry.ServerSmallId)
+        {
+            Log("WARN", $"{sender.DisplayName} tried to {command} SmallID 0, which is the server");
             return;
         }
 

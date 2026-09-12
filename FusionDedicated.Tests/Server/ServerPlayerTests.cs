@@ -1,4 +1,5 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 using FusionDedicated.Tests.Harness;
 
@@ -73,5 +74,37 @@ public class ServerPlayerTests
 
         Assert.Equal(1, Told(joel));
         Assert.Equal(1, Told(kanza));
+    }
+
+    [Theory]
+    [InlineData(PermissionLevel.Default)]
+    [InlineData(PermissionLevel.Operator)]
+    public void Nobody_may_change_player_0s_metadata(PermissionLevel rank)
+    {
+        var config = new ServerConfig { CullOrphanedEntities = false, ServerName = "Southside RP" };
+        config.Permissions.Add(new PermissionEntry { PlatformId = 76561198000000001, Level = rank });
+        using var world = NewWorld(config);
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+
+        // Loading false would build the server a body on every screen.
+        joel.Send(ClientMessages.MetadataFor(joel.SmallId, 0, "Loading", "False"));
+
+        Assert.Equal("True", joel.View.Players[0].Metadata["Loading"]);
+    }
+
+    [Fact]
+    public void Kicking_player_0_is_logged_as_aimed_at_the_server()
+    {
+        var config = new ServerConfig { CullOrphanedEntities = false, ServerName = "Southside RP" };
+        config.Permissions.Add(new PermissionEntry { PlatformId = 76561198000000001, Level = PermissionLevel.Operator });
+        using var world = NewWorld(config);
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+
+        joel.Send(ClientMessages.PermissionCommand(joel.SmallId, ServerProtocol.PermissionCommand.Kick, 0));
+
+        Assert.Contains(world.Server.RecentLog(), entry => entry.Message.Contains("which is the server"));
+        Assert.Contains(joel, world.Players);
     }
 }
