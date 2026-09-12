@@ -134,6 +134,7 @@ public sealed class PluginRpc
     }
 
     /// <summary>Sets a value on a component, for everybody or for one player.</summary>
+    /// <remarks>A broadcast of the value the server already holds is skipped, so undo a per-player value with another per-player send.</remarks>
     public void SetInt(string path, int value, ulong? platformId = null)
         => Send(RpcKind.Int, path, RpcValue.OfInt(value), platformId);
 

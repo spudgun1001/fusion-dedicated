@@ -2155,14 +2155,6 @@ public sealed class FusionServer : IDisposable
             handlerTag, PlayerRegistry.ServerSmallId, payload), reliable: true);
 
     /// <summary>
-    /// Puts this level's placed props in front of somebody who just joined.
-    ///
-    /// They are registered once, the first time anybody needs them, and sent to
-    /// everyone after that, so every client agrees on the ids. They are registered
-    /// ownerless; the catch-up below then adopts them to an online player like any
-    /// other ownerless entity, and being persistent is what stops a cull taking them.
-    /// </summary>
-    /// <summary>
     /// Puts the world in front of somebody who has just arrived.
     ///
     /// A relay is not a host, and Fusion's own catch-up runs on the host alone,
