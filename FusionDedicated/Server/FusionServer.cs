@@ -288,6 +288,7 @@ public sealed class FusionServer : IDisposable
         _rateLimiter.Forget(player.SmallId);
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
+        _ownershipRefusalLog.Remove(player.SmallId);
         SeatForgetRider(player.SmallId);
 
         // Small ids are reused, so the next holder of this one is a different
@@ -3493,6 +3494,9 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private const uint CatchupTracker = uint.MaxValue;
 
+    /// <summary>Keeps the "Refused an ownership request" line from repeating every tick.</summary>
+    private readonly Dictionary<byte, DateTime> _ownershipRefusalLog = new();
+
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = TryReadOwnership(message);
@@ -3507,6 +3511,24 @@ public sealed class FusionServer : IDisposable
         }
 
         var (requestedOwner, entityId) = request.Value;
+
+        // A LabFusion client only ever asks ownership for itself. A request naming
+        // somebody else is spoofed, so it is refused before it reaches a plugin or
+        // a tool gate, and nothing is set or announced.
+        if (requestedOwner != sender.SmallId)
+        {
+            DateTime now = Clock();
+            var lastRefusal = _ownershipRefusalLog.TryGetValue(sender.SmallId, out var when) ? when : (DateTime?)null;
+
+            if (PoseLogThrottle.ShouldLog(lastRefusal, now))
+            {
+                _ownershipRefusalLog[sender.SmallId] = now;
+                Log("WARN", $"Refused an ownership request from {sender.DisplayName} naming player " +
+                            $"{requestedOwner} for entity {entityId}", console: false);
+            }
+
+            return;
+        }
 
         if (!MayHold(sender, entityId))
         {
