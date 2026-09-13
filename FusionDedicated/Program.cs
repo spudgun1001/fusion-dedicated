@@ -239,16 +239,20 @@ public static class Program
         var pluginEvents = new PluginEvents(pluginHealth, (level, message) => server.Log(level, message));
 
         // Kick takes a small id rather than a SteamID, so the delegate resolves it.
+        //
+        // Kick, ban and rank reach state only the loop may change, so they run on it.
+        // Plugins hold their own locks while calling in and must never wait for the
+        // world lock. Everything below them uses state with a lock of its own.
         var pluginActions = new ServerPluginActions(
-            (id, reason) =>
+            (id, reason) => server.OnLoop(() =>
             {
                 if (server.Players.GetByPlatformId(id) is { } target)
                 {
                     server.Kick(target.SmallId, reason);
                 }
-            },
-            (id, reason) => server.Ban(id, "", reason),
-            (id, level) => server.SetPermission(id, "", level),
+            }),
+            (id, reason) => server.OnLoop(() => server.Ban(id, "", reason)),
+            (id, level) => server.OnLoop(() => server.SetPermission(id, "", level)),
             id => server.RemoveEntity(id),
             (id, tag, payload) => server.SendModuleTo(id, tag, payload),
             (tag, payload) => server.BroadcastModule(tag, payload),
@@ -426,78 +430,83 @@ public static class Program
             // process with players on it: a file busy for a moment was enough.
             try
             {
-                SteamAPI.RunCallbacks();
-
-                server.Receive();
-
-                if ((DateTime.UtcNow - lastLobbyUpdate).TotalSeconds >= 5)
+                // One pass at a time under the world lock, so the panel, console and RCON
+                // never change the world halfway through one.
+                server.Exclusive(() =>
                 {
-                    if (!lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID)
-                        && wasPublished)
+                    SteamAPI.RunCallbacks();
+
+                    server.Receive();
+
+                    if ((DateTime.UtcNow - lastLobbyUpdate).TotalSeconds >= 5)
                     {
-                        server.Log("WARN", "The Steam lobby has gone, so the server is no longer in " +
-                                           "the browser. Publishing it again.");
+                        if (!lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID)
+                            && wasPublished)
+                        {
+                            server.Log("WARN", "The Steam lobby has gone, so the server is no longer in " +
+                                               "the browser. Publishing it again.");
+                        }
+
+                        wasPublished = lobby.IsPublished;
+                        lastLobbyUpdate = DateTime.UtcNow;
                     }
 
-                    wasPublished = lobby.IsPublished;
-                    lastLobbyUpdate = DateTime.UtcNow;
-                }
-
-                // Steam can take minutes to sign in. Asking once at startup left the
-                // server invisible for good when it had not finished by then.
-                //
-                // Started and left running, never awaited. Steam completes the call
-                // through RunCallbacks, this loop is the only thing pumping it, and
-                // awaiting here would suspend the loop waiting for a callback nothing
-                // can raise: the whole server would stop rather than recover.
-                if (lobbyPublish.MayStart(DateTime.UtcNow)
-                    && lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow))
-                {
-                    lobbyPublish.Started(lobby.PublishAsync(config.MaxPlayers), DateTime.UtcNow);
-                }
-
-                if (lobbyPublish.Collect() is { } published && published)
-                {
-                    lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
-                    wasPublished = true;
-                    server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
-                }
-
-                // Anything waiting on a shorter clock than the tick below.
-                server.PumpDeferred();
-
-                if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
-                {
-                    if (blocklist.ReloadIfChanged())
+                    // Steam can take minutes to sign in. Asking once at startup left the
+                    // server invisible for good when it had not finished by then.
+                    //
+                    // Started and left running, never awaited. Steam completes the call
+                    // through RunCallbacks, this loop is the only thing pumping it, and
+                    // awaiting here would suspend the loop waiting for a callback nothing
+                    // can raise: the whole server would stop rather than recover.
+                    if (lobbyPublish.MayStart(DateTime.UtcNow)
+                        && lobbyRetry.ShouldRetry(lobby.IsPublished, DateTime.UtcNow))
                     {
-                        server.RebuildBlocklist();
-                        server.Log("INFO", "Reloaded blocklist.json");
+                        lobbyPublish.Started(lobby.PublishAsync(config.MaxPlayers), DateTime.UtcNow);
                     }
 
-                    if (bans.ReloadIfChanged())
+                    if (lobbyPublish.Collect() is { } published && published)
                     {
-                        server.Log("INFO", $"Reloaded bans.json, {bans.Entries.Count} listed");
+                        lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
+                        wasPublished = true;
+                        server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
                     }
 
-                    if (members.ReloadIfChanged())
+                    // Anything waiting on a shorter clock than the tick below.
+                    server.PumpDeferred();
+
+                    if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
                     {
-                        server.Log("INFO", $"Reloaded whitelist.json, {members.Entries.Count} listed");
+                        if (blocklist.ReloadIfChanged())
+                        {
+                            server.RebuildBlocklist();
+                            server.Log("INFO", "Reloaded blocklist.json");
+                        }
+
+                        if (bans.ReloadIfChanged())
+                        {
+                            server.Log("INFO", $"Reloaded bans.json, {bans.Entries.Count} listed");
+                        }
+
+                        if (members.ReloadIfChanged())
+                        {
+                            server.Log("INFO", $"Reloaded whitelist.json, {members.Entries.Count} listed");
+                        }
+
+                        if (bans.SweepExpired() > 0)
+                        {
+                            bans.Save();
+                        }
+
+                        server.Tick();
+                        lastTick = DateTime.UtcNow;
                     }
 
-                    if (bans.SweepExpired() > 0)
+                    if ((DateTime.UtcNow - lastSample).TotalSeconds >= 5)
                     {
-                        bans.Save();
+                        server.Resources.Sample_(server);
+                        lastSample = DateTime.UtcNow;
                     }
-
-                    server.Tick();
-                    lastTick = DateTime.UtcNow;
-                }
-
-                if ((DateTime.UtcNow - lastSample).TotalSeconds >= 5)
-                {
-                    server.Resources.Sample_(server);
-                    lastSample = DateTime.UtcNow;
-                }
+                });
             }
             catch (Exception ex)
             {
@@ -511,10 +520,13 @@ public static class Program
         Console.WriteLine();
         server.Log("INFO", "Shutting down...");
 
-        foreach (var player in server.Players.Players)
+        server.Exclusive(() =>
         {
-            server.Kick(player.SmallId, "Server shutting down");
-        }
+            foreach (var player in server.Players.Players)
+            {
+                server.Kick(player.SmallId, "Server shutting down");
+            }
+        });
 
         await Task.Delay(400);
 
