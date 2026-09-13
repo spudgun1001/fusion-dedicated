@@ -50,4 +50,16 @@ public class ProgramLockTests
         Assert.True(exclusive >= 0, "the shutdown kicks do not take the world lock");
         Assert.True(exclusive < shutdown.IndexOf("server.Kick(player.SmallId", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void The_shutdown_runs_queued_plugin_actions_before_the_kicks()
+    {
+        string shutdown = ProgramSource.Between("// ---- shutdown ----", "await Task.Delay(400);");
+
+        int exclusive = shutdown.IndexOf("server.Exclusive(", StringComparison.Ordinal);
+        int pump = shutdown.IndexOf("server.PumpDeferred();", StringComparison.Ordinal);
+
+        Assert.True(exclusive >= 0 && pump > exclusive, "the shutdown does not run queued plugin actions inside the world lock");
+        Assert.True(pump < shutdown.IndexOf("server.Kick(player.SmallId", StringComparison.Ordinal));
+    }
 }

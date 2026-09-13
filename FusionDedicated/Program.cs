@@ -522,6 +522,9 @@ public static class Program
 
         server.Exclusive(() =>
         {
+            // A plugin ban or rank change queued in the last pass would otherwise never be saved.
+            server.PumpDeferred();
+
             foreach (var player in server.Players.Players)
             {
                 server.Kick(player.SmallId, "Server shutting down");
