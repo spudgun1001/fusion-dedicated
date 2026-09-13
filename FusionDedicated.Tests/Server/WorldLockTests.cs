@@ -32,29 +32,36 @@ public class WorldLockTests
     }
 
     [Fact]
-    public void Exclusive_keeps_another_thread_out_until_it_is_released()
+    public async Task Exclusive_keeps_another_thread_out_until_it_is_released()
     {
         using var world = new World();
-        using var inside = new ManualResetEventSlim();
+        var inside = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var release = new ManualResetEventSlim();
 
         var holder = Task.Run(() => world.Server.Exclusive(() =>
         {
-            inside.Set();
+            inside.SetResult();
             release.Wait();
         }));
 
-        inside.Wait();
+        try
+        {
+            await inside.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        var other = Task.Run(() => world.Server.Exclusive(() => 42));
+            var other = Task.Run(() => world.Server.Exclusive(() => 42));
 
-        Assert.False(other.Wait(TimeSpan.FromMilliseconds(200)));
+            Assert.NotSame(other, await Task.WhenAny(other, Task.Delay(200)));
 
-        release.Set();
+            release.Set();
 
-        Assert.True(other.Wait(TimeSpan.FromSeconds(5)));
-        Assert.Equal(42, other.Result);
-        holder.Wait();
+            Assert.Equal(42, await other.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            release.Set();
+        }
+
+        await holder.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     [Fact]
@@ -66,15 +73,13 @@ public class WorldLockTests
     }
 
     [Fact]
-    public void A_throw_inside_Exclusive_releases_the_lock()
+    public async Task A_throw_inside_Exclusive_releases_the_lock()
     {
         using var world = new World();
 
         Assert.Throws<InvalidOperationException>(
             () => world.Server.Exclusive(() => throw new InvalidOperationException("boom")));
 
-        var other = Task.Run(() => world.Server.Exclusive(() => 1));
-
-        Assert.True(other.Wait(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, await Task.Run(() => world.Server.Exclusive(() => 1)).WaitAsync(TimeSpan.FromSeconds(5)));
     }
 }
