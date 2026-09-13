@@ -118,6 +118,16 @@ public sealed class Dashboard
             catch (Exception ex)
             {
                 _server.Log("ERROR", $"Panel: {ex.Message}");
+
+                // Answered, so the browser is not left waiting on a request that failed.
+                try
+                {
+                    context.Response.StatusCode = 500;
+                    context.Response.Close();
+                }
+                catch
+                {
+                }
             }
         }
     }
@@ -161,13 +171,17 @@ public sealed class Dashboard
                 return;
 
             case "/api/state":
+            {
                 // A banker is given the shell and nothing to put in it. They need
                 // this to draw the panel at all, and hiding the rest in the page
                 // would only be hiding it: the answer would still have been sent.
-                ServeJson(context, _actingRole == PanelRole.Banker
+                var state = _server.Exclusive(() => _actingRole == PanelRole.Banker
                     ? BuildBankerState()
                     : BuildState());
+
+                ServeJson(context, state);
                 return;
+            }
 
             case "/api/kick":
                 HandleKick(context, query);
@@ -202,13 +216,13 @@ public sealed class Dashboard
                 return;
 
             case "/api/clear":
-                ServeJson(context, new
-                {
-                    ok = true,
-                    removed = _server.ClearAllEntities(
-                        query["includeDiscovered"] == "1" || _config.ClearDiscoveredEntities),
-                });
+            {
+                int removed = _server.Exclusive(() => _server.ClearAllEntities(
+                    query["includeDiscovered"] == "1" || _config.ClearDiscoveredEntities));
+
+                ServeJson(context, new { ok = true, removed });
                 return;
+            }
 
             case "/api/gather":
                 HandleGather(context, query);
@@ -231,8 +245,13 @@ public sealed class Dashboard
                 return;
 
             case "/api/audit":
-                ServeJson(context, _server.AuditTrail?.Recent(200) ?? Array.Empty<object>().Cast<object>());
+            {
+                var entries = _server.Exclusive(() =>
+                    _server.AuditTrail?.Recent(200) ?? Array.Empty<object>().Cast<object>());
+
+                ServeJson(context, entries);
                 return;
+            }
 
             case "/api/purge":
                 HandlePurge(context, query);
@@ -244,19 +263,24 @@ public sealed class Dashboard
 
             case "/api/modules":
             {
-                if (query["enabled"] is { Length: > 0 } wanted)
+                var modules = _server.Exclusive(() =>
                 {
-                    _server.ModuleInspector.Enabled = wanted == "1" || wanted == "true";
-                    _config.ModuleInspection = _server.ModuleInspector.Enabled;
-                    _config.Save(Program.ConfigPath);
-                }
+                    if (query["enabled"] is { Length: > 0 } wanted)
+                    {
+                        _server.ModuleInspector.Enabled = wanted == "1" || wanted == "true";
+                        _config.ModuleInspection = _server.ModuleInspector.Enabled;
+                        _config.Save(Program.ConfigPath);
+                    }
 
-                ServeJson(context, new
-                {
-                    ok = true,
-                    enabled = _server.ModuleInspector.Enabled,
-                    seen = _server.ModuleInspector.Recent,
+                    return new
+                    {
+                        ok = true,
+                        enabled = _server.ModuleInspector.Enabled,
+                        seen = _server.ModuleInspector.Recent,
+                    };
                 });
+
+                ServeJson(context, modules);
                 return;
             }
 
@@ -700,7 +724,7 @@ public sealed class Dashboard
         if (byte.TryParse(query["id"], out var smallId))
         {
             string reason = query["reason"] is { Length: > 0 } r ? r : "Kicked by server operator";
-            _server.Kick(smallId, reason);
+            _server.Exclusive(() => _server.Kick(smallId, reason));
         }
 
         ServeJson(context, new { ok = true });
@@ -723,28 +747,33 @@ public sealed class Dashboard
         }
 
         string note = query["note"] ?? "";
-        bool written = _server.BanList?.SetNote(platformId, note) ?? false;
 
-        if (!written)
+        object reply = _server.Exclusive<object>(() =>
         {
-            foreach (var entry in _config.Bans.Where(b => b.PlatformId == platformId))
+            bool written = _server.BanList?.SetNote(platformId, note) ?? false;
+
+            if (!written)
             {
-                entry.Note = note;
-                written = true;
+                foreach (var entry in _config.Bans.Where(b => b.PlatformId == platformId))
+                {
+                    entry.Note = note;
+                    written = true;
+                }
             }
-        }
 
-        if (!written)
-        {
-            ServeJson(context, new { ok = false, error = "no such ban" });
-            return;
-        }
+            if (!written)
+            {
+                return new { ok = false, error = "no such ban" };
+            }
 
-        _server.BanList?.Save();
-        _config.Save(Program.ConfigPath);
+            _server.BanList?.Save();
+            _config.Save(Program.ConfigPath);
 
-        _server.Log("INFO", $"Note written on the ban for {platformId} by {_acting}");
-        ServeJson(context, new { ok = true });
+            _server.Log("INFO", $"Note written on the ban for {platformId} by {_acting}");
+            return new { ok = true };
+        });
+
+        ServeJson(context, reply);
     }
 
     private void HandleBan(HttpListenerContext context, NameValueCollection query)
@@ -752,24 +781,28 @@ public sealed class Dashboard
         string reason = query["reason"] is { Length: > 0 } r ? r : "Banned from Server";
         string note = query["note"] ?? "";
 
-        if (byte.TryParse(query["id"], out var smallId) && _server.Players.Get(smallId) is { } player)
+        object reply = _server.Exclusive<object>(() =>
         {
-            _server.Ban(player.PlatformId, player.Username, reason,
-                null, Server.Audit.AuditChannel.Panel, _acting, note);
-        }
-        else if (ulong.TryParse(query["platformId"], out var platformId))
-        {
-            _server.Ban(platformId, query["username"] ?? "", reason,
-                null, Server.Audit.AuditChannel.Panel, _acting, note);
-        }
-        else
-        {
-            ServeJson(context, new { ok = false, error = "no such player" });
-            return;
-        }
+            if (byte.TryParse(query["id"], out var smallId) && _server.Players.Get(smallId) is { } player)
+            {
+                _server.Ban(player.PlatformId, player.Username, reason,
+                    null, Server.Audit.AuditChannel.Panel, _acting, note);
+            }
+            else if (ulong.TryParse(query["platformId"], out var platformId))
+            {
+                _server.Ban(platformId, query["username"] ?? "", reason,
+                    null, Server.Audit.AuditChannel.Panel, _acting, note);
+            }
+            else
+            {
+                return new { ok = false, error = "no such player" };
+            }
 
-        _config.Save(Program.ConfigPath);
-        ServeJson(context, new { ok = true });
+            _config.Save(Program.ConfigPath);
+            return new { ok = true };
+        });
+
+        ServeJson(context, reply);
     }
 
     private void HandleMute(HttpListenerContext context, NameValueCollection query, bool muted)
@@ -781,30 +814,37 @@ public sealed class Dashboard
             return;
         }
 
-        string name = _server.Players.GetByPlatformId(platformId)?.DisplayName ?? "";
+        _server.Exclusive(() =>
+        {
+            string name = _server.Players.GetByPlatformId(platformId)?.DisplayName ?? "";
 
-        if (muted)
-        {
-            _server.MutePlayer(platformId, name);
-        }
-        else
-        {
-            _server.UnmutePlayer(platformId, name);
-        }
+            if (muted)
+            {
+                _server.MutePlayer(platformId, name);
+            }
+            else
+            {
+                _server.UnmutePlayer(platformId, name);
+            }
+        });
 
         ServeJson(context, new { ok = true });
     }
 
     private void HandleUnban(HttpListenerContext context, NameValueCollection query)
     {
-        if (!ulong.TryParse(query["platformId"], out var platformId) || !_server.Unban(platformId))
+        object reply = _server.Exclusive<object>(() =>
         {
-            ServeJson(context, new { ok = false, error = "not banned" });
-            return;
-        }
+            if (!ulong.TryParse(query["platformId"], out var platformId) || !_server.Unban(platformId))
+            {
+                return new { ok = false, error = "not banned" };
+            }
 
-        _config.Save(Program.ConfigPath);
-        ServeJson(context, new { ok = true });
+            _config.Save(Program.ConfigPath);
+            return new { ok = true };
+        });
+
+        ServeJson(context, reply);
     }
 
     private void HandlePermission(HttpListenerContext context, NameValueCollection query)
@@ -817,22 +857,26 @@ public sealed class Dashboard
 
         var level = PermissionLevels.Clamp(rawLevel);
 
-        if (byte.TryParse(query["id"], out var smallId) && _server.Players.Get(smallId) is { } player)
+        object reply = _server.Exclusive<object>(() =>
         {
-            _server.SetPermission(player.PlatformId, player.Username, level);
-        }
-        else if (ulong.TryParse(query["platformId"], out var platformId))
-        {
-            _server.SetPermission(platformId, query["username"] ?? "", level);
-        }
-        else
-        {
-            ServeJson(context, new { ok = false, error = "no such player" });
-            return;
-        }
+            if (byte.TryParse(query["id"], out var smallId) && _server.Players.Get(smallId) is { } player)
+            {
+                _server.SetPermission(player.PlatformId, player.Username, level);
+            }
+            else if (ulong.TryParse(query["platformId"], out var platformId))
+            {
+                _server.SetPermission(platformId, query["username"] ?? "", level);
+            }
+            else
+            {
+                return new { ok = false, error = "no such player" };
+            }
 
-        _config.Save(Program.ConfigPath);
-        ServeJson(context, new { ok = true });
+            _config.Save(Program.ConfigPath);
+            return new { ok = true };
+        });
+
+        ServeJson(context, reply);
     }
 
     // ---- world & lifecycle ----
@@ -850,8 +894,11 @@ public sealed class Dashboard
         int modId = int.TryParse(query["modId"], out var m) ? m : -1;
         int? modFileId = int.TryParse(query["modFileId"], out var f) && f > 0 ? f : null;
 
-        _server.SetLevel(barcode, query["title"] ?? barcode, modId, modFileId);
-        _config.Save(Program.ConfigPath);
+        _server.Exclusive(() =>
+        {
+            _server.SetLevel(barcode, query["title"] ?? barcode, modId, modFileId);
+            _config.Save(Program.ConfigPath);
+        });
 
         ServeJson(context, new { ok = true });
     }
@@ -867,30 +914,34 @@ public sealed class Dashboard
             return;
         }
 
-        if (query["remove"] == "true")
+        _server.Exclusive(() =>
         {
-            _config.Levels.RemoveAll(l => l.Barcode == barcode);
-        }
-        else
-        {
-            var existing = _config.Levels.FirstOrDefault(l => l.Barcode == barcode);
-            var entry = existing ?? new LevelEntry { Barcode = barcode };
-
-            if (query["title"] is { Length: > 0 } title)
+            if (query["remove"] == "true")
             {
-                entry.Title = title;
+                _config.Levels.RemoveAll(l => l.Barcode == barcode);
+            }
+            else
+            {
+                var existing = _config.Levels.FirstOrDefault(l => l.Barcode == barcode);
+                var entry = existing ?? new LevelEntry { Barcode = barcode };
+
+                if (query["title"] is { Length: > 0 } title)
+                {
+                    entry.Title = title;
+                }
+
+                entry.ModId = int.TryParse(query["modId"], out var m) ? m : -1;
+                entry.ModFileId = int.TryParse(query["modFileId"], out var f) && f > 0 ? f : null;
+
+                if (existing == null)
+                {
+                    _config.Levels.Add(entry);
+                }
             }
 
-            entry.ModId = int.TryParse(query["modId"], out var m) ? m : -1;
-            entry.ModFileId = int.TryParse(query["modFileId"], out var f) && f > 0 ? f : null;
+            _config.Save(Program.ConfigPath);
+        });
 
-            if (existing == null)
-            {
-                _config.Levels.Add(entry);
-            }
-        }
-
-        _config.Save(Program.ConfigPath);
         ServeJson(context, new { ok = true });
     }
 
@@ -903,32 +954,34 @@ public sealed class Dashboard
             return;
         }
 
-        if (_server.Players.Get(smallId) is not { } target)
+        object reply = _server.Exclusive<object>(() =>
         {
-            ServeJson(context, new { ok = false, error = "That player has left." });
-            return;
-        }
-
-        if (!target.HasPosition)
-        {
-            ServeJson(context, new
+            if (_server.Players.Get(smallId) is not { } target)
             {
-                ok = false,
-                error = $"{target.DisplayName} has not reported a position yet.",
-            });
+                return new { ok = false, error = "That player has left." };
+            }
 
-            return;
-        }
+            if (!target.HasPosition)
+            {
+                return new
+                {
+                    ok = false,
+                    error = $"{target.DisplayName} has not reported a position yet.",
+                };
+            }
 
-        var result = _server.GatherEveryoneTo(smallId);
+            var result = _server.GatherEveryoneTo(smallId);
 
-        ServeJson(context, new
-        {
-            ok = true,
-            moved = result.Moved,
-            skipped = result.Skipped,
-            name = target.DisplayName,
+            return new
+            {
+                ok = true,
+                moved = result.Moved,
+                skipped = result.Skipped,
+                name = target.DisplayName,
+            };
         });
+
+        ServeJson(context, reply);
     }
 
     /// <summary>
@@ -946,29 +999,32 @@ public sealed class Dashboard
             return;
         }
 
-        if (_server.Entities.Get(id) is not { } entity)
+        object reply = _server.Exclusive<object>(() =>
         {
-            ServeJson(context, new { ok = false, error = "That entity is no longer in the world." });
-            return;
-        }
+            if (_server.Entities.Get(id) is not { } entity)
+            {
+                return new { ok = false, error = "That entity is no longer in the world." };
+            }
 
-        string name = entity.ShortName;
-        bool wasPersistent = entity.Persistent;
+            string name = entity.ShortName;
+            bool wasPersistent = entity.Persistent;
 
-        if (wasPersistent)
-        {
-            _server.ForgetProp(id);
-        }
+            if (wasPersistent)
+            {
+                _server.ForgetProp(id);
+            }
 
-        if (!_server.DespawnEntity(id))
-        {
-            ServeJson(context, new { ok = false, error = "That entity is no longer in the world." });
-            return;
-        }
+            if (!_server.DespawnEntity(id))
+            {
+                return new { ok = false, error = "That entity is no longer in the world." };
+            }
 
-        _server.Log("WARN", $"Panel removed '{name}'");
+            _server.Log("WARN", $"Panel removed '{name}'");
 
-        ServeJson(context, new { ok = true, name, wasPersistent });
+            return new { ok = true, name, wasPersistent };
+        });
+
+        ServeJson(context, reply);
     }
 
     /// <summary>Marks a prop to be put back after a restart, or stops doing so.</summary>
@@ -981,19 +1037,25 @@ public sealed class Dashboard
         }
 
         bool keep = query["keep"] != "0";
-        bool alreadyKept = keep && _server.Entities.Get(id) is { Persistent: true };
 
-        bool done = keep
-            ? _server.KeepProp(id, query["note"] ?? "")
-            : _server.ForgetProp(id);
-
-        ServeJson(context, new
+        object reply = _server.Exclusive<object>(() =>
         {
-            ok = done,
-            error = done ? null
-                : alreadyKept ? "That prop is already kept. Drop it first to keep it somewhere else."
-                : "That prop is no longer in the world.",
+            bool alreadyKept = keep && _server.Entities.Get(id) is { Persistent: true };
+
+            bool done = keep
+                ? _server.KeepProp(id, query["note"] ?? "")
+                : _server.ForgetProp(id);
+
+            return new
+            {
+                ok = done,
+                error = done ? null
+                    : alreadyKept ? "That prop is already kept. Drop it first to keep it somewhere else."
+                    : "That prop is no longer in the world.",
+            };
         });
+
+        ServeJson(context, reply);
     }
 
     private void HandlePurge(HttpListenerContext context, NameValueCollection query)
@@ -1004,10 +1066,15 @@ public sealed class Dashboard
             return;
         }
 
-        int removed = _server.PurgeEntitiesOf(smallId);
-        _server.Log("WARN", $"Panel purged {removed} entities owned by SmallID {smallId}");
+        object reply = _server.Exclusive<object>(() =>
+        {
+            int removed = _server.PurgeEntitiesOf(smallId);
+            _server.Log("WARN", $"Panel purged {removed} entities owned by SmallID {smallId}");
 
-        ServeJson(context, new { ok = true, removed });
+            return new { ok = true, removed };
+        });
+
+        ServeJson(context, reply);
     }
 
     private void HandleRestart(HttpListenerContext context, NameValueCollection query)
@@ -1021,123 +1088,125 @@ public sealed class Dashboard
         // Answer before the process goes away, or the panel only sees the socket drop.
         ServeJson(context, new { ok = true });
 
-        _ = _server.RestartAsync(reason, grace);
+        _server.Exclusive(() => { _ = _server.RestartAsync(reason, grace); });
     }
 
     // ---- settings ----
 
     private void HandleSettings(HttpListenerContext context, NameValueCollection query)
     {
-        // Identity
-        if (query["name"] is { Length: > 0 } name)
+        _server.Exclusive(() =>
         {
-            _config.ServerName = name;
-        }
+            // Identity
+            if (query["name"] is { Length: > 0 } name)
+            {
+                _config.ServerName = name;
+            }
 
-        if (query["description"] is { } description)
-        {
-            _config.Description = description;
-        }
+            if (query["description"] is { } description)
+            {
+                _config.Description = description;
+            }
 
-        if (int.TryParse(query["maxPlayers"], out var max) && max is > 0 and <= 255)
-        {
-            _config.MaxPlayers = max;
-        }
+            if (int.TryParse(query["maxPlayers"], out var max) && max is > 0 and <= 255)
+            {
+                _config.MaxPlayers = max;
+            }
 
-        if (int.TryParse(query["privacy"], out var privacy) && privacy is >= 0 and <= 3)
-        {
-            _config.Privacy = privacy;
-        }
+            if (int.TryParse(query["privacy"], out var privacy) && privacy is >= 0 and <= 3)
+            {
+                _config.Privacy = privacy;
+            }
 
-        // Gameplay
-        ReadBool(query, "nameTags", v => _config.NameTags = v);
-        ReadBool(query, "voiceChat", v => _config.VoiceChat = v);
-        ReadBool(query, "playerConstraining", v => _config.PlayerConstraining = v);
-        ReadBool(query, "mortality", v => _config.Mortality = v);
-        ReadBool(query, "friendlyFire", v => _config.FriendlyFire = v);
-        ReadBool(query, "knockout", v => _config.Knockout = v);
+            // Gameplay
+            ReadBool(query, "nameTags", v => _config.NameTags = v);
+            ReadBool(query, "voiceChat", v => _config.VoiceChat = v);
+            ReadBool(query, "playerConstraining", v => _config.PlayerConstraining = v);
+            ReadBool(query, "mortality", v => _config.Mortality = v);
+            ReadBool(query, "friendlyFire", v => _config.FriendlyFire = v);
+            ReadBool(query, "knockout", v => _config.Knockout = v);
 
-        if (int.TryParse(query["knockoutLength"], out var knockout) && knockout is >= 0 and <= 600)
-        {
-            _config.KnockoutLength = knockout;
-        }
+            if (int.TryParse(query["knockoutLength"], out var knockout) && knockout is >= 0 and <= 600)
+            {
+                _config.KnockoutLength = knockout;
+            }
 
-        if (float.TryParse(query["maxAvatarHeight"], System.Globalization.CultureInfo.InvariantCulture,
-                out var height) && height is > 0 and <= 100)
-        {
-            _config.MaxAvatarHeight = height;
-        }
+            if (float.TryParse(query["maxAvatarHeight"], System.Globalization.CultureInfo.InvariantCulture,
+                    out var height) && height is > 0 and <= 100)
+            {
+                _config.MaxAvatarHeight = height;
+            }
 
-        if (int.TryParse(query["slowMoMode"], out var slowMo) && slowMo is >= 0 and <= 4)
-        {
-            _config.SlowMoMode = slowMo;
-        }
+            if (int.TryParse(query["slowMoMode"], out var slowMo) && slowMo is >= 0 and <= 4)
+            {
+                _config.SlowMoMode = slowMo;
+            }
 
-        // Permission gates
-        ReadLevel(query, "devTools", v => _config.DevTools = v);
-        ReadLevel(query, "constrainer", v => _config.Constrainer = v);
-        ReadLevel(query, "nimbus", v => _config.Nimbus = v);
-        ReadLevel(query, "spawning", v => _config.Spawning = v);
-        ReadLevel(query, "customAvatars", v => _config.CustomAvatars = v);
-        ReadLevel(query, "kicking", v => _config.Kicking = v);
-        ReadLevel(query, "banning", v => _config.Banning = v);
-        ReadLevel(query, "teleportation", v => _config.Teleportation = v);
+            // Permission gates
+            ReadLevel(query, "devTools", v => _config.DevTools = v);
+            ReadLevel(query, "constrainer", v => _config.Constrainer = v);
+            ReadLevel(query, "nimbus", v => _config.Nimbus = v);
+            ReadLevel(query, "spawning", v => _config.Spawning = v);
+            ReadLevel(query, "customAvatars", v => _config.CustomAvatars = v);
+            ReadLevel(query, "kicking", v => _config.Kicking = v);
+            ReadLevel(query, "banning", v => _config.Banning = v);
+            ReadLevel(query, "teleportation", v => _config.Teleportation = v);
 
-        // Limits
-        if (int.TryParse(query["maxEntities"], out var maxEntities) && maxEntities is > 0 and <= 100000)
-        {
-            _config.MaxEntities = maxEntities;
-        }
+            // Limits
+            if (int.TryParse(query["maxEntities"], out var maxEntities) && maxEntities is > 0 and <= 100000)
+            {
+                _config.MaxEntities = maxEntities;
+            }
 
-        ReadBool(query, "cullOrphans", v => _config.CullOrphanedEntities = v);
+            ReadBool(query, "cullOrphans", v => _config.CullOrphanedEntities = v);
 
+            // Crash protection
+            ReadBool(query, "antiSpam", v => _config.AntiSpamEnabled = v);
+            ReadLevel(query, "antiSpamExemptLevel", v => _config.AntiSpamExemptLevel = v);
 
-        // Crash protection
-        ReadBool(query, "antiSpam", v => _config.AntiSpamEnabled = v);
-        ReadLevel(query, "antiSpamExemptLevel", v => _config.AntiSpamExemptLevel = v);
+            if (int.TryParse(query["spawnBurstLimit"], out var burst) && burst is >= 1 and <= 1000)
+            {
+                _config.SpawnBurstLimit = burst;
+            }
 
-        if (int.TryParse(query["spawnBurstLimit"], out var burst) && burst is >= 1 and <= 1000)
-        {
-            _config.SpawnBurstLimit = burst;
-        }
+            if (int.TryParse(query["spawnWindowSeconds"], out var win) && win is >= 1 and <= 120)
+            {
+                _config.SpawnWindowSeconds = win;
+            }
 
-        if (int.TryParse(query["spawnWindowSeconds"], out var win) && win is >= 1 and <= 120)
-        {
-            _config.SpawnWindowSeconds = win;
-        }
+            if (int.TryParse(query["maxEntitiesPerPlayer"], out var perPlayer) && perPlayer is >= 1 and <= 20000)
+            {
+                _config.MaxEntitiesPerPlayer = perPlayer;
+            }
 
-        if (int.TryParse(query["maxEntitiesPerPlayer"], out var perPlayer) && perPlayer is >= 1 and <= 20000)
-        {
-            _config.MaxEntitiesPerPlayer = perPlayer;
-        }
+            if (int.TryParse(query["spamStrikes"], out var strikes) && strikes is >= 1 and <= 20)
+            {
+                _config.SpamStrikesBeforeKick = strikes;
+            }
 
-        if (int.TryParse(query["spamStrikes"], out var strikes) && strikes is >= 1 and <= 20)
-        {
-            _config.SpamStrikesBeforeKick = strikes;
-        }
+            // Zero is the off switch, so the floor is zero rather than a usable timeout.
+            if (int.TryParse(query["ammoTimeoutSeconds"], out var ammo) && ammo is >= 0 and <= 86400)
+            {
+                _config.AmmoTimeoutSeconds = ammo;
+            }
 
-        // Zero is the off switch, so the floor is zero rather than a usable timeout.
-        if (int.TryParse(query["ammoTimeoutSeconds"], out var ammo) && ammo is >= 0 and <= 86400)
-        {
-            _config.AmmoTimeoutSeconds = ammo;
-        }
+            if (int.TryParse(query["idleTimeoutSeconds"], out var idle) && idle is >= 0 and <= 86400)
+            {
+                _config.IdleTimeoutSeconds = idle;
+            }
 
-        if (int.TryParse(query["idleTimeoutSeconds"], out var idle) && idle is >= 0 and <= 86400)
-        {
-            _config.IdleTimeoutSeconds = idle;
-        }
+            if (int.TryParse(query["orphanTimeoutSeconds"], out var orphan) && orphan is >= 5 and <= 86400)
+            {
+                _config.OrphanTimeoutSeconds = orphan;
+            }
 
-        if (int.TryParse(query["orphanTimeoutSeconds"], out var orphan) && orphan is >= 5 and <= 86400)
-        {
-            _config.OrphanTimeoutSeconds = orphan;
-        }
+            _config.Save(Program.ConfigPath);
 
-        _config.Save(Program.ConfigPath);
+            // Reaches players who are already connected, not just the browser listing.
+            _server.PushSettings();
 
-        // Reaches players who are already connected, not just the browser listing.
-        _server.PushSettings();
-
-        _server.Log("INFO", "Settings updated from the panel");
+            _server.Log("INFO", "Settings updated from the panel");
+        });
 
         ServeJson(context, new { ok = true });
     }
