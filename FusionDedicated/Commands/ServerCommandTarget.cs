@@ -14,33 +14,36 @@ public sealed class ServerCommandTarget : ICommandTarget
         _plugins = plugins;
     }
 
-    public IReadOnlyList<CommandPlayer> Players => _server.Players.Players
+    // Console and RCON run on their own threads, so every call into the world takes
+    // the world lock. Listing and reloading plugins do not: a reload waits for
+    // plugin timers.
+    public IReadOnlyList<CommandPlayer> Players => _server.Exclusive(() => _server.Players.Players
         .Select(p => new CommandPlayer(
             p.PlatformId,
             p.SmallId,
             p.DisplayName,
             p.Permission,
             _server.Entities.Entities.Count(e => e.OwnerSmallId == p.SmallId)))
-        .ToList();
+        .ToList());
 
     public void SetRank(ulong platformId, string name, PermissionLevel level)
-        => _server.SetPermission(platformId, name, level);
+        => _server.Exclusive(() => _server.SetPermission(platformId, name, level));
 
-    public void Kick(byte smallId, string reason) => _server.Kick(smallId, reason);
+    public void Kick(byte smallId, string reason) => _server.Exclusive(() => _server.Kick(smallId, reason));
 
     public void Ban(ulong platformId, string name, string reason, TimeSpan? duration)
-        => _server.Ban(platformId, name, reason, duration, Server.Audit.AuditChannel.Console);
+        => _server.Exclusive(() => _server.Ban(platformId, name, reason, duration, Server.Audit.AuditChannel.Console));
 
-    public void Mute(ulong platformId, string name) => _server.MutePlayer(platformId, name);
+    public void Mute(ulong platformId, string name) => _server.Exclusive(() => _server.MutePlayer(platformId, name));
 
-    public void Unmute(ulong platformId, string name) => _server.UnmutePlayer(platformId, name);
+    public void Unmute(ulong platformId, string name) => _server.Exclusive(() => _server.UnmutePlayer(platformId, name));
 
-    public bool Unban(ulong platformId) => _server.Unban(platformId);
+    public bool Unban(ulong platformId) => _server.Exclusive(() => _server.Unban(platformId));
 
-    public int Purge(byte smallId) => _server.PurgeEntitiesOf(smallId);
+    public int Purge(byte smallId) => _server.Exclusive(() => _server.PurgeEntitiesOf(smallId));
 
     public void SetLevel(string barcode, string title)
-        => _server.SetLevel(barcode, title, -1, null);
+        => _server.Exclusive(() => _server.SetLevel(barcode, title, -1, null));
 
     public IReadOnlyList<string> ListPlugins()
         => _plugins?.Loaded.Select(p => $"{p.Name} {p.Manifest.Version}").ToList()
