@@ -2186,13 +2186,18 @@ public sealed class FusionServer : IDisposable
             // person told about it hears the same answer.
             byte owner = entity.OwnerSmallId ?? Adopt(entity, player);
 
+            // A kept prop goes where it was kept. Its owner's game can report it
+            // anywhere, even before that game has loaded the level.
+            var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
+            byte[] rotation = entity.KeptAt != null ? entity.KeptRotation : entity.Rotation;
+
             // Not tracker zero. A client counts its own spawn trackers up from
             // zero, and a catch-up naming a tracker it is waiting on would fire
             // that callback with the wrong thing. Nothing counts this high.
             SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
                 owner, owner,
                 entity.Id, entity.Barcode,
-                new Vec3(entity.X, entity.Y, entity.Z), entity.Rotation,
+                new Vec3(x, y, z), rotation,
                 CatchupTracker,
                 spawnEffect: false, source: entity.Source), reliable: true);
 
@@ -2267,6 +2272,7 @@ public sealed class FusionServer : IDisposable
 
                 tracked.Persistent = true;
                 tracked.KeptAt = (prop.X, prop.Y, prop.Z);
+                tracked.KeptRotation = prop.RotationBytes();
                 Entities.SetOwner(id, null);
             }
 
@@ -2315,6 +2321,7 @@ public sealed class FusionServer : IDisposable
 
         entity.Persistent = true;
         entity.KeptAt = (entity.X, entity.Y, entity.Z);
+        entity.KeptRotation = entity.Rotation.ToArray();
 
         store.Add(new Props.PersistentProp
         {
@@ -2352,6 +2359,7 @@ public sealed class FusionServer : IDisposable
 
         var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
         entity.KeptAt = null;
+        entity.KeptRotation = Array.Empty<byte>();
 
         if (!store.Remove(entity.Barcode, Config.LevelBarcode, x, y, z))
         {
@@ -2967,7 +2975,10 @@ public sealed class FusionServer : IDisposable
             : 0UL;
 
         return new FusionDedicated.Plugins.PluginEntity(
-            entity.Id, entity.Barcode, owner, entity.X, entity.Y, entity.Z, entity.Persistent);
+            entity.Id, entity.Barcode, owner, entity.X, entity.Y, entity.Z, entity.Persistent)
+        {
+            KeptAt = entity.KeptAt,
+        };
     }
 
     /// <summary>Rotation and velocity of one entity, for a plugin. Null when it has gone.</summary>
@@ -2991,7 +3002,10 @@ public sealed class FusionServer : IDisposable
                 e.Id,
                 e.Barcode,
                 e.OwnerSmallId is { } small ? Players.Get(small)?.PlatformId ?? 0UL : 0UL,
-                e.X, e.Y, e.Z, e.Persistent))
+                e.X, e.Y, e.Z, e.Persistent)
+            {
+                KeptAt = e.KeptAt,
+            })
             .ToList();
 
     /// <summary>Gives one entity to one player, for a plugin. False when either is missing.</summary>

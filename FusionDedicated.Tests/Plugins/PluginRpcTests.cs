@@ -382,6 +382,15 @@ public class PluginWorldTests
         => Assert.NotEmpty(PluginWorld.PlaceOf(At(4f, 0f, -12f), 0f));
 
     [Fact]
+    public void A_kept_prop_is_placed_by_where_it_was_kept_rather_than_where_it_stands()
+    {
+        // A still-loading owner can report a kept prop anywhere, and its key must not follow.
+        var drifted = At(90f, -200f, 40f) with { KeptAt = (4f, 0f, -12f) };
+
+        Assert.Equal("8:0:-24", PluginWorld.PlaceOf(drifted));
+    }
+
+    [Fact]
     public void Nothing_is_found_when_there_is_no_server_behind_it()
         => Assert.Null(new PluginWorld().Find(300));
 

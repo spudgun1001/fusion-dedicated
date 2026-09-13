@@ -14,7 +14,11 @@ public readonly record struct PluginEntity(
     float X,
     float Y,
     float Z,
-    bool Persistent);
+    bool Persistent)
+{
+    /// <summary>Where a kept prop was kept, which its current position may have drifted from. Null for anything not kept.</summary>
+    public (float X, float Y, float Z)? KeptAt { get; init; }
+}
 
 /// <summary>How a thing is turned and moving, as of its latest pose.</summary>
 /// <param name="Rotation">The seven bytes a spawn carries. Empty when nothing gave one.</param>
@@ -92,7 +96,10 @@ public sealed class PluginWorld
             grid = 0.5f;
         }
 
-        return $"{Snap(entity.X, grid)}:{Snap(entity.Y, grid)}:{Snap(entity.Z, grid)}";
+        // A kept prop is known by where it was kept, since poses can put it anywhere.
+        var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
+
+        return $"{Snap(x, grid)}:{Snap(y, grid)}:{Snap(z, grid)}";
     }
 
     private static long Snap(float value, float grid)

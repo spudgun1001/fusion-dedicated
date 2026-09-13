@@ -58,6 +58,9 @@ public sealed class TrackedEntity
     /// <summary>Where a kept prop's record puts it, so forgetting it finds that record after it drifts.</summary>
     public (float X, float Y, float Z)? KeptAt { get; set; }
 
+    /// <summary>The rotation bytes a kept prop was kept with, so a joiner gets it the way round it was kept.</summary>
+    public byte[] KeptRotation { get; set; } = Array.Empty<byte>();
+
     /// <summary>
     /// True when this is not a spawnable at all. The ends of a constraint are
     /// tracked so they count against the cap and can be culled, but their barcode
