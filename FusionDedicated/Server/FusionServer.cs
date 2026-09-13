@@ -2502,6 +2502,61 @@ public sealed class FusionServer : IDisposable
         return id;
     }
 
+    /// <summary>When a plugin holster is sent again, for a game that had not finished building the item.</summary>
+    private static readonly TimeSpan[] PluginHolsterDelays = { TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(6) };
+
+    /// <summary>
+    /// Puts an entity into one of a player's body slots for a plugin, as their own holstering would.
+    /// Recorded like a real insert, so joiners are told and a cull leaves it alone.
+    /// </summary>
+    /// <returns>False when the player or the entity is missing.</returns>
+    public bool HolsterForPlugin(ushort entityId, ulong platformId, byte slotIndex)
+    {
+        if (Entities.Get(entityId) is not { } entity || Players.GetByPlatformId(platformId) is not { } player)
+        {
+            return false;
+        }
+
+        lock (_cacheLock)
+        {
+            _slotted.Insert(player.SmallId, slotIndex, entityId);
+        }
+
+        _grabs.ReleaseEntity(player.SmallId, entityId);
+        Entities.SetAttached(entityId, true);
+
+        SendHolster(player, entityId, slotIndex);
+
+        foreach (var delay in PluginHolsterDelays)
+        {
+            Defer(delay, () => SendHolster(player, entityId, slotIndex));
+        }
+
+        Log("INFO", $"Holster: a plugin put {entity.ShortName} (entity {entityId}) in " +
+                    $"{player.DisplayName}'s slot {slotIndex}", console: false);
+        return true;
+    }
+
+    /// <summary>Sends a plugin holster to everybody while the item is still recorded in that slot.</summary>
+    private void SendHolster(ConnectedPlayer player, ushort entityId, byte slotIndex)
+    {
+        if (Players.Get(player.SmallId) != player)
+        {
+            return;
+        }
+
+        lock (_cacheLock)
+        {
+            if (_slotted.Find(entityId) is not { } slot || slot.Slot != player.SmallId || slot.Index != slotIndex)
+            {
+                return;
+            }
+        }
+
+        BroadcastModule(ModuleProtocol.InventorySlotInsertTag,
+            ModuleProtocol.WriteInventorySlotInsert(player.SmallId, entityId, slotIndex));
+    }
+
     public int PurgeEntitiesOf(byte smallId)
     {
         // If the owner has already gone, name someone who is still here, see
