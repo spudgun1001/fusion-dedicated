@@ -3278,6 +3278,50 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
+    /// The world lock. The main loop holds it for each pass, and the panel, console
+    /// and RCON take it around their server calls.
+    ///
+    /// Nothing a plugin calls may take it, and no thread holding a plugin's lock may
+    /// wait for it. Plugins hold their own locks while calling in, so waiting here
+    /// could deadlock against the loop running their handlers. Plugin actions that
+    /// need it go through OnLoop instead.
+    /// </summary>
+    private readonly object _worldLock = new();
+
+    /// <summary>Runs work while holding the world lock.</summary>
+    public void Exclusive(Action work)
+    {
+        lock (_worldLock)
+        {
+            work();
+        }
+    }
+
+    /// <summary>Runs work while holding the world lock, and returns what it gives.</summary>
+    public T Exclusive<T>(Func<T> work)
+    {
+        lock (_worldLock)
+        {
+            return work();
+        }
+    }
+
+    /// <summary>
+    /// Runs work on the main loop: at once when this thread already holds the world
+    /// lock, otherwise on the next pass. Never waits, so plugin code may call it.
+    /// </summary>
+    public void OnLoop(Action work)
+    {
+        if (Monitor.IsEntered(_worldLock))
+        {
+            work();
+            return;
+        }
+
+        Defer(TimeSpan.Zero, work);
+    }
+
+    /// <summary>
     /// Runs anything whose time has come. Called every pass of the main loop, so
     /// this is the only place with a clock finer than the ten second tick.
     /// </summary>
