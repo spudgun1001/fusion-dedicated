@@ -20,7 +20,7 @@ public readonly record struct ConstraintEnd(ConstraintEndKind Kind, ushort Entit
 
 /// <summary>
 /// Reads the two ends of Fusion's ConstraintCreateMessage: SmallID, a nullable
-/// ConstrainerID, Mode, then each end as a type byte followed by an entity id and
+/// ConstrainerID, Mode, then each end as a type int32 followed by an entity id and
 /// body index, or a scene path. Big-endian, as Fusion writes it.
 /// </summary>
 public static class ConstraintEnds
@@ -55,17 +55,20 @@ public static class ConstraintEnds
 
     private static ConstraintEnd? TryEnd(ReadOnlySpan<byte> payload, ref int at)
     {
-        if (!TryByte(payload, ref at, out byte kind))
+        if (payload.Length - at < 4)
         {
             return null;
         }
 
+        int kind = BinaryPrimitives.ReadInt32BigEndian(payload[at..]);
+        at += 4;
+
         switch (kind)
         {
-            case (byte)ConstraintEndKind.Null:
+            case (int)ConstraintEndKind.Null:
                 return new ConstraintEnd(ConstraintEndKind.Null, 0);
 
-            case (byte)ConstraintEndKind.Entity:
+            case (int)ConstraintEndKind.Entity:
             {
                 if (payload.Length - at < 4)
                 {
@@ -78,7 +81,7 @@ public static class ConstraintEnds
                 return new ConstraintEnd(ConstraintEndKind.Entity, id);
             }
 
-            case (byte)ConstraintEndKind.Scene:
+            case (int)ConstraintEndKind.Scene:
             {
                 if (payload.Length - at < 4)
                 {

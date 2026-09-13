@@ -46,17 +46,17 @@ internal static class ConstraintPayloads
         switch (end)
         {
             case NullEnd:
-                writer.Write((byte)0);
+                writer.Write(0);
                 break;
 
             case EntityEnd entity:
-                writer.Write((byte)1);
+                writer.Write(1);
                 writer.WriteUInt16(entity.Id);
                 writer.WriteUInt16(entity.Body);
                 break;
 
             case SceneEnd scene:
-                writer.Write((byte)2);
+                writer.Write(2);
                 writer.Write(scene.Path);
                 break;
         }

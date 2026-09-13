@@ -56,15 +56,15 @@ public class ConstraintEndsTests
 
     [Fact]
     public void An_entity_end_cut_short_does_not_read()
-        => Assert.Null(ConstraintEnds.TryRead(new byte[] { 1, 0, 0, 1, 0 }));
+        => Assert.Null(ConstraintEnds.TryRead(new byte[] { 1, 0, 0, 0, 0, 0, 1, 0 }));
 
     [Fact]
     public void An_unknown_end_type_does_not_read()
-        => Assert.Null(ConstraintEnds.TryRead(new byte[] { 1, 0, 0, 7, 0, 0, 0, 0 }));
+        => Assert.Null(ConstraintEnds.TryRead(new byte[] { 1, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0 }));
 
     [Fact]
     public void A_scene_length_past_the_end_does_not_read()
-        => Assert.Null(ConstraintEnds.TryRead(new byte[] { 1, 0, 0, 2, 0, 0, 0, 50, 65 }));
+        => Assert.Null(ConstraintEnds.TryRead(new byte[] { 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 50, 65 }));
 
     [Fact]
     public void Player_and_prop_ends_are_told_apart()
@@ -77,6 +77,24 @@ public class ConstraintEndsTests
         Assert.False(Entity(256).IsPlayer);
         Assert.False(new ConstraintEnd(ConstraintEndKind.Scene, 0).IsPlayer);
         Assert.False(new ConstraintEnd(ConstraintEndKind.Scene, 300).IsProp);
+    }
+
+    [Fact]
+    public void Ends_are_read_from_the_bytes_Fusion_writes()
+    {
+        // SmallID 1, no constrainer, mode 0, then Entity 2 body 5 and Entity 300 body 9, each type an int32.
+        byte[] payload =
+        {
+            1, 0, 0,
+            0, 0, 0, 1, 0, 2, 0, 5,
+            0, 0, 0, 1, 1, 44, 0, 9,
+        };
+
+        var ends = ConstraintEnds.TryRead(payload);
+
+        Assert.NotNull(ends);
+        Assert.Equal(Entity(2), ends.Value.First);
+        Assert.Equal(Entity(300), ends.Value.Second);
     }
 }
 
@@ -124,5 +142,14 @@ public class StoredConstraintTests
         Assert.Empty(stored.Players);
         Assert.Empty(stored.Props);
         Assert.False(stored.IsStale(_ => null, _ => false));
+    }
+
+    [Fact]
+    public void A_player_end_nobody_held_is_stale_at_once()
+    {
+        var stored = StoredConstraint.For(1, new byte[] { 9 }, 801, HandToCrate, _ => null);
+
+        Assert.Equal(0UL, stored.Players[2]);
+        Assert.True(stored.IsStale(_ => null, _ => true));
     }
 }
