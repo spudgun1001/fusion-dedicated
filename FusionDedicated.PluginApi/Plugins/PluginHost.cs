@@ -378,6 +378,7 @@ public sealed class PluginHost
             // no longer loaded, which ends the process rather than throwing.
             plugin.Given?.StopTimers();
             plugin.Store.Save();
+            plugin.Given?.SaveOpenedStores();
             plugin.Context?.Unload();
         }
         catch (Exception e)

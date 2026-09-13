@@ -28,6 +28,9 @@ public sealed class PluginStore
         _log = log;
     }
 
+    /// <summary>The file this store reads and writes, so a second store can sit beside it.</summary>
+    internal string FilePath => _path;
+
     /// <summary>False once a write has failed and not yet succeeded again.</summary>
     public bool Writable { get; private set; } = true;
 

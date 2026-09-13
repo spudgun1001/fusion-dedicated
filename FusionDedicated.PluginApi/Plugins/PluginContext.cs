@@ -9,6 +9,7 @@ public sealed class PluginContext
     private readonly Func<IReadOnlyList<PluginPlayer>> _players;
     private readonly List<Timer> _timers = new();
     private readonly object _lock = new();
+    private readonly Dictionary<string, PluginStore> _opened = new(StringComparer.OrdinalIgnoreCase);
 
     private int _running;
     private bool _stopped;
@@ -48,6 +49,53 @@ public sealed class PluginContext
     public PluginEvents Events { get; }
 
     public PluginStore Store { get; }
+
+    /// <summary>
+    /// A second store beside the main one, for data too big or too busy to rewrite
+    /// with every save. Loaded before it is returned, and saved by the host when
+    /// the plugin unloads.
+    /// </summary>
+    /// <param name="part">1 to 32 letters, digits or dashes. The file is the main one's name with .part.json.</param>
+    public PluginStore OpenStore(string part)
+    {
+        if (string.IsNullOrEmpty(part) || part.Length > 32
+            || !part.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'))
+        {
+            throw new ArgumentException(
+                $"'{part}' is not a store name: use 1 to 32 letters, digits or dashes", nameof(part));
+        }
+
+        lock (_lock)
+        {
+            if (_opened.TryGetValue(part, out var open))
+            {
+                return open;
+            }
+
+            string path = Path.ChangeExtension(Store.FilePath, null) + "." + part + ".json";
+            var store = new PluginStore(path, _log);
+            store.Load();
+
+            _opened[part] = store;
+            return store;
+        }
+    }
+
+    /// <summary>Saves every store opened with <see cref="OpenStore"/>.</summary>
+    public void SaveOpenedStores()
+    {
+        List<PluginStore> stores;
+
+        lock (_lock)
+        {
+            stores = _opened.Values.ToList();
+        }
+
+        foreach (var store in stores)
+        {
+            store.Save();
+        }
+    }
 
     /// <summary>The page this plugin offers in the web panel, if it wants one.</summary>
     public PluginPanel Panel { get; }
