@@ -1,3 +1,5 @@
+using FusionDedicated.Web;
+
 namespace FusionDedicated.Plugins;
 
 /// <summary>Whether a button did anything, and why not when it did not.</summary>
@@ -17,8 +19,11 @@ public sealed class PluginPanel
 {
     private const char KeySeparator = '\0';
 
-    private readonly Dictionary<string, Func<PluginPage>> _pages =
+    private readonly Dictionary<string, Func<PluginViewer, PluginPage>> _pages =
         new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Who a page is built for when the caller does not say.</summary>
+    private static readonly PluginViewer Owner = new("panel", PanelRole.Owner);
 
     private readonly Dictionary<string, Action<IReadOnlyDictionary<string, string>>> _actions =
         new(StringComparer.OrdinalIgnoreCase);
@@ -39,6 +44,10 @@ public sealed class PluginPanel
     }
 
     public void Register(string plugin, Func<PluginPage> build)
+        => Register(plugin, _ => build());
+
+    /// <summary>Registers a page that is built for the panel account looking at it.</summary>
+    public void Register(string plugin, Func<PluginViewer, PluginPage> build)
     {
         lock (_lock)
         {
@@ -55,14 +64,16 @@ public sealed class PluginPanel
         }
     }
 
-    public PluginPage? Build(string plugin)
+    public PluginPage? Build(string plugin) => Build(plugin, Owner);
+
+    public PluginPage? Build(string plugin, PluginViewer viewer)
     {
         if (_health.IsDisabled(plugin))
         {
             return null;
         }
 
-        Func<PluginPage>? build;
+        Func<PluginViewer, PluginPage>? build;
 
         lock (_lock)
         {
@@ -74,7 +85,7 @@ public sealed class PluginPanel
 
         try
         {
-            return build();
+            return build(viewer);
         }
         catch (Exception e)
         {
