@@ -330,37 +330,12 @@ public sealed class Dashboard
         }
     }
 
-    /// <summary>
-    /// A plugin page with the blocks this account may not see taken out, or null
-    /// when there is nothing left for them.
-    ///
-    /// Filtered here rather than when the page is built, so a plugin describes
-    /// its page once and the panel decides who sees which part of it.
-    /// </summary>
+    /// <summary>A plugin page built for, and cut down to, the account making this request.</summary>
     private Plugins.PluginPage? VisiblePage(string plugin)
-    {
-        var page = PluginPanel?.Build(plugin);
+        => PluginPageAccess.Visible(PluginPanel, plugin, ActingViewer);
 
-        if (page == null)
-        {
-            return null;
-        }
-
-        page.Sections = page.Sections
-            .Where(section => PanelPermissions.CanSee(_actingRole, section.Required))
-            .ToList();
-
-        if (page.Sections.Count == 0)
-        {
-            return null;
-        }
-
-        // A banker is allowed a page by the blocks marked for them, not by the
-        // page's own floor, which every page sets to moderator.
-        return _actingRole == PanelRole.Banker || PanelPermissions.CanSee(_actingRole, page.Required)
-            ? page
-            : null;
-    }
+    /// <summary>The account making this request, as a plugin page sees it.</summary>
+    private Plugins.PluginViewer ActingViewer => new(_acting, _actingRole);
 
     /// <summary>Plugins with at least one block this account may see.</summary>
     private IReadOnlyList<string> VisiblePlugins()
@@ -370,28 +345,9 @@ public sealed class Dashboard
         return names.Where(name => VisiblePage(name) != null).ToList();
     }
 
-    /// <summary>
-    /// Whether an action is one of the buttons this account is shown. Row buttons
-    /// count as well as a block's own, since a table's rows carry their own.
-    /// </summary>
+    /// <summary>Whether an action is one of the buttons the account making this request is shown.</summary>
     private bool MayInvoke(string plugin, string action)
-    {
-        if (VisiblePage(plugin) is not { } page)
-        {
-            return false;
-        }
-
-        foreach (var section in page.Sections)
-        {
-            if (section.Buttons.Any(b => b.Action == action)
-                || section.Rows.Any(r => r.Actions.Any(b => b.Action == action)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => PluginPageAccess.MayInvoke(PluginPanel, plugin, action, ActingViewer);
 
     private void ServePage(HttpListenerContext context)
     {
