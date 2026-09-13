@@ -235,6 +235,23 @@ public class KeptPropTests : IDisposable
     }
 
     [Fact]
+    public void Keeping_a_kept_prop_again_is_refused_and_leaves_one_record()
+    {
+        using var world = new World();
+        var store = new PersistentPropStore(Path_);
+        world.Server.Props = store;
+
+        var joel = world.Join(1001, "Joel");
+        joel.FinishLoading();
+        world.Spawn(joel, 300, Payphone, 1, 2, 3);
+
+        Assert.True(world.Server.KeepProp(300, ""));
+        Assert.False(world.Server.KeepProp(300, ""));
+
+        Assert.Equal(1, store.Count);
+    }
+
+    [Fact]
     public void Plugins_see_where_a_kept_prop_stands_and_where_it_was_kept()
     {
         var (world, first, entity) = KeptPayphoneWithItsFirstOwner();

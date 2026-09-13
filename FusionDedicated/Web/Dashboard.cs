@@ -981,6 +981,7 @@ public sealed class Dashboard
         }
 
         bool keep = query["keep"] != "0";
+        bool alreadyKept = keep && _server.Entities.Get(id) is { Persistent: true };
 
         bool done = keep
             ? _server.KeepProp(id, query["note"] ?? "")
@@ -989,7 +990,9 @@ public sealed class Dashboard
         ServeJson(context, new
         {
             ok = done,
-            error = done ? null : "That prop is no longer in the world.",
+            error = done ? null
+                : alreadyKept ? "That prop is already kept. Drop it first to keep it somewhere else."
+                : "That prop is no longer in the world.",
         });
     }
 

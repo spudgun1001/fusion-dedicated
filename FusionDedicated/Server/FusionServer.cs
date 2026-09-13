@@ -2325,6 +2325,14 @@ public sealed class FusionServer : IDisposable
             return false;
         }
 
+        // A second record would bring a second copy back on the next join, and Drop
+        // only removes one. Drop it first to keep it somewhere else.
+        if (entity.Persistent)
+        {
+            Log("INFO", $"'{entity.ShortName}' is already kept; drop it to keep it somewhere else");
+            return false;
+        }
+
         entity.Persistent = true;
         entity.KeptAt = (entity.X, entity.Y, entity.Z);
         entity.KeptRotation = entity.Rotation.ToArray();
