@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Server;
@@ -33,5 +34,37 @@ public class PoseLogThrottleTests
 
         Assert.True(throttle.AllowIgnored(300, sender: 3, Start.AddSeconds(1)));
         Assert.True(throttle.AllowKeptMoved(300, Start.AddSeconds(1)));
+    }
+
+    [Fact]
+    public void Forgetting_while_poses_are_logged_on_other_threads_never_throws()
+    {
+        // An entity removal raises Forget on whichever thread removed it, while
+        // the loop keeps logging poses.
+        var throttle = new PoseLogThrottle();
+        var errors = new ConcurrentQueue<Exception>();
+
+        Parallel.Invoke(
+            () => Run(errors, i => throttle.AllowIgnored((ushort)(300 + i % 50), (byte)(i % 8), Start.AddSeconds(i))),
+            () => Run(errors, i => throttle.AllowKeptMoved((ushort)(300 + i % 50), Start.AddSeconds(i))),
+            () => Run(errors, i => throttle.Forget((ushort)(300 + i % 50))));
+
+        Assert.Empty(errors);
+    }
+
+    private static void Run(ConcurrentQueue<Exception> errors, Action<int> work)
+    {
+        for (int i = 0; i < 200_000; i++)
+        {
+            try
+            {
+                work(i);
+            }
+            catch (Exception e)
+            {
+                errors.Enqueue(e);
+                return;
+            }
+        }
     }
 }
