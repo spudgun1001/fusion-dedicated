@@ -301,6 +301,8 @@ public static class Program
                 server.Entities.Get(entityId) is { PositionKnown: true } entity
                     ? (entity.X, entity.Y, entity.Z)
                     : ((float X, float Y, float Z)?)null),
+            HolsteredLookup = server.HolsteredBy,
+            HeldLookup = server.HeldBy,
         };
 
         var plugins = new PluginHost(

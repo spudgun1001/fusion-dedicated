@@ -32,6 +32,9 @@ public readonly record struct PluginMotion(
     public float Speed => MathF.Sqrt(VelocityX * VelocityX + VelocityY * VelocityY + VelocityZ * VelocityZ);
 }
 
+/// <summary>One of a player's body slots with something in it.</summary>
+public readonly record struct PluginSlot(byte Index, ushort EntityId);
+
 /// <summary>
 /// What is in the world, to read.
 ///
@@ -59,12 +62,26 @@ public sealed class PluginWorld
     /// <summary>How the server lists who is holding an entity. Null outside a server.</summary>
     public Func<ushort, IReadOnlyList<ulong>>? HoldersLookup { get; set; }
 
+    /// <summary>How the server lists a player's filled body slots. Null outside a server.</summary>
+    public Func<ulong, IReadOnlyList<PluginSlot>>? HolsteredLookup { get; set; }
+
+    /// <summary>How the server lists what a player holds. Null outside a server.</summary>
+    public Func<ulong, IReadOnlyList<ushort>>? HeldLookup { get; set; }
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
 
     public PluginMotion? Motion(ushort entityId) => MotionLookup?.Invoke(entityId);
 
     /// <summary>Who is holding an entity, empty when there is no server.</summary>
     public IReadOnlyList<ulong> Holders(ushort entityId) => HoldersLookup?.Invoke(entityId) ?? Array.Empty<ulong>();
+
+    /// <summary>A player's filled body slots, empty when there is no server.</summary>
+    public IReadOnlyList<PluginSlot> Holstered(ulong platformId)
+        => HolsteredLookup?.Invoke(platformId) ?? Array.Empty<PluginSlot>();
+
+    /// <summary>The entities in a player's hands, empty when there is no server.</summary>
+    public IReadOnlyList<ushort> Held(ulong platformId)
+        => HeldLookup?.Invoke(platformId) ?? Array.Empty<ushort>();
 
     /// <summary>Everything in the world, empty when there is no server.</summary>
     public IReadOnlyList<PluginEntity> All()

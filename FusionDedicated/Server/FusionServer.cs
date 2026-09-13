@@ -3118,6 +3118,30 @@ public sealed class FusionServer : IDisposable
     /// <summary>Who holds an entity, earliest grab first.</summary>
     public IReadOnlyList<byte> HoldersOf(ushort entityId) => _grabs.HoldersOf(entityId);
 
+    /// <summary>What is in one player's body slots, for a plugin.</summary>
+    public IReadOnlyList<FusionDedicated.Plugins.PluginSlot> HolsteredBy(ulong platformId)
+    {
+        if (Players.GetByPlatformId(platformId) is not { } player)
+        {
+            return Array.Empty<FusionDedicated.Plugins.PluginSlot>();
+        }
+
+        lock (_cacheLock)
+        {
+            return _slotted.All()
+                .Where(s => s.Slot == player.SmallId)
+                .OrderBy(s => s.Index)
+                .Select(s => new FusionDedicated.Plugins.PluginSlot(s.Index, s.Weapon))
+                .ToList();
+        }
+    }
+
+    /// <summary>What one player is holding, for a plugin.</summary>
+    public IReadOnlyList<ushort> HeldBy(ulong platformId)
+        => Players.GetByPlatformId(platformId) is { } player
+            ? _grabs.All().Where(h => h.Player == player.SmallId).Select(h => h.EntityId).Distinct().ToList()
+            : Array.Empty<ushort>();
+
     /// <summary>What players are holding or have holstered, for the cull and the eviction to leave alone.</summary>
     private HashSet<ushort> EntitiesInUse()
     {
