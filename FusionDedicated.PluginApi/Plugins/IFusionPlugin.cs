@@ -46,4 +46,10 @@ public interface IPluginActions
 
     /// <summary>Gives one entity to one player. False when either is missing.</summary>
     bool GiveOwner(ushort entityId, ulong platformId) => false;
+
+    /// <summary>Puts a crate into the world owned by one player, so their game simulates it. Returns the new entity id, or 0 when refused or the player is not here.</summary>
+    ushort SpawnFor(string barcode, float x, float y, float z, byte[] rotation, ulong ownerPlatformId) => 0;
+
+    /// <summary>Puts an entity into one of a player's body slots for everybody. False when the player or the entity is missing.</summary>
+    bool Holster(ushort entityId, ulong platformId, byte slotIndex) => false;
 }

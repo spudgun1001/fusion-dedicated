@@ -2472,6 +2472,36 @@ public sealed class FusionServer : IDisposable
         return id;
     }
 
+    /// <summary>
+    /// Puts a crate into the world for a plugin, owned by one player, so their game
+    /// simulates it and can holster it. Refused as a player's own spawn would be when
+    /// the blocklist names it or the world is full.
+    /// </summary>
+    /// <returns>The new entity id, or 0 when refused or the player is not here.</returns>
+    public ushort SpawnForPlayer(string barcode, float x, float y, float z, byte[] rotation, ulong platformId)
+    {
+        if (string.IsNullOrWhiteSpace(barcode) || Players.GetByPlatformId(platformId) is not { } owner)
+        {
+            return 0;
+        }
+
+        if (_blocklist.Check(barcode, owner.Permission).Blocked || Entities.SpawnedCount >= Config.MaxEntities)
+        {
+            Log("WARN", $"A plugin spawn of '{barcode}' for {owner.DisplayName} was refused");
+            return 0;
+        }
+
+        ushort id = Entities.AllocateId();
+
+        Entities.Register(id, barcode, owner.SmallId, x, y, z, rotation);
+
+        Broadcast(FusionProtocol.BuildSpawnResponse(owner.SmallId, owner.SmallId, id, barcode,
+            new Vec3(x, y, z), rotation, CatchupTracker, spawnEffect: false), reliable: true);
+
+        Log("SPAWN", $"id={id} '{barcode}' by a plugin for {owner.DisplayName}");
+        return id;
+    }
+
     public int PurgeEntitiesOf(byte smallId)
     {
         // If the owner has already gone, name someone who is still here, see

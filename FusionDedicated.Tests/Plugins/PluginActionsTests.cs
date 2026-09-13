@@ -126,6 +126,41 @@ public class PluginActionsTests
         Assert.False(actions.GiveOwner(300, 1));
     }
 
+    [Fact]
+    public void Spawn_for_a_player_and_holster_reach_the_server_calls_behind_them()
+    {
+        var made = new List<string>();
+
+        var actions = new ServerPluginActions(
+            (id, reason) => { },
+            (id, reason) => { },
+            (id, level) => { },
+            id => { },
+            (id, tag, payload) => { },
+            (tag, payload) => { },
+            (barcode, x, y, z, rotation) => 0,
+            (id, note) => false,
+            id => false,
+            (id, platformId) => false,
+            (barcode, x, y, z, rotation, owner) => { made.Add($"spawnFor {barcode} {owner}"); return 301; },
+            (id, platformId, index) => { made.Add($"holster {id} {platformId} {index}"); return true; });
+
+        Assert.Equal((ushort)301, actions.SpawnFor("Pack.Spawnable.Pistol", 1f, 2f, 3f, Array.Empty<byte>(), 7));
+        Assert.True(actions.Holster(301, 7, 2));
+        Assert.Equal(new[] { "spawnFor Pack.Spawnable.Pistol 7", "holster 301 7 2" }, made);
+    }
+
+    [Fact]
+    public void Spawn_for_a_player_and_holster_refuse_when_the_server_has_neither()
+    {
+        IPluginActions actions = new ServerPluginActions(
+            (id, reason) => { }, (id, reason) => { }, (id, level) => { }, id => { },
+            (id, tag, payload) => { }, (tag, payload) => { });
+
+        Assert.Equal((ushort)0, actions.SpawnFor("Pack.Spawnable.Pistol", 0f, 0f, 0f, Array.Empty<byte>(), 7));
+        Assert.False(actions.Holster(301, 7, 2));
+    }
+
     private sealed class OlderActions : IPluginActions
     {
         public void Kick(ulong platformId, string reason) { }

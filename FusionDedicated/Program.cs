@@ -255,7 +255,9 @@ public static class Program
             (barcode, x, y, z, rotation) => server.SpawnForPlugin(barcode, x, y, z, rotation),
             (id, note) => server.KeepProp(id, note),
             id => server.ForgetProp(id),
-            (id, platformId) => server.GiveOwner(id, platformId));
+            (id, platformId) => server.GiveOwner(id, platformId),
+            (barcode, x, y, z, rotation, platformId) => server.SpawnForPlayer(barcode, x, y, z, rotation, platformId),
+            (id, platformId, index) => false);
 
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));

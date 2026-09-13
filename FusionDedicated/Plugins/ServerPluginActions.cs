@@ -17,6 +17,8 @@ public sealed class ServerPluginActions : IPluginActions
     private readonly Func<ushort, string, bool>? _keep;
     private readonly Func<ushort, bool>? _forget;
     private readonly Func<ushort, ulong, bool>? _giveOwner;
+    private readonly Func<string, float, float, float, byte[], ulong, ushort>? _spawnFor;
+    private readonly Func<ushort, ulong, byte, bool>? _holster;
 
     public ServerPluginActions(Action<ulong, string> kick, Action<ulong, string> ban,
         Action<ulong, PermissionLevel> setRank, Action<ushort> despawn,
@@ -54,6 +56,21 @@ public sealed class ServerPluginActions : IPluginActions
         _giveOwner = giveOwner;
     }
 
+    /// <summary>The one that also spawns for a chosen player and holsters.</summary>
+    public ServerPluginActions(Action<ulong, string> kick, Action<ulong, string> ban,
+        Action<ulong, PermissionLevel> setRank, Action<ushort> despawn,
+        Action<ulong, long, byte[]> sendModule, Action<long, byte[]> broadcastModule,
+        Func<string, float, float, float, byte[], ushort> spawn,
+        Func<ushort, string, bool> keep, Func<ushort, bool> forget,
+        Func<ushort, ulong, bool> giveOwner,
+        Func<string, float, float, float, byte[], ulong, ushort> spawnFor,
+        Func<ushort, ulong, byte, bool> holster)
+        : this(kick, ban, setRank, despawn, sendModule, broadcastModule, spawn, keep, forget, giveOwner)
+    {
+        _spawnFor = spawnFor;
+        _holster = holster;
+    }
+
     public void Kick(ulong platformId, string reason) => _kick(platformId, reason);
 
     public void Ban(ulong platformId, string reason) => _ban(platformId, reason);
@@ -76,4 +93,10 @@ public sealed class ServerPluginActions : IPluginActions
     public bool Forget(ushort entityId) => _forget?.Invoke(entityId) ?? false;
 
     public bool GiveOwner(ushort entityId, ulong platformId) => _giveOwner?.Invoke(entityId, platformId) ?? false;
+
+    public ushort SpawnFor(string barcode, float x, float y, float z, byte[] rotation, ulong ownerPlatformId)
+        => _spawnFor?.Invoke(barcode, x, y, z, rotation, ownerPlatformId) ?? 0;
+
+    public bool Holster(ushort entityId, ulong platformId, byte slotIndex)
+        => _holster?.Invoke(entityId, platformId, slotIndex) ?? false;
 }
