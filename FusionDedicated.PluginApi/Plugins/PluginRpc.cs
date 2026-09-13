@@ -138,15 +138,19 @@ public sealed class PluginRpc
     public void SetInt(string path, int value, ulong? platformId = null)
         => Send(RpcKind.Int, path, RpcValue.OfInt(value), platformId);
 
+    /// <remarks>A broadcast of the value the server already holds is skipped, so undo a per-player value with another per-player send.</remarks>
     public void SetFloat(string path, float value, ulong? platformId = null)
         => Send(RpcKind.Float, path, RpcValue.OfFloat(value), platformId);
 
+    /// <remarks>A broadcast of the value the server already holds is skipped, so undo a per-player value with another per-player send.</remarks>
     public void SetBool(string path, bool value, ulong? platformId = null)
         => Send(RpcKind.Bool, path, RpcValue.OfBool(value), platformId);
 
+    /// <remarks>A broadcast of the value the server already holds is skipped, so undo a per-player value with another per-player send.</remarks>
     public void SetString(string path, string value, ulong? platformId = null)
         => Send(RpcKind.String, path, RpcValue.OfString(value), platformId);
 
+    /// <remarks>A broadcast of the value the server already holds is skipped, so undo a per-player value with another per-player send.</remarks>
     public void SetVector(string path, float x, float y, float z, ulong? platformId = null)
         => Send(RpcKind.Vector3, path, RpcValue.OfVector(x, y, z), platformId);
 

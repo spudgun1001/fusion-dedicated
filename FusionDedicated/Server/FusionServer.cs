@@ -610,18 +610,18 @@ public sealed class FusionServer : IDisposable
             case 213 when sender != null:
             case 214 when sender != null:
             {
-                // A variable is kept so a joiner can be told what it is now. An
-                // event is a one-shot and there is nothing to keep.
-                if (tag != 209)
-                {
-                    NoteRpcVariable(tag, sender.SmallId, message);
-                }
-
                 // A plugin gets it before anybody else, which is what lets a prop
                 // built in Unity and shipped on mod.io be answered by the server.
                 if (OfferRpcToPlugins(sender, tag, message) == FusionDedicated.Plugins.RpcActionKind.Drop)
                 {
                     return;
+                }
+
+                // Kept after the plugins, so a value a plugin dropped is never told to a
+                // joiner. An event is a one-shot and there is nothing to keep.
+                if (tag != 209)
+                {
+                    NoteRpcVariable(tag, sender.SmallId, message);
                 }
 
                 break;
@@ -1278,6 +1278,12 @@ public sealed class FusionServer : IDisposable
         // message to say which it is now.
         if (body.Length > MaxCachedBody)
         {
+            // Relayed but too big to keep, so a smaller value held for this path is no longer what players have.
+            lock (_cacheLock)
+            {
+                _rpcVariables.Forget(tag, path);
+            }
+
             return;
         }
 
@@ -3007,18 +3013,23 @@ public sealed class FusionServer : IDisposable
 
         // Held so somebody who joins afterwards is told it too. An unchanged
         // broadcast is skipped, so a plugin undoes a per-player value with another per-player send.
-        if (platformId == null
-            && kind != BonelabServerBrowser.Fusion.RpcKind.Event
-            && payload.Length <= MaxCachedBody)
+        if (platformId == null && kind != BonelabServerBrowser.Fusion.RpcKind.Event)
         {
             lock (_cacheLock)
             {
-                if (_rpcVariables.IsUnchanged((byte)kind, payload, pathBytes))
+                if (payload.Length > MaxCachedBody)
+                {
+                    // Too big to keep, so a smaller value held for this path is no longer what players have.
+                    _rpcVariables.Forget((byte)kind, pathBytes);
+                }
+                else if (_rpcVariables.IsUnchanged((byte)kind, payload, pathBytes))
                 {
                     return;
                 }
-
-                CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
+                else
+                {
+                    CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
+                }
             }
         }
 

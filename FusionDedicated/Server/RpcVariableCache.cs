@@ -53,6 +53,18 @@ public sealed class RpcVariableCache
         }
     }
 
+    /// <summary>Forgets one variable, for a value players were sent that is too big to keep.</summary>
+    /// <returns>Whether one was held.</returns>
+    public bool Forget(byte tag, ReadOnlySpan<byte> path)
+    {
+        var key = (tag, KeyFor(path));
+
+        lock (_lock)
+        {
+            return _values.Remove(key);
+        }
+    }
+
     /// <summary>Drops every variable on one prop, for when it has gone.</summary>
     /// <returns>How many went.</returns>
     public int ForgetEntity(ushort entityId)
