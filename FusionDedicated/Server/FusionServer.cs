@@ -616,6 +616,11 @@ public sealed class FusionServer : IDisposable
             case 213 when sender != null:
             case 214 when sender != null:
             {
+                if (tag != 209)
+                {
+                    MarkRpcVariableStale(tag, message);
+                }
+
                 // A plugin gets it before anybody else, which is what lets a prop
                 // built in Unity and shipped on mod.io be answered by the server.
                 if (OfferRpcToPlugins(sender, tag, message) == FusionDedicated.Plugins.RpcActionKind.Drop)
@@ -1329,6 +1334,25 @@ public sealed class FusionServer : IDisposable
         foreach (var (end, constraint) in held)
         {
             DropConstraint(end, constraint, $"prop {entityId} is gone");
+        }
+    }
+
+    /// <summary>
+    /// Marks a held RPC variable stale when a player sends a different value. A plugin
+    /// may put back the server's value, and the sender does not hold it.
+    /// </summary>
+    private void MarkRpcVariableStale(byte tag, byte[] message)
+    {
+        byte[]? body = GateProtocol.TryReadBody(message, tag);
+
+        if (body == null || GateProtocol.TryReadRpcPath(body) is not { } path)
+        {
+            return;
+        }
+
+        lock (_cacheLock)
+        {
+            _rpcVariables.MarkStaleIfDifferent(tag, body, path);
         }
     }
 

@@ -16,7 +16,7 @@ public sealed class RpcVariableCache
     /// </summary>
     public const int MaxVariables = 2048;
 
-    private readonly Dictionary<(byte Tag, string Key), (byte From, byte[] Body)> _values = new();
+    private readonly Dictionary<(byte Tag, string Key), (byte From, byte[] Body, bool Stale)> _values = new();
     private readonly object _lock = new();
 
     public int Count
@@ -37,7 +37,7 @@ public sealed class RpcVariableCache
                 return false;
             }
 
-            _values[key] = (from, body);
+            _values[key] = (from, body, false);
             return true;
         }
     }
@@ -49,7 +49,28 @@ public sealed class RpcVariableCache
 
         lock (_lock)
         {
-            return _values.TryGetValue(key, out var held) && held.Body.AsSpan().SequenceEqual(body);
+            return _values.TryGetValue(key, out var held) && !held.Stale && held.Body.AsSpan().SequenceEqual(body);
+        }
+    }
+
+    /// <summary>
+    /// Marks a held variable stale when a player sent a different value, so the held
+    /// one is sent again rather than skipped. It is still what a joiner is told.
+    /// </summary>
+    /// <returns>Whether it was held and differed.</returns>
+    public bool MarkStaleIfDifferent(byte tag, byte[] body, ReadOnlySpan<byte> path)
+    {
+        var key = (tag, KeyFor(path));
+
+        lock (_lock)
+        {
+            if (!_values.TryGetValue(key, out var held) || held.Body.AsSpan().SequenceEqual(body))
+            {
+                return false;
+            }
+
+            _values[key] = held with { Stale = true };
+            return true;
         }
     }
 
