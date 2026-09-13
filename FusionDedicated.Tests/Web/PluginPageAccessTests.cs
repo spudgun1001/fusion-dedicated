@@ -63,6 +63,20 @@ public class PluginPageAccessTests
     }
 
     [Fact]
+    public void A_row_button_may_be_pressed_only_by_an_account_shown_its_table()
+    {
+        var panel = Panel();
+        panel.Register("labrp", _ => new PluginPage("LabRP")
+            .Table("Balances", new[] { "Player" },
+                new[] { new PluginRow(new[] { "Joel" }).With(new PluginButton("Give 100", "give")) })
+            .Fields("Everyone else", Array.Empty<PluginField>(), new[] { new PluginButton("Save", "settings") })
+            .OnlyFor(PanelRole.Banker));
+
+        Assert.True(PluginPageAccess.MayInvoke(panel, "labrp", "give", new PluginViewer("Sam", PanelRole.Moderator)));
+        Assert.False(PluginPageAccess.MayInvoke(panel, "labrp", "give", new PluginViewer("Bank", PanelRole.Banker)));
+    }
+
+    [Fact]
     public void No_panel_means_no_page()
         => Assert.Null(PluginPageAccess.Visible(null, "labrp", new PluginViewer("Sam", PanelRole.Owner)));
 }
