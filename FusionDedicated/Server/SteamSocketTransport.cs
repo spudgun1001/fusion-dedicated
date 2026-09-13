@@ -15,6 +15,7 @@ public sealed class SteamSocketTransport : ISocketTransport
     private Action<HSteamNetConnection> _connecting = _ => { };
     private Action<HSteamNetConnection, string> _closed = (_, _) => { };
     private readonly Action<string>? _onReadFailure;
+    private readonly ReceiveFailureLog _receiveFailures = new();
 
     public SteamSocketTransport(Action<string>? onReadFailure = null)
     {
@@ -99,6 +100,17 @@ public sealed class SteamSocketTransport : ISocketTransport
         }
 
         int count = SteamNetworkingSockets.ReceiveMessagesOnPollGroup(_pollGroup, _messageBuffer, max);
+
+        // A negative count is Steam failing, not an empty queue, and would otherwise look like nothing to read.
+        if (count < 0)
+        {
+            if (_receiveFailures.Failed(count, DateTime.UtcNow) is { } line)
+            {
+                _onReadFailure?.Invoke(line);
+            }
+
+            return 0;
+        }
 
         for (var i = 0; i < count; i++)
         {
