@@ -1251,11 +1251,7 @@ public sealed class FusionServer : IDisposable
         {
             if (Entities.Get(end) == null)
             {
-                lock (_cacheLock)
-                {
-                    _constraints.Remove(end);
-                }
-
+                DropConstraint(end, constraint, "its end is gone");
                 continue;
             }
 
@@ -1316,7 +1312,10 @@ public sealed class FusionServer : IDisposable
         }
     }
 
-    /// <summary>Forgets every constraint on a prop that has been removed. A constraint's own ends are never prop ends, so dropping one does not recurse.</summary>
+    /// <summary>
+    /// Forgets every constraint on a prop that has been removed. Dropping one does not recurse,
+    /// because DropConstraint takes it out of the dictionary before removing its ends.
+    /// </summary>
     private void DropConstraintsHolding(ushort entityId)
     {
         if (entityId < EntityRegistry.FirstEntityId)
@@ -3791,10 +3790,6 @@ public sealed class FusionServer : IDisposable
         end1.Partner = point2;
         end2.Partner = point1;
 
-        // Kept so somebody joining later is told about it. A host replays every
-        // constraint on catch-up; without this everything welded together comes
-        // apart for a newcomer while staying joined for everyone else.
-
         // What each end holds, so the constraint can be forgotten when that goes
         // rather than replayed onto whoever is given the same id next.
         var ends = ConstraintEnds.TryRead(payload);
@@ -3808,6 +3803,9 @@ public sealed class FusionServer : IDisposable
         var stored = StoredConstraint.For(sender.SmallId, rewritten, point2, ends,
             smallId => Players.Get(smallId)?.PlatformId);
 
+        // Kept so somebody joining later is told about it. A host replays every
+        // constraint on catch-up; without this everything welded together comes
+        // apart for a newcomer while staying joined for everyone else.
         lock (_cacheLock)
         {
             _constraints[point1] = stored;

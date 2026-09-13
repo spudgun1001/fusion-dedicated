@@ -31,6 +31,7 @@ public class ConstraintCatchupTests
 
         Constrain(joel, new EntityEnd(kanza.SmallId, 5), new EntityEnd(kanza.SmallId, 9));
         world.Leave(kanza, "Closing Connection");
+        Assert.DoesNotContain(world.Server.Entities.Entities, e => e.Synthetic);
 
         var newbie = world.Join(76561198000000003, "Newbie");
 
@@ -49,11 +50,31 @@ public class ConstraintCatchupTests
 
         Constrain(joel, new EntityEnd(300), new SceneEnd("/Level/Wall"));
         Assert.True(world.Server.DespawnEntity(300));
+        Assert.DoesNotContain(world.Server.Entities.Entities, e => e.Synthetic);
 
         var newbie = world.Join(76561198000000003, "Newbie");
 
         Assert.Equal(0, ReplaysTo(world, newbie));
         Assert.DoesNotContain(world.Server.Entities.Entities, e => e.Synthetic);
+    }
+
+    [Fact]
+    public void A_constraint_whose_end_is_gone_leaves_no_end_behind()
+    {
+        using var world = NewWorld();
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+
+        Constrain(joel, new EntityEnd(joel.SmallId, 5), new SceneEnd("/Level/Wall"));
+        var ends = world.Server.Entities.Entities.Where(e => e.Synthetic).Select(e => e.Id).Order().ToList();
+        Assert.Equal(2, ends.Count);
+
+        world.Server.Entities.Remove(ends[0]);
+
+        var newbie = world.Join(76561198000000003, "Newbie");
+
+        Assert.DoesNotContain(world.Server.Entities.Entities, e => e.Synthetic);
+        Assert.Equal(0, ReplaysTo(world, newbie));
     }
 
     [Fact]
