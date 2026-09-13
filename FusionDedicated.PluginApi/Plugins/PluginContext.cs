@@ -10,6 +10,7 @@ public sealed class PluginContext
     private readonly List<Timer> _timers = new();
     private readonly object _lock = new();
     private readonly Dictionary<string, PluginStore> _opened = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _storesLock = new();
 
     private int _running;
     private bool _stopped;
@@ -65,7 +66,7 @@ public sealed class PluginContext
                 $"'{part}' is not a store name: use 1 to 32 letters, digits or dashes", nameof(part));
         }
 
-        lock (_lock)
+        lock (_storesLock)
         {
             if (_opened.TryGetValue(part, out var open))
             {
@@ -86,7 +87,7 @@ public sealed class PluginContext
     {
         List<PluginStore> stores;
 
-        lock (_lock)
+        lock (_storesLock)
         {
             stores = _opened.Values.ToList();
         }
