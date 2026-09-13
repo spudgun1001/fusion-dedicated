@@ -65,6 +65,8 @@ public sealed class FusionServer : IDisposable
 
         // A removed id can be handed out again, so its throttle history must not linger.
         Entities.Removed += id => _poseLog.Forget(id);
+
+        Entities.Removed += DropConstraintsHolding;
     }
 
     public void Start()
@@ -319,6 +321,10 @@ public sealed class FusionServer : IDisposable
         {
             holders.Remove(player.SmallId);
         }
+
+        // A constraint on their rig went with it on every client, and a joiner
+        // given their SmallID next would otherwise be handed it on their own rig.
+        DropConstraintsNaming(player.SmallId, $"{player.DisplayName} left");
 
         // Their entities lost the only machine simulating them. A vehicle goes to
         // somebody still sitting in it and a held thing to somebody still holding
@@ -1144,7 +1150,7 @@ public sealed class FusionServer : IDisposable
     /// Constraints that exist, keyed on the first of their two ends, with the
     /// payload exactly as it was sent on. Replayed to a newcomer.
     /// </summary>
-    private readonly Dictionary<ushort, (byte Owner, byte[] Payload)> _constraints = new();
+    private readonly Dictionary<ushort, StoredConstraint> _constraints = new();
 
     /// <summary>
     /// The last value of every RPC variable, by tag and by which variable it is.
@@ -1229,37 +1235,101 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        List<(ushort End, byte Owner, byte[] Payload)> welds;
+        List<(ushort End, StoredConstraint Constraint)> welds;
 
         lock (_cacheLock)
         {
-            welds = _constraints.Select(c => (c.Key, c.Value.Owner, c.Value.Payload)).ToList();
+            welds = _constraints.Select(c => (c.Key, c.Value)).ToList();
         }
 
-        foreach (var weld in welds)
+        foreach (var (end, constraint) in welds)
         {
-            if (Entities.Get(weld.End) == null)
+            if (Entities.Get(end) == null)
             {
                 lock (_cacheLock)
                 {
-                    _constraints.Remove(weld.End);
+                    _constraints.Remove(end);
                 }
 
                 continue;
             }
 
-            byte from = Players.Get(weld.Owner) != null
-                ? weld.Owner
+            // Constraints are forgotten as what they hold goes, so this only catches one that slipped past.
+            if (constraint.IsStale(smallId => Players.Get(smallId)?.PlatformId, id => Entities.Get(id) != null))
+            {
+                DropConstraint(end, constraint, "what it held has gone");
+                continue;
+            }
+
+            byte from = Players.Get(constraint.Owner) != null
+                ? constraint.Owner
                 : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
                     ?? player.SmallId;
 
             SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
-                ModuleProtocol.ConstraintCreateTag, from, weld.Payload), reliable: true);
+                ModuleProtocol.ConstraintCreateTag, from, constraint.Payload), reliable: true);
 
             sent++;
         }
 
         return sent;
+    }
+
+    /// <summary>
+    /// Forgets a stored constraint and both of its ends. Nothing is sent: every client
+    /// already dropped it with the rig or prop it held.
+    /// </summary>
+    private void DropConstraint(ushort end, StoredConstraint constraint, string why)
+    {
+        lock (_cacheLock)
+        {
+            if (!_constraints.Remove(end))
+            {
+                return;
+            }
+        }
+
+        Entities.Remove(end);
+        Entities.Remove(constraint.Partner);
+
+        Log("INFO", $"Dropped constraint {end} and {constraint.Partner}: {why}");
+    }
+
+    /// <summary>Forgets every constraint on a player's rig, for when they leave.</summary>
+    private void DropConstraintsNaming(byte smallId, string why)
+    {
+        List<(ushort End, StoredConstraint Constraint)> named;
+
+        lock (_cacheLock)
+        {
+            named = _constraints.Where(c => c.Value.NamesPlayer(smallId)).Select(c => (c.Key, c.Value)).ToList();
+        }
+
+        foreach (var (end, constraint) in named)
+        {
+            DropConstraint(end, constraint, why);
+        }
+    }
+
+    /// <summary>Forgets every constraint on a prop that has been removed. A constraint's own ends are never prop ends, so dropping one does not recurse.</summary>
+    private void DropConstraintsHolding(ushort entityId)
+    {
+        if (entityId < EntityRegistry.FirstEntityId)
+        {
+            return;
+        }
+
+        List<(ushort End, StoredConstraint Constraint)> held;
+
+        lock (_cacheLock)
+        {
+            held = _constraints.Where(c => c.Value.NamesProp(entityId)).Select(c => (c.Key, c.Value)).ToList();
+        }
+
+        foreach (var (end, constraint) in held)
+        {
+            DropConstraint(end, constraint, $"prop {entityId} is gone");
+        }
     }
 
     /// <summary>
@@ -2627,6 +2697,12 @@ public sealed class FusionServer : IDisposable
         Config.LevelModId = modId;
         Config.LevelModFileId = modFileId;
 
+        // Constraints first, so removing every entity does not drop them one by one.
+        lock (_cacheLock)
+        {
+            _constraints.Clear();
+        }
+
         // Everything goes, props included. Anything placed on the new level is put
         // back as players arrive on it.
         Entities.Forget();
@@ -3650,9 +3726,23 @@ public sealed class FusionServer : IDisposable
         // Kept so somebody joining later is told about it. A host replays every
         // constraint on catch-up; without this everything welded together comes
         // apart for a newcomer while staying joined for everyone else.
+
+        // What each end holds, so the constraint can be forgotten when that goes
+        // rather than replayed onto whoever is given the same id next.
+        var ends = ConstraintEnds.TryRead(payload);
+
+        if (ends == null)
+        {
+            Log("WARN", $"Constraint by {sender.DisplayName} could not be read, so it is kept " +
+                        "until it is cleared or the level changes");
+        }
+
+        var stored = StoredConstraint.For(sender.SmallId, rewritten, point2, ends,
+            smallId => Players.Get(smallId)?.PlatformId);
+
         lock (_cacheLock)
         {
-            _constraints[point1] = (sender.SmallId, rewritten);
+            _constraints[point1] = stored;
         }
 
         Broadcast(ModuleProtocol.WriteModuleToClients(
