@@ -87,6 +87,7 @@ public sealed class PluginStore
 
             if (parsed == null)
             {
+                KeepUnreadable();
                 return;
             }
 
@@ -98,6 +99,23 @@ public sealed class PluginStore
         catch (JsonException)
         {
             // A broken file must not throw away state the plugin is still using.
+            KeepUnreadable();
+        }
+    }
+
+    /// <summary>Copies a file that will not parse aside, before the next save writes over it.</summary>
+    private void KeepUnreadable()
+    {
+        string copy = _path + ".unreadable";
+
+        try
+        {
+            File.Copy(_path, copy, overwrite: true);
+            _log?.Invoke("WARN", $"'{_path}' could not be read, so nothing was loaded from it. A copy is kept at '{copy}'.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log?.Invoke("WARN", $"'{_path}' could not be read, so nothing was loaded from it, and no copy could be kept: {e.Message}");
         }
     }
 
@@ -124,6 +142,8 @@ public sealed class PluginStore
     /// <returns>True when the file was written.</returns>
     public bool TrySave()
     {
+        string tmp = _path + ".tmp";
+
         try
         {
             Dictionary<string, JsonElement> forDisk;
@@ -134,7 +154,18 @@ public sealed class PluginStore
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? ".");
-            File.WriteAllText(_path, JsonSerializer.Serialize(forDisk, Options));
+
+            // A rename replaces a read-only file on Linux, so the file must prove it can be written first.
+            if (File.Exists(_path))
+            {
+                using (new FileStream(_path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
+                {
+                }
+            }
+
+            // Written beside the file and moved over it, so a kill mid-write leaves the old file whole.
+            File.WriteAllText(tmp, JsonSerializer.Serialize(forDisk, Options));
+            File.Move(tmp, _path, overwrite: true);
 
             if (!Writable)
             {
@@ -149,6 +180,8 @@ public sealed class PluginStore
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
             or System.Security.SecurityException or NotSupportedException)
         {
+            try { File.Delete(tmp); } catch { }
+
             Writable = false;
 
             // Said once rather than on every change, since a plugin saves often.

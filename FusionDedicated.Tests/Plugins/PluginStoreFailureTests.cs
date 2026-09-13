@@ -42,6 +42,39 @@ public class PluginStoreFailureTests : IDisposable
     }
 
     [Fact]
+    public void A_failed_save_leaves_no_temporary_file_behind()
+    {
+        string path = Blocked();
+        var store = new PluginStore(path);
+        store.Set("roster", new[] { 1, 2, 3 });
+
+        Assert.False(store.TrySave());
+        Assert.False(File.Exists(path + ".tmp"));
+    }
+
+    [Fact]
+    public void A_read_only_file_is_not_written()
+    {
+        string path = Path.Combine(_dir, "locked.json");
+        File.WriteAllText(path, "{}");
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+
+        try
+        {
+            var store = new PluginStore(path);
+            store.Set("salary", 1);
+
+            Assert.False(store.TrySave());
+            Assert.Equal("{}", File.ReadAllText(path));
+            Assert.False(File.Exists(path + ".tmp"));
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
     public void It_says_so_rather_than_failing_silently()
     {
         var lines = new List<string>();

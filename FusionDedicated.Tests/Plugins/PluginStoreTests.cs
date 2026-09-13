@@ -69,6 +69,30 @@ public class PluginStoreTests : IDisposable
         Assert.Equal(new List<ulong> { 1 }, store.Get<Roster>("roster")!.Members);
     }
 
+    [Theory]
+    [InlineData("{ not json")]
+    [InlineData("null")]
+    public void A_file_that_will_not_parse_is_kept_aside_and_said(string broken)
+    {
+        var lines = new List<string>();
+        File.WriteAllText(Path_, broken);
+
+        new PluginStore(Path_, (level, message) => lines.Add($"{level} {message}")).Load();
+
+        Assert.Equal(broken, File.ReadAllText(Path_ + ".unreadable"));
+        Assert.Contains(lines, l => l.StartsWith("WARN") && l.Contains("data.json"));
+    }
+
+    [Fact]
+    public void A_save_leaves_no_temporary_file_behind()
+    {
+        var store = new PluginStore(Path_);
+        store.Set("roster", new Roster(new List<ulong> { 1 }));
+
+        Assert.True(store.TrySave());
+        Assert.False(File.Exists(Path_ + ".tmp"));
+    }
+
     [Fact]
     public void Loading_a_file_that_is_not_there_yet_is_not_an_error()
     {
