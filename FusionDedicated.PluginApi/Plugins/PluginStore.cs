@@ -19,6 +19,12 @@ public sealed class PluginStore
     private readonly object _lock = new();
     private readonly Action<string, string>? _log;
 
+    /// <summary>One save at a time, so two threads never write the same temporary file.</summary>
+    private readonly object _saveLock = new();
+
+    /// <summary>Keys already warned about, so a plugin reading one every second says it once.</summary>
+    private readonly HashSet<string> _unreadableKeys = new(StringComparer.OrdinalIgnoreCase);
+
     private Dictionary<string, JsonElement> _values = new(StringComparer.OrdinalIgnoreCase);
     private bool _warned;
 
@@ -49,6 +55,12 @@ public sealed class PluginStore
             }
             catch (JsonException)
             {
+                if (_unreadableKeys.Add(key))
+                {
+                    _log?.Invoke("WARN", $"'{_path}' has a '{key}' that could not be read as " +
+                                         $"{typeof(T).Name}, so the plugin was given nothing for it");
+                }
+
                 return default;
             }
         }
@@ -141,6 +153,14 @@ public sealed class PluginStore
     /// </summary>
     /// <returns>True when the file was written.</returns>
     public bool TrySave()
+    {
+        lock (_saveLock)
+        {
+            return WriteFile();
+        }
+    }
+
+    private bool WriteFile()
     {
         string tmp = _path + ".tmp";
 
