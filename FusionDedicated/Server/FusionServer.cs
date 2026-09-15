@@ -3815,6 +3815,13 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // The same per-second cap as spawning, so a flood is cut off before any other work.
+        if (!_rateLimiter.Allow(sender.SmallId, Clock()))
+        {
+            Refuse(sender, "constraint", $"Constraint by {sender.DisplayName} denied: over the per-second rate cap");
+            return;
+        }
+
         byte[]? payload = ModuleProtocol.TryReadHandlerPayload(message);
 
         if (payload == null)
@@ -3830,6 +3837,36 @@ public sealed class FusionServer : IDisposable
             Log("WARN", $"Constraint by {sender.DisplayName} denied: the world is full " +
                         $"({Entities.SpawnedCount}/{Config.MaxEntities}). Clear some props " +
                         "or raise Max entities.");
+            return;
+        }
+
+        // Two entities each, so constraining answers to the spawn guard too, strikes included.
+        var verdict = Guard.Check(sender, Entities.SpawnsOwnedBy(sender.SmallId));
+
+        if (Guard.ExemptOverrun is { } overrun)
+        {
+            Log("WARN", $"Spam guard: {overrun}");
+        }
+
+        if (!verdict.Allowed)
+        {
+            Log("WARN", $"Spam guard: {sender.DisplayName} {verdict.Reason}");
+
+            if (verdict.Purge)
+            {
+                int purged = PurgeEntitiesOf(sender.SmallId);
+
+                if (purged > 0)
+                {
+                    Log("WARN", $"Removed {purged} entities spawned by {sender.DisplayName}");
+                }
+            }
+
+            if (verdict.Kick)
+            {
+                Kick(sender.SmallId, "Kicked for making too many constraints too quickly");
+            }
+
             return;
         }
 
