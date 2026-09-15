@@ -45,6 +45,9 @@
   "MaxEntitiesPerPlayer": 300,
   "SpamStrikesBeforeKick": 3,
   "AntiSpamExemptLevel": "Owner",
+  "MetadataPerSecond": 10,
+  "AvatarSwapsPerSecond": 2,
+  "RpcMessagesPerSecond": 60,
 
   "MaxEntities": 2000,
   "CullOrphanedEntities": true,
