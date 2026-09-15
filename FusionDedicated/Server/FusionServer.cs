@@ -1655,7 +1655,7 @@ public sealed class FusionServer : IDisposable
         // else's leftovers, one player was holding 1071 entities after a night of
         // this, and counting those would have the guard purge and eventually kick
         // whoever stayed longest, for other people's props.
-        int owned = Entities.Entities.Count(e => e.OwnerSmallId == sender.SmallId && !e.Inherited);
+        int owned = Entities.SpawnsOwnedBy(sender.SmallId);
         var verdict = Guard.Check(sender, owned);
 
         if (Guard.ExemptOverrun is { } overrun)
@@ -2566,7 +2566,8 @@ public sealed class FusionServer : IDisposable
         ushort id = Entities.AllocateId();
         byte? owner = Players.Players.FirstOrDefault()?.SmallId;
 
-        Entities.Register(id, barcode, owner ?? 0, x, y, z, rotation);
+        var spawned = Entities.Register(id, barcode, owner ?? 0, x, y, z, rotation);
+        spawned.PluginSpawned = true;
         Entities.SetOwner(id, owner);
 
         if (owner is { } named)
@@ -2600,7 +2601,8 @@ public sealed class FusionServer : IDisposable
 
         ushort id = Entities.AllocateId();
 
-        Entities.Register(id, barcode, owner.SmallId, x, y, z, rotation);
+        var spawned = Entities.Register(id, barcode, owner.SmallId, x, y, z, rotation);
+        spawned.PluginSpawned = true;
 
         Broadcast(FusionProtocol.BuildSpawnResponse(owner.SmallId, owner.SmallId, id, barcode,
             new Vec3(x, y, z), rotation, CatchupTracker, spawnEffect: false), reliable: true);
@@ -2666,11 +2668,10 @@ public sealed class FusionServer : IDisposable
 
     public int PurgeEntitiesOf(byte smallId)
     {
-        // If the owner has already gone, name someone who is still here, see
-        // Their own spawns only, sweeping up inherited props would delete the work of
-        // players who have since left.
+        // Their own spawns only. Kept props, level props, constraint ends, inherited
+        // props and plugin spawns were never theirs to lose.
         var doomed = Entities.Entities
-            .Where(e => e.OwnerSmallId == smallId && !e.Inherited)
+            .Where(e => e.OwnerSmallId == smallId && EntityRegistry.CountsAgainstOwner(e))
             .Select(e => e.Id)
             .ToList();
 
