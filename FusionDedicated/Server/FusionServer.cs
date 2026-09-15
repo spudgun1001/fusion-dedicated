@@ -80,7 +80,8 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += id => _recentRemovals.Note(id);
 
         _catchup = new CatchupOutbox(() => Config.CatchupMessagesPerSecond, () => Clock(),
-            (player, message, reliable) => SendTo(player.Connection, message, reliable));
+            (player, message, reliable) => SendTo(player.Connection, message, reliable),
+            warn: message => Log("WARN", message));
     }
 
     public void Start()
@@ -388,9 +389,9 @@ public sealed class FusionServer : IDisposable
         DropConstraintsNaming(player.SmallId, $"{player.DisplayName} left");
 
         // Their entities lost the only machine simulating them. A vehicle goes to
-        // somebody still sitting in it and a held thing to somebody still holding
-        // it, otherwise to another player who has loaded if anyone is left, otherwise they hang
-        // frozen until culled.
+        // somebody still sitting in it, a held thing to somebody still holding it,
+        // and otherwise to whichever connected player has joined the longest,
+        // loaded or not.
         byte? fallback = Players.SteadiestPlayer()?.SmallId;
         var affected = Entities.OrphanWith(player.SmallId, entity =>
             WorldCatchup.HeirFor(RidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
@@ -1297,7 +1298,9 @@ public sealed class FusionServer : IDisposable
             // Gone from the world, so the id may already belong to something
             // else. Telling a newcomer about it would weld their copy of the
             // level to whatever holds that id now.
-            if (Entities.Get(prop.EntityId) == null)
+            var entity = Entities.Get(prop.EntityId);
+
+            if (entity == null)
             {
                 lock (_cacheLock)
                 {
@@ -1309,21 +1312,27 @@ public sealed class FusionServer : IDisposable
 
             _catchup.Enqueue(player, () =>
             {
-                bool stillThere;
+                FusionProtocol.PropCreate current;
 
                 lock (_cacheLock)
                 {
-                    stillThere = _sceneProps.ContainsKey((prop.Hash, prop.Index));
+                    if (!_sceneProps.TryGetValue((prop.Hash, prop.Index), out current))
+                    {
+                        return null;
+                    }
                 }
 
-                if (!stillThere || Entities.Get(prop.EntityId) == null)
+                // The id may since have gone to something else entirely: removed and
+                // reused, or renetworked under a fresh record. Either way this record
+                // no longer names the object the newcomer would be told about.
+                if (current.EntityId != prop.EntityId || !ReferenceEquals(Entities.Get(prop.EntityId), entity))
                 {
                     return null;
                 }
 
                 byte owner = WorldCatchup.PropOwner(
-                    Entities.Get(prop.EntityId)?.OwnerSmallId,
-                    prop.OwnerSmallId,
+                    entity.OwnerSmallId,
+                    current.OwnerSmallId,
                     player.SmallId,
                     id => Players.Get(id) != null,
                     Players.SteadiestPlayer(except: player.SmallId)?.SmallId);

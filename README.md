@@ -314,10 +314,10 @@ to lift that limit.
 `CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
 the holsters and magazines after that, and the level's variables once they finish
-loading. Whatever goes past the cap waits and follows as the allowance refills, so a
-large world reaches them over a few seconds. Raise it if joins to a quiet server feel
-slow, or set it to 0 to send everything at once. It applies whether or not
-`AntiSpamEnabled` is on.
+loading. The first 100 go out at once and the rest follow at about 100 a second, so
+900 level variables take about 8 seconds and a full world at the entity and variable
+caps takes about 20. Raise it if joins to a quiet server feel slow, or set it to 0 to
+send everything at once. It applies whether or not `AntiSpamEnabled` is on.
 
 Across one night of testing (140 joins, peaks of 8–12 players) the guard removed
 3,254 props and kicked 4 people.

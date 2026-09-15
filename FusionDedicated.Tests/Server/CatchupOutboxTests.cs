@@ -10,6 +10,7 @@ namespace FusionDedicated.Tests.Server;
 public class CatchupOutboxTests
 {
     private readonly List<(byte Player, byte Message, bool Reliable)> _sent = new();
+    private readonly List<string> _warnings = new();
     private DateTime _now = new(2026, 9, 15, 12, 0, 0, DateTimeKind.Utc);
     private int _perSecond;
 
@@ -18,7 +19,8 @@ public class CatchupOutboxTests
         _perSecond = perSecond;
 
         return new CatchupOutbox(() => _perSecond, () => _now,
-            (player, message, reliable) => _sent.Add((player.SmallId, message[0], reliable)));
+            (player, message, reliable) => _sent.Add((player.SmallId, message[0], reliable)),
+            warn: _warnings.Add);
     }
 
     private static ConnectedPlayer Player(byte smallId) => new()
@@ -279,5 +281,42 @@ public class CatchupOutboxTests
         outbox.Pump();
 
         Assert.Equal(new byte[] { 0, 9 }, _sent.Select(s => s.Message));
+    }
+
+    [Fact]
+    public void A_builder_that_throws_costs_no_token_and_is_reported_as_a_warning()
+    {
+        var outbox = Outbox(1);
+        var player = Player(1);
+
+        outbox.Enqueue(player, new byte[] { 0 }, reliable: true);
+        outbox.Enqueue(player, () => throw new InvalidOperationException("boom"), reliable: true);
+        outbox.Enqueue(player, new byte[] { 2 }, reliable: true);
+
+        Wait(1);
+        outbox.Pump();
+
+        Assert.Equal(new byte[] { 0, 2 }, _sent.Select(s => s.Message));
+        Assert.Single(_warnings);
+    }
+
+    [Fact]
+    public void A_builder_that_forgets_another_players_lane_during_pump_does_not_throw()
+    {
+        var outbox = Outbox(1);
+        var p1 = Player(1);
+        var p2 = Player(2);
+
+        outbox.Enqueue(p1, new byte[] { 0 }, reliable: true);
+        outbox.Enqueue(p1, () => { outbox.Forget(2); return new byte[] { 1 }; }, reliable: true);
+
+        outbox.Enqueue(p2, new byte[] { 2 }, reliable: true);
+        outbox.Enqueue(p2, new byte[] { 3 }, reliable: true);
+
+        Wait(1);
+        var exception = Record.Exception(() => outbox.Pump());
+
+        Assert.Null(exception);
+        Assert.DoesNotContain(_sent, s => s.Player == 2 && s.Message == 3);
     }
 }

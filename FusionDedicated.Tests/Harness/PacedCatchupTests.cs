@@ -268,6 +268,32 @@ public class PacedCatchupTests
     }
 
     [Fact]
+    public void A_scene_prop_whose_entity_id_is_reused_while_queued_is_never_sent()
+    {
+        var (world, joel) = TwelveCrates(perSecond: 5);
+        using var disposing = world;
+
+        var door = world.Server.Entities.Register(700, "", joel.SmallId, 0, 0, 0);
+        door.Discovered = true;
+        joel.Send(FusionProtocol.BuildPropCreate(joel.SmallId, 1234567, 2, 700));
+
+        var late = world.Join(LateId, "Late");
+        Assert.Equal(5, Sent(world, late, FusionProtocol.TagSpawnResponse));
+        late.FinishLoading();
+
+        // The scene prop's message is still queued behind the twelve crates. The id
+        // it points at is given to a new crate before it is ever sent.
+        world.Server.Entities.Remove(700);
+        world.Server.Entities.Register(700, "Pack.Spawnable.Crate", joel.SmallId, 0, 0, 0);
+
+        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.DoesNotContain(world.Transport.SentTo(late.Connection),
+            sent => sent.Message[0] == FusionProtocol.TagNetworkPropCreate);
+    }
+
+    [Fact]
     public void A_new_player_given_a_departed_players_SmallId_gets_a_full_fresh_catchup()
     {
         var (world, _) = TwelveCrates(perSecond: 5);
