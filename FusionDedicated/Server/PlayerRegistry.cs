@@ -135,7 +135,8 @@ public sealed class ConnectedPlayer
     public bool Kicked { get; set; }
 
     public System.Version Version { get; set; } = new(0, 0, 0);
-    public DateTime JoinedAt { get; } = DateTime.UtcNow;
+    /// <summary>When they joined. Settable so a test can say who has been here longest.</summary>
+    public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastSeen { get; set; } = DateTime.UtcNow;
 
     /// <summary>
@@ -192,6 +193,22 @@ public sealed class PlayerRegistry
             {
                 return _bySmallId.Values.OrderBy(p => p.SmallId).ToList();
             }
+        }
+    }
+
+    /// <summary>
+    /// Whoever has been connected longest, leaving out <paramref name="except"/>, or
+    /// null when nobody is. A tie goes to the lower SmallId.
+    /// </summary>
+    public ConnectedPlayer? LongestJoined(byte? except = null)
+    {
+        lock (_lock)
+        {
+            return _bySmallId.Values
+                .Where(p => p.SmallId != except)
+                .OrderBy(p => p.JoinedAt)
+                .ThenBy(p => p.SmallId)
+                .FirstOrDefault();
         }
     }
 

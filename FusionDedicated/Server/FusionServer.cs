@@ -2317,12 +2317,12 @@ public sealed class FusionServer : IDisposable
         // something it is only being introduced to. A real host never does that,
         // and on the receiving client it also fires the spawn callback for
         // tracker 0, which is a real tracker number somebody may be waiting on.
-        byte owner = Players.Players
-            .Where(p => p.SmallId != joining.SmallId)
-            .Select(p => (byte?)p.SmallId)
-            .FirstOrDefault() ?? joining.SmallId;
+        byte owner = Players.LongestJoined(except: joining.SmallId)?.SmallId ?? joining.SmallId;
 
         Entities.SetOwner(entity.Id, owner);
+
+        // They did not spawn it, so it must not count against their limits.
+        entity.Inherited = true;
         AnnounceOwner(entity.Id, owner);
 
         return owner;
@@ -2564,7 +2564,7 @@ public sealed class FusionServer : IDisposable
         }
 
         ushort id = Entities.AllocateId();
-        byte? owner = Players.Players.FirstOrDefault()?.SmallId;
+        byte? owner = Players.LongestJoined()?.SmallId;
 
         var spawned = Entities.Register(id, barcode, owner ?? 0, x, y, z, rotation);
         spawned.PluginSpawned = true;
