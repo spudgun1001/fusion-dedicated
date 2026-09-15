@@ -858,6 +858,9 @@
         <div><label>Window (s)</label><input id="fWindow" type="number" min="1" max="120" data-s></div>
         <div><label>Per player</label><input id="fPerPlayer" type="number" min="1" max="20000" data-s></div>
         <div><label>Strikes</label><input id="fStrikes" type="number" min="1" max="20" data-s></div>
+        <div><label>Metadata/s</label><input id="fMetadataRate" type="number" min="0" max="1000" data-s></div>
+        <div><label>Avatars/s</label><input id="fAvatarRate" type="number" min="0" max="1000" data-s></div>
+        <div><label>RPC/s</label><input id="fRpcRate" type="number" min="0" max="1000" data-s></div>
         <div class="full">
           <label>Exempt</label>
           <select id="fExempt" data-s>
@@ -1812,6 +1815,9 @@ function revert() {
   $('fWindow').value = g.windowSeconds;
   $('fPerPlayer').value = g.maxPerPlayer;
   $('fStrikes').value = g.strikes;
+  $('fMetadataRate').value = g.metadataPerSecond;
+  $('fAvatarRate').value = g.avatarSwapsPerSecond;
+  $('fRpcRate').value = g.rpcMessagesPerSecond;
   $('fExempt').value = g.exemptLevel;
 
   dirty = false;
@@ -1850,6 +1856,9 @@ async function saveSettings() {
     spawnWindowSeconds: $('fWindow').value,
     maxEntitiesPerPlayer: $('fPerPlayer').value,
     spamStrikes: $('fStrikes').value,
+    metadataPerSecond: $('fMetadataRate').value,
+    avatarSwapsPerSecond: $('fAvatarRate').value,
+    rpcMessagesPerSecond: $('fRpcRate').value,
     antiSpamExemptLevel: $('fExempt').value,
   });
 

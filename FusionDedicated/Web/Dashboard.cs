@@ -493,6 +493,9 @@ public sealed class Dashboard
                 maxPerPlayer = _config.MaxEntitiesPerPlayer,
                 strikes = _config.SpamStrikesBeforeKick,
                 exemptLevel = (int)_config.AntiSpamExemptLevel,
+                metadataPerSecond = _config.MetadataPerSecond,
+                avatarSwapsPerSecond = _config.AvatarSwapsPerSecond,
+                rpcMessagesPerSecond = _config.RpcMessagesPerSecond,
             },
             resources = BuildResources(),
             gameplay = new
@@ -1186,6 +1189,22 @@ public sealed class Dashboard
             if (int.TryParse(query["spamStrikes"], out var strikes) && strikes is >= 1 and <= 20)
             {
                 _config.SpamStrikesBeforeKick = strikes;
+            }
+
+            // Zero turns each of these off.
+            if (int.TryParse(query["metadataPerSecond"], out var metadataRate) && metadataRate is >= 0 and <= 1000)
+            {
+                _config.MetadataPerSecond = metadataRate;
+            }
+
+            if (int.TryParse(query["avatarSwapsPerSecond"], out var avatarRate) && avatarRate is >= 0 and <= 1000)
+            {
+                _config.AvatarSwapsPerSecond = avatarRate;
+            }
+
+            if (int.TryParse(query["rpcMessagesPerSecond"], out var rpcRate) && rpcRate is >= 0 and <= 1000)
+            {
+                _config.RpcMessagesPerSecond = rpcRate;
             }
 
             // Zero is the off switch, so the floor is zero rather than a usable timeout.

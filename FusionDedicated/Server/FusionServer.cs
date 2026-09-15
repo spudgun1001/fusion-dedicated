@@ -42,6 +42,7 @@ public sealed class FusionServer : IDisposable
     private SpawnRateLimiter _rateLimiter = new(0);
     private RefusalGuard _refusals = new(0, TimeSpan.FromSeconds(5));
     private NicknameGuard _nicknames = new(0, Array.Empty<string>());
+    private readonly MessageBudget _budget;
 
     public FusionServer(ServerConfig config, ISocketTransport? transport = null)
     {
@@ -51,6 +52,7 @@ public sealed class FusionServer : IDisposable
         Entities.Capacity = config.MaxEntities;
         Entities.Clock = () => Clock();
         Guard = new SpawnGuard(config);
+        _budget = new MessageBudget(config);
         _refusals = new RefusalGuard(config.RefusalKickPerSecond, TimeSpan.FromSeconds(5));
 
         // A prop's saved variables go with it, or a busy level fills the cache and
@@ -289,6 +291,7 @@ public sealed class FusionServer : IDisposable
 
         Guard.Forget(player.SmallId);
         _rateLimiter.Forget(player.SmallId);
+        _budget.Forget(player.SmallId);
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
@@ -616,6 +619,12 @@ public sealed class FusionServer : IDisposable
             case 213 when sender != null:
             case 214 when sender != null:
             {
+                // Before the cache and the plugins see it, so a dropped one leaves no trace.
+                if (!WithinBudget(sender, MessageKind.Rpc))
+                {
+                    return;
+                }
+
                 if (tag != 209)
                 {
                     MarkRpcVariableStale(tag, message);
@@ -739,6 +748,12 @@ public sealed class FusionServer : IDisposable
 
             case GateProtocol.TagPlayerRepAvatar when sender != null:
             {
+                // Before the gates and the plugins, so a swap over the allowance costs nothing.
+                if (!WithinBudget(sender, MessageKind.Avatar))
+                {
+                    return;
+                }
+
                 if (!PassesGates(sender, tag, message))
                 {
                     return;
@@ -1468,6 +1483,14 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // After the refusals, before anything is kept or sent. The finished-loading signal is
+        // never dropped or counted, because LevelStateSent already stops it being repeated.
+        if (!WorldCatchup.FinishedLoading(request.Value.Key, request.Value.Value)
+            && !WithinBudget(sender, MessageKind.Metadata))
+        {
+            return;
+        }
+
         // A nickname is metadata like any other, so handling metadata at all
         // opened a way around both nickname guards: the reserved names that stop
         // somebody calling themselves an operator, and the cap on how often a
@@ -1833,6 +1856,25 @@ public sealed class FusionServer : IDisposable
         if (verdict.Kick)
         {
             Kick(sender.SmallId, "Flooding the server with refused requests");
+        }
+    }
+
+    /// <summary>
+    /// Whether one more message of this kind from them fits their allowance. Limited
+    /// like the spawn guard: only while anti-spam is on, and never at the exempt rank.
+    /// </summary>
+    private bool WithinBudget(ConnectedPlayer sender, MessageKind kind)
+        => !Config.AntiSpamEnabled
+        || sender.Permission.IsAtLeast(Config.AntiSpamExemptLevel)
+        || _budget.Allow(sender.SmallId, kind, Clock());
+
+    /// <summary>One line per player and kind for messages dropped over the allowance, at most once a minute.</summary>
+    private void LogDroppedMessages()
+    {
+        foreach (var (smallId, kind, dropped) in _budget.DueSummaries(Clock()))
+        {
+            string name = Players.Get(smallId)?.DisplayName ?? $"player {smallId}";
+            Log("WARN", $"Dropped {dropped} {MessageBudget.Word(kind)} messages from {name} in the last minute");
         }
     }
 
@@ -4564,6 +4606,8 @@ public sealed class FusionServer : IDisposable
             string name = Players.Get(player)?.DisplayName ?? $"player {player}";
             Log("WARN", $"{name}: {count} more {kind} refusal(s) held back from the log");
         }
+
+        LogDroppedMessages();
 
         if (!Config.CullOrphanedEntities)
         {
