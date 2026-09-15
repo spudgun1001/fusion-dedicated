@@ -82,6 +82,7 @@ public static class Program
         using var server = new FusionServer(config)
         {
             HostPlatformId = SteamUser.GetSteamID().m_SteamID,
+            IsFriend = id => SteamFriends.GetFriendRelationship(new CSteamID(id)) == EFriendRelationship.k_EFriendRelationshipFriend,
         };
 
         server.Start();

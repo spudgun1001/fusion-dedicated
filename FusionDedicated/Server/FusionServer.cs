@@ -882,9 +882,10 @@ public sealed class FusionServer : IDisposable
             platformId = remote;
         }
 
-        void Reject(string reason)
+        // The log can name the real cause when the player is shown Fusion's own vaguer text.
+        void Reject(string reason, string? logged = null)
         {
-            Log("WARN", $"Rejected {platformId}: {reason}");
+            Log("WARN", $"Rejected {platformId}: {logged ?? reason}");
             SendTo(connection, ServerProtocol.WriteDisconnect(platformId, reason), reliable: true);
 
             // A joined player asking again keeps their connection, since closing it ourselves would skip Depart.
@@ -929,6 +930,12 @@ public sealed class FusionServer : IDisposable
         if (request.Version.Major != Config.VersionMajor || request.Version.Minor != Config.VersionMinor)
         {
             Reject($"Version mismatch: server is v{Config.VersionMajor}.{Config.VersionMinor}");
+            return;
+        }
+
+        if (PrivacyRefusal(platformId) is { } privacy)
+        {
+            Reject("Server is private.", privacy);
             return;
         }
 
@@ -2983,6 +2990,21 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Steam ID this server runs under; used as the LobbyInfo's lobby ID.</summary>
     public ulong HostPlatformId { get; set; }
+
+    /// <summary>Whether a SteamID is a Steam friend of the account the server runs as, for Friends only privacy.</summary>
+    public Func<ulong, bool> IsFriend { get; set; } = _ => false;
+
+    /// <summary>
+    /// Why Privacy keeps this player out, or null when it lets them in. Matches Fusion's NetworkVerification, where only
+    /// Public and Private admit strangers and anything past Friends only admits nobody.
+    /// </summary>
+    private string? PrivacyRefusal(ulong platformId) => Config.Privacy switch
+    {
+        0 or 1 => null,
+        2 => IsFriend(platformId) ? null : "Privacy is Friends only and they are not a Steam friend of the server's account",
+        3 => "Privacy is Locked",
+        _ => $"Privacy is {Config.Privacy}, which admits nobody",
+    };
 
     public string BuildLobbyInfoJson()
         => LobbyInfoBuilder.Serialize(Config, Players.Players, HostPlatformId);
