@@ -48,6 +48,11 @@ public sealed class ConnectedPlayer
         }
     }
 
+    /// <summary>
+    /// Sets one key, within limits. Both the key and the value are whatever the
+    /// client sent, and the whole dictionary is repeated to everybody who joins
+    /// afterwards, so an unbounded one is paid for on every future join.
+    /// </summary>
     /// <returns>False when the key was not kept, for its length or because they already hold the most keys.</returns>
     public bool SetMetadata(string key, string value)
     {
