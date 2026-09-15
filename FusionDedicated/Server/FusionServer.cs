@@ -33,6 +33,9 @@ public sealed class FusionServer : IDisposable
     public long BytesIn { get; private set; }
     public long BytesOut { get; private set; }
 
+    /// <summary>Sends Steam refused, which count toward neither PacketsOut nor BytesOut.</summary>
+    public long SendsRefused { get; private set; }
+
     private readonly ISocketTransport _transport;
 
     private readonly List<ServerLogEntry> _log = new();
@@ -4644,8 +4647,38 @@ public sealed class FusionServer : IDisposable
             PacketsOut++;
             BytesOut += message.Length;
         }
+        else
+        {
+            SendsRefused++;
+            _refusedSinceSummary++;
+            _lastRefusal = _transport.LastSendFailure ?? "unknown";
+            _lastRefusedTo = Players.GetByConnection(connection)?.DisplayName
+                             ?? $"conn {connection.m_HSteamNetConnection}";
+        }
 
         return sent;
+    }
+
+    private int _refusedSinceSummary;
+    private string _lastRefusal = "";
+    private string _lastRefusedTo = "";
+    private DateTime _lastRefusalSummary = DateTime.MinValue;
+
+    /// <summary>At most once a minute, since a player dropping off can refuse hundreds of sends in a second.</summary>
+    private void SummariseRefusedSends()
+    {
+        var now = Clock();
+
+        if (_refusedSinceSummary == 0 || now - _lastRefusalSummary < TimeSpan.FromMinutes(1))
+        {
+            return;
+        }
+
+        Log("WARN", $"{_refusedSinceSummary} sends refused by Steam in the last minute, " +
+                    $"last: {_lastRefusal} to {_lastRefusedTo}");
+
+        _refusedSinceSummary = 0;
+        _lastRefusalSummary = now;
     }
 
     public void Kick(byte smallId, string reason)
@@ -4730,6 +4763,8 @@ public sealed class FusionServer : IDisposable
         }
 
         LogDroppedMessages();
+
+        SummariseRefusedSends();
 
         if (!Config.CullOrphanedEntities)
         {

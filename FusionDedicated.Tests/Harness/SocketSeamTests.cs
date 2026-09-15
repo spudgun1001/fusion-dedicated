@@ -94,6 +94,24 @@ public class SocketSeamTests
     }
 
     [Fact]
+    public void Send_pins_the_message_instead_of_copying_it_to_native_memory()
+    {
+        string source = SteamSocketTransportSource();
+
+        Assert.DoesNotContain("AllocHGlobal", source);
+        Assert.Contains("fixed (byte* data = message)", source);
+    }
+
+    [Fact]
+    public void Send_fails_and_keeps_the_result_when_steam_refuses_it()
+    {
+        string source = SteamSocketTransportSource();
+
+        Assert.Contains("if (result != EResult.k_EResultOK)", source);
+        Assert.Contains("LastSendFailure = result.ToString();", source);
+    }
+
+    [Fact]
     public void The_constructor_logs_unreadable_packets_and_sets_the_registry_clock()
     {
         string ctor = FusionServerSource.Method("public FusionServer(");
@@ -131,6 +149,8 @@ public class SocketSeamTests
         public ulong RemoteSteamId(Steamworks.HSteamNetConnection connection) => 0;
 
         public bool Send(Steamworks.HSteamNetConnection connection, byte[] message, bool reliable) => false;
+
+        public string? LastSendFailure => "k_EResultNoConnection";
 
         public int Receive(int max, Action<Steamworks.HSteamNetConnection, byte[]> handle) => 0;
 

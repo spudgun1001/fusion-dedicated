@@ -27,6 +27,17 @@ public class FakeTransportTests
     }
 
     [Fact]
+    public void A_send_set_to_fail_returns_false_records_why_and_delivers_nothing()
+    {
+        var transport = new FakeTransport { FailSendsWith = "k_EResultNoConnection" };
+        var a = transport.Connect();
+
+        Assert.False(transport.Send(a, new byte[] { 1 }, reliable: true));
+        Assert.Equal("k_EResultNoConnection", transport.LastSendFailure);
+        Assert.Empty(transport.SentTo(a));
+    }
+
+    [Fact]
     public void Deliver_drops_a_message_for_a_connection_already_closed()
     {
         var transport = new FakeTransport();

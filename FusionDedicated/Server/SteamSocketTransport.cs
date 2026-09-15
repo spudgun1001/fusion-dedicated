@@ -65,30 +65,36 @@ public sealed class SteamSocketTransport : ISocketTransport
             ? info.m_identityRemote.GetSteamID64()
             : 0UL;
 
-    public bool Send(HSteamNetConnection connection, byte[] message, bool reliable)
+    public string? LastSendFailure { get; private set; }
+
+    public unsafe bool Send(HSteamNetConnection connection, byte[] message, bool reliable)
     {
-        var buffer = Marshal.AllocHGlobal(message.Length);
+        int flags = reliable
+            ? Constants.k_nSteamNetworkingSend_Reliable
+            : Constants.k_nSteamNetworkingSend_Unreliable;
 
         try
         {
-            Marshal.Copy(message, 0, buffer, message.Length);
+            // Pinned only for the call, since Steam copies the bytes before it returns.
+            fixed (byte* data = message)
+            {
+                var result = SteamNetworkingSockets.SendMessageToConnection(
+                    connection, (IntPtr)data, (uint)message.Length, flags, out _);
 
-            int flags = reliable
-                ? Constants.k_nSteamNetworkingSend_Reliable
-                : Constants.k_nSteamNetworkingSend_Unreliable;
-
-            SteamNetworkingSockets.SendMessageToConnection(connection, buffer, (uint)message.Length, flags, out _);
+                if (result != EResult.k_EResultOK)
+                {
+                    LastSendFailure = result.ToString();
+                    return false;
+                }
+            }
 
             return true;
         }
-        catch
+        catch (Exception e)
         {
             // A closing connection throws; the status callback handles cleanup.
+            LastSendFailure = e.Message;
             return false;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
         }
     }
 

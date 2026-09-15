@@ -85,8 +85,19 @@ public sealed class FakeTransport : ISocketTransport
 
     public ulong RemoteSteamId(HSteamNetConnection connection) => 0;
 
+    /// <summary>Set to a Steam result name to make every send fail with it, the way a refused send does.</summary>
+    public string? FailSendsWith { get; set; }
+
+    public string? LastSendFailure { get; private set; }
+
     public bool Send(HSteamNetConnection connection, byte[] message, bool reliable)
     {
+        if (FailSendsWith != null)
+        {
+            LastSendFailure = FailSendsWith;
+            return false;
+        }
+
         lock (_lock)
         {
             if (!_sent.TryGetValue(connection.m_HSteamNetConnection, out var list))

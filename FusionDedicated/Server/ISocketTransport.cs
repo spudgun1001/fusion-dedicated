@@ -18,8 +18,11 @@ public interface ISocketTransport : IDisposable
     /// <summary>The Steam ID on the other end, or zero when it is not known.</summary>
     ulong RemoteSteamId(HSteamNetConnection connection);
 
-    /// <returns>False when the send threw.</returns>
+    /// <returns>False when Steam refused the send or it threw.</returns>
     bool Send(HSteamNetConnection connection, byte[] message, bool reliable);
+
+    /// <summary>Why the most recent failed send failed, such as a Steam result name. Null until one has.</summary>
+    string? LastSendFailure { get; }
 
     /// <summary>Hands up to <paramref name="max"/> waiting messages to the handler.</summary>
     /// <returns>How many there were.</returns>
