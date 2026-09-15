@@ -292,6 +292,9 @@ public sealed class EntityRegistry
         }
     }
 
+    private const int PropIdCount = ushort.MaxValue - FirstEntityId + 1;
+
+    /// <exception cref="InvalidOperationException">Every prop id is in use.</exception>
     public ushort AllocateId()
     {
         lock (_lock)
@@ -301,8 +304,17 @@ public sealed class EntityRegistry
                 _nextId = FirstEntityId;
             }
 
+            int tried = 0;
+
             while (_entities.ContainsKey(_nextId))
             {
+                // A full pass with nothing free means every id is taken, and going round again would hang the main loop.
+                if (++tried >= PropIdCount)
+                {
+                    throw new InvalidOperationException(
+                        $"Every entity id from {FirstEntityId} to {ushort.MaxValue} is in use");
+                }
+
                 // Ids are a ushort on the wire, so wrap back to the first prop id
                 // rather than overflowing into the player range.
                 _nextId = _nextId >= ushort.MaxValue ? FirstEntityId : (ushort)(_nextId + 1);

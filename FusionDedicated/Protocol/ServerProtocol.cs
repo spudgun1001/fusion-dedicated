@@ -508,7 +508,8 @@ public static class ServerProtocol
 
     /// <summary>
     /// Rewrites a relayed message's Sender field so downstream clients see who it
-    /// came from. Returns the original bytes when the route carries no sender.
+    /// came from. Returns the original bytes when the route carries no sender, or
+    /// when a target list does not fit in the message.
     /// </summary>
     public static byte[] StampSender(byte[] message, byte senderSmallId)
     {
@@ -529,8 +530,19 @@ public static class ServerProtocol
         }
         else if (relayType == 5) // ToTargets: int length + bytes
         {
+            if (message.Length < offset + 4)
+            {
+                return message;
+            }
+
             int count = (message[offset] << 24) | (message[offset + 1] << 16)
                       | (message[offset + 2] << 8) | message[offset + 3];
+
+            // Checked before it moves the offset, since a huge count overflows it and a negative one writes inside the route.
+            if (count < 0 || count > message.Length - offset - 4)
+            {
+                return message;
+            }
 
             offset += 4 + count;
         }

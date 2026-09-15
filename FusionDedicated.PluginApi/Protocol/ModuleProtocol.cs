@@ -285,6 +285,12 @@ public static class ModuleProtocol
             {
                 int targets = reader.ReadInt32();
 
+                // Capped at 256 like the other readers. Fusion addresses at most 255 players, so a longer list is not a real message.
+                if (targets is < 0 or > 256)
+                {
+                    return null;
+                }
+
                 for (var i = 0; i < targets; i++)
                 {
                     reader.ReadByte();
