@@ -291,14 +291,18 @@ Defaults: 25 spawns per 5 seconds, 300 entities per player, 3 strikes. Early str
 only delete the offending props; a kick follows repeated attempts. Only a player's own
 spawns count against them. Props inherited from players who left, kept props, level
 props, constraint ends and anything a plugin spawned never count and are never purged.
+Creating a constraint is held to the same per-second spawn rate cap and spawn guard,
+so constraint spam earns the same strikes, purge and kick.
 
 Metadata changes, avatar swaps and RPC messages have allowances of their own, per
 player per second: `MetadataPerSecond` (10), `AvatarSwapsPerSecond` (2) and
 `RpcMessagesPerSecond` (60). A message over its allowance is dropped before anybody
-else receives it, and the log totals each player's drops once a minute. Nobody is
-kicked for going over. Like the spawn guard, the allowances apply only while
-`AntiSpamEnabled` is on and only to players below `AntiSpamExemptLevel`. Set one to
-0 to lift that limit.
+else receives it, and the log totals each player's drops once a minute per player and
+per kind of message. The message a player's game sends when it finishes loading a
+level is never dropped and does not count against `MetadataPerSecond`, so a busy
+player still receives the level's state. Nobody is kicked for going over. Like the
+spawn guard, the allowances apply only while `AntiSpamEnabled` is on and only to
+players below `AntiSpamExemptLevel`. Set one to 0 to lift that limit.
 
 Across one night of testing (140 joins, peaks of 8–12 players) the guard removed
 3,254 props and kicked 4 people.
