@@ -42,6 +42,8 @@ public sealed class PluginStore
 
     public T? Get<T>(string key)
     {
+        bool warn = false;
+
         lock (_lock)
         {
             if (!_values.TryGetValue(key, out var element))
@@ -55,15 +57,18 @@ public sealed class PluginStore
             }
             catch (JsonException)
             {
-                if (_unreadableKeys.Add(key))
-                {
-                    _log?.Invoke("WARN", $"'{_path}' has a '{key}' that could not be read as " +
-                                         $"{typeof(T).Name}, so the plugin was given nothing for it");
-                }
-
-                return default;
+                warn = _unreadableKeys.Add(key);
             }
         }
+
+        // Said outside the lock, like the store's other log lines.
+        if (warn)
+        {
+            _log?.Invoke("WARN", $"'{_path}' has a '{key}' that could not be read as " +
+                                 $"{typeof(T).Name}, so the plugin was given nothing for it");
+        }
+
+        return default;
     }
 
     public void Set<T>(string key, T value)

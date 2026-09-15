@@ -756,7 +756,8 @@ public sealed class EntityRegistry
             // Surviving a clear is the point of marking something persistent, so
             // Clear all leaves them and removing one is its own deliberate press.
             removed = _entities.Values
-                // A constraint end stays until the server drops the constraint, when what it holds goes or the constraint is cleared.
+                // A constraint end stays until the server drops its constraint: when what
+                // it holds goes, one of its ends goes missing, or it is cleared.
                 .Where(e => e.Removable && !e.Synthetic && (includeDiscovered || !e.Discovered))
                 .Select(e => e.Id)
                 .ToList();

@@ -1277,8 +1277,8 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
-    /// Forgets a stored constraint and both of its ends. Nothing is sent: every client
-    /// already dropped it with the rig or prop it held.
+    /// Forgets a stored constraint and both of its ends. Nothing is sent, because clients
+    /// drop a constraint themselves when its rig, prop or end goes.
     /// </summary>
     private void DropConstraint(ushort end, StoredConstraint constraint, string why)
     {
