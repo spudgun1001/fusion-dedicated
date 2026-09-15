@@ -11,7 +11,6 @@ public enum MessageKind
 /// <summary>
 /// Per-player allowances for messages every other client is sent a copy of. What
 /// goes over is counted and summed up once a minute rather than logged one by one.
-/// Time is passed in so it tests without waiting.
 /// </summary>
 public sealed class MessageBudget
 {

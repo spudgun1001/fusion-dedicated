@@ -351,7 +351,7 @@ public sealed class ServerConfig
     public PermissionLevel AntiSpamExemptLevel { get; set; } = PermissionLevel.Owner;
 
     /// <summary>
-    /// Metadata changes one player may send a second. Everybody is sent a copy of
+    /// Metadata changes one player may send a second; everybody is sent a copy of
     /// each, so the ones over this are dropped. Zero means no limit.
     /// </summary>
     public int MetadataPerSecond { get; set; } = 10;
