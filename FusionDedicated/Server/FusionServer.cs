@@ -1580,6 +1580,7 @@ public sealed class FusionServer : IDisposable
 
         // A key set to what it already holds changes nothing, so nobody is told again,
         // and it must not spend the allowance a real change later in the same second needs.
+        // The loading checks at the end still run.
         bool unchanged = target is { } holder && holder.HoldsMetadata(request.Value.Key, request.Value.Value);
 
         // After the refusals, before anything is kept or sent. The finished-loading signal is
