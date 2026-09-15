@@ -120,9 +120,17 @@ public sealed class Dashboard
                 _server.Log("ERROR", $"Panel: {ex.Message}");
 
                 // Answered, so the browser is not left waiting on a request that failed.
+                // Apart, so a status that can no longer be set does not stop the close.
                 try
                 {
                     context.Response.StatusCode = 500;
+                }
+                catch
+                {
+                }
+
+                try
+                {
                     context.Response.Close();
                 }
                 catch
@@ -245,13 +253,9 @@ public sealed class Dashboard
                 return;
 
             case "/api/audit":
-            {
-                var entries = _server.Exclusive(() =>
-                    _server.AuditTrail?.Recent(200) ?? Array.Empty<object>().Cast<object>());
-
-                ServeJson(context, entries);
+                // The audit trail has its own lock, and reading the whole log under the world lock would hold up the loop.
+                ServeJson(context, _server.AuditTrail?.Recent(200) ?? Array.Empty<object>().Cast<object>());
                 return;
-            }
 
             case "/api/purge":
                 HandlePurge(context, query);

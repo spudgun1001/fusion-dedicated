@@ -42,10 +42,13 @@ public class DashboardLockTests
     [Theory]
     [InlineData("/api/state", "/api/kick")]
     [InlineData("/api/clear", "/api/gather")]
-    [InlineData("/api/audit", "/api/purge")]
     [InlineData("/api/modules", "/api/plugins")]
-    public void The_state_clear_audit_and_modules_endpoints_take_the_world_lock(string route, string next)
+    public void The_state_clear_and_modules_endpoints_take_the_world_lock(string route, string next)
         => Assert.Contains("_server.Exclusive(", Case(route, next));
+
+    [Fact]
+    public void The_audit_endpoint_reads_outside_the_world_lock()
+        => Assert.DoesNotContain("_server.Exclusive(", Case("/api/audit", "/api/purge"));
 
     [Fact]
     public void Plugin_code_never_runs_under_the_world_lock()
