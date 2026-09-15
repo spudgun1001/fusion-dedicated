@@ -1307,15 +1307,30 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            byte owner = WorldCatchup.PropOwner(
-                Entities.Get(prop.EntityId)?.OwnerSmallId,
-                prop.OwnerSmallId,
-                player.SmallId,
-                id => Players.Get(id) != null,
-                Players.SteadiestPlayer(except: player.SmallId)?.SmallId);
+            _catchup.Enqueue(player, () =>
+            {
+                bool stillThere;
 
-            _catchup.Enqueue(player, FusionProtocol.BuildPropCreate(
-                owner, prop.Hash, prop.Index, prop.EntityId), reliable: true);
+                lock (_cacheLock)
+                {
+                    stillThere = _sceneProps.ContainsKey((prop.Hash, prop.Index));
+                }
+
+                if (!stillThere || Entities.Get(prop.EntityId) == null)
+                {
+                    return null;
+                }
+
+                byte owner = WorldCatchup.PropOwner(
+                    Entities.Get(prop.EntityId)?.OwnerSmallId,
+                    prop.OwnerSmallId,
+                    player.SmallId,
+                    id => Players.Get(id) != null,
+                    Players.SteadiestPlayer(except: player.SmallId)?.SmallId);
+
+                return FusionProtocol.BuildPropCreate(
+                    owner, prop.Hash, prop.Index, prop.EntityId);
+            }, reliable: true);
 
             sent++;
         }
@@ -1357,15 +1372,30 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            // Owner != player.SmallId guards a departed maker's freed id being handed straight
-            // back to the newcomer being caught up, the same reuse PropOwner guards against.
-            byte from = constraint.Owner != player.SmallId && Players.Get(constraint.Owner) != null
-                ? constraint.Owner
-                : Players.SteadiestPlayer(except: player.SmallId)?.SmallId
-                    ?? player.SmallId;
+            _catchup.Enqueue(player, () =>
+            {
+                StoredConstraint? current;
 
-            _catchup.Enqueue(player, ModuleProtocol.WriteModuleToClients(
-                ModuleProtocol.ConstraintCreateTag, from, constraint.Payload), reliable: true);
+                lock (_cacheLock)
+                {
+                    _constraints.TryGetValue(end, out current);
+                }
+
+                if (!ReferenceEquals(current, constraint) || Entities.Get(end) == null)
+                {
+                    return null;
+                }
+
+                // Owner != player.SmallId guards a departed maker's freed id being handed straight
+                // back to the newcomer being caught up, the same reuse PropOwner guards against.
+                byte from = constraint.Owner != player.SmallId && Players.Get(constraint.Owner) != null
+                    ? constraint.Owner
+                    : Players.SteadiestPlayer(except: player.SmallId)?.SmallId
+                        ?? player.SmallId;
+
+                return ModuleProtocol.WriteModuleToClients(
+                    ModuleProtocol.ConstraintCreateTag, from, constraint.Payload);
+            }, reliable: true);
 
             sent++;
         }
@@ -1530,16 +1560,16 @@ public sealed class FusionServer : IDisposable
     {
         int sent = 0;
 
-        List<(byte Tag, byte From, byte[] Body)> variables;
+        List<(byte Tag, byte[] Path)> variables;
 
         lock (_cacheLock)
         {
-            variables = _rpcVariables.All();
+            variables = _rpcVariables.AllPaths();
         }
 
-        foreach (var (tag, from, body) in variables)
+        foreach (var (tag, path) in variables)
         {
-            SendRpcVariable(player, tag, from, body, paced: true);
+            SendRpcVariable(player, tag, path);
             sent++;
         }
 
@@ -1551,20 +1581,34 @@ public sealed class FusionServer : IDisposable
     /// still here. A value stamped as the server would present whatever somebody put
     /// in the cache to every later joiner as though the level said it.
     /// </summary>
-    /// <param name="paced">Through the catch-up outbox, for values the player did not ask for.</param>
-    private void SendRpcVariable(ConnectedPlayer player, byte tag, byte from, byte[] body, bool paced = false)
+    private void SendRpcVariable(ConnectedPlayer player, byte tag, byte from, byte[] body)
     {
         byte source = Players.Get(from) != null ? from : player.SmallId;
-        byte[] message = GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body);
 
-        if (paced)
+        SendTo(player.Connection,
+            GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body), reliable: true);
+    }
+
+    /// <summary>The paced counterpart. Looks up the value fresh through the outbox, since a queued send can go out well after this was called.</summary>
+    private void SendRpcVariable(ConnectedPlayer player, byte tag, byte[] path)
+    {
+        _catchup.Enqueue(player, () =>
         {
-            _catchup.Enqueue(player, message, reliable: true);
-        }
-        else
-        {
-            SendTo(player.Connection, message, reliable: true);
-        }
+            (byte From, byte[] Body)? current;
+
+            lock (_cacheLock)
+            {
+                current = _rpcVariables.Current(tag, path);
+            }
+
+            if (current == null)
+            {
+                return null;
+            }
+
+            byte source = Players.Get(current.Value.From) != null ? current.Value.From : player.SmallId;
+            return GateProtocol.BuildRpcVariable(tag, player.SmallId, source, current.Value.Body);
+        }, reliable: true);
     }
 
     private void HandleMetadataRequest(ConnectedPlayer sender, byte[] message)
@@ -2486,30 +2530,39 @@ public sealed class FusionServer : IDisposable
 
         foreach (var entity in replay)
         {
-            // An owner every client will agree on. A client registers what it is
-            // told it owns with its own update loop and starts sending poses for
-            // it, so naming the person being caught up meant each new arrival
-            // took ownership of every ownerless prop and they all simulated the
-            // same object against each other. That is what flinging looks like.
-            //
-            // Adopting rather than naming one for this message alone, so the next
-            // person told about it hears the same answer.
-            byte owner = entity.OwnerSmallId ?? Adopt(entity, player);
+            _catchup.Enqueue(player, () =>
+            {
+                // Gone, or this id now belongs to something else, by the time this is sent.
+                if (!ReferenceEquals(Entities.Get(entity.Id), entity))
+                {
+                    return null;
+                }
 
-            // A kept prop goes where it was kept. Its owner's game can report it
-            // anywhere, even before that game has loaded the level.
-            var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
-            byte[] rotation = entity.KeptAt != null ? entity.KeptRotation : entity.Rotation;
+                // An owner every client will agree on. A client registers what it is
+                // told it owns with its own update loop and starts sending poses for
+                // it, so naming the person being caught up meant each new arrival
+                // took ownership of every ownerless prop and they all simulated the
+                // same object against each other. That is what flinging looks like.
+                //
+                // Adopting rather than naming one for this message alone, so the next
+                // person told about it hears the same answer.
+                byte owner = entity.OwnerSmallId ?? Adopt(entity, player);
 
-            // Not tracker zero. A client counts its own spawn trackers up from
-            // zero, and a catch-up naming a tracker it is waiting on would fire
-            // that callback with the wrong thing. Nothing counts this high.
-            _catchup.Enqueue(player, FusionProtocol.BuildSpawnResponse(
-                owner, owner,
-                entity.Id, entity.Barcode,
-                new Vec3(x, y, z), rotation,
-                CatchupTracker,
-                spawnEffect: false, source: entity.Source), reliable: true);
+                // A kept prop goes where it was kept. Its owner's game can report it
+                // anywhere, even before that game has loaded the level.
+                var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
+                byte[] rotation = entity.KeptAt != null ? entity.KeptRotation : entity.Rotation;
+
+                // Not tracker zero. A client counts its own spawn trackers up from
+                // zero, and a catch-up naming a tracker it is waiting on would fire
+                // that callback with the wrong thing. Nothing counts this high.
+                return FusionProtocol.BuildSpawnResponse(
+                    owner, owner,
+                    entity.Id, entity.Barcode,
+                    new Vec3(x, y, z), rotation,
+                    CatchupTracker,
+                    spawnEffect: false, source: entity.Source);
+            }, reliable: true);
 
             sent++;
         }
@@ -3762,9 +3815,17 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            _catchup.Enqueue(player,
-                FusionProtocol.BuildCullStatus(owner, player.SmallId, entity.Id, true),
-                reliable: true);
+            _catchup.Enqueue(player, () =>
+            {
+                if (!ReferenceEquals(Entities.Get(entity.Id), entity) || !entity.CulledForOwner
+                    || entity.OwnerSmallId is not { } currentOwner
+                    || currentOwner == player.SmallId || Players.Get(currentOwner) == null)
+                {
+                    return null;
+                }
+
+                return FusionProtocol.BuildCullStatus(currentOwner, player.SmallId, entity.Id, true);
+            }, reliable: true);
 
             sent++;
         }
@@ -3781,9 +3842,24 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            _catchup.Enqueue(player, ModuleProtocol.WriteModuleToClients(
-                ModuleProtocol.MagazineInsertTag, PlayerRegistry.ServerSmallId,
-                ModuleProtocol.WriteMagazineInsert(magazine, gun)), reliable: true);
+            _catchup.Enqueue(player, () =>
+            {
+                bool stillLoaded;
+
+                lock (_cacheLock)
+                {
+                    stillLoaded = _loaded.TryGetValue(magazine, out ushort currentGun) && currentGun == gun;
+                }
+
+                if (!stillLoaded || Entities.Get(magazine) == null || Entities.Get(gun) == null)
+                {
+                    return null;
+                }
+
+                return ModuleProtocol.WriteModuleToClients(
+                    ModuleProtocol.MagazineInsertTag, PlayerRegistry.ServerSmallId,
+                    ModuleProtocol.WriteMagazineInsert(magazine, gun));
+            }, reliable: true);
 
             sent++;
         }
@@ -3805,13 +3881,28 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            _catchup.Enqueue(player, ModuleProtocol.WriteModuleToClients(
-                ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
-                ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index)), reliable: true);
+            _catchup.Enqueue(player, () =>
+            {
+                bool stillSlotted;
 
-            Log("INFO", HolsterLog.Resent(Entities.Get(weapon)?.ShortName ?? "an untracked item", weapon,
-                    HolsterLog.SlotOwner(slot, smallId => Players.Get(smallId)?.DisplayName), index, player.DisplayName),
-                console: false);
+                lock (_cacheLock)
+                {
+                    stillSlotted = _slotted.Find(weapon) is { } found && found.Slot == slot && found.Index == index;
+                }
+
+                if (!stillSlotted || Entities.Get(weapon) == null || !WorldCatchup.ShouldReseat(_grabs.HoldersOf(weapon)))
+                {
+                    return null;
+                }
+
+                Log("INFO", HolsterLog.Resent(Entities.Get(weapon)?.ShortName ?? "an untracked item", weapon,
+                        HolsterLog.SlotOwner(slot, smallId => Players.Get(smallId)?.DisplayName), index, player.DisplayName),
+                    console: false);
+
+                return ModuleProtocol.WriteModuleToClients(
+                    ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
+                    ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index));
+            }, reliable: true);
 
             sent++;
         }
@@ -4612,6 +4703,23 @@ public sealed class FusionServer : IDisposable
     /// <param name="paced">Through the catch-up outbox. A reply to the player's own request is not.</param>
     private void ReplayVariables(ConnectedPlayer requester, ushort entityId, bool paced = false)
     {
+        if (paced)
+        {
+            List<(byte Tag, byte[] Path)> queued;
+
+            lock (_cacheLock)
+            {
+                queued = _rpcVariables.EntityPaths(entityId);
+            }
+
+            foreach (var (tag, path) in queued)
+            {
+                SendRpcVariable(requester, tag, path);
+            }
+
+            return;
+        }
+
         List<(byte Tag, byte From, byte[] Body)> variables;
 
         lock (_cacheLock)
@@ -4621,7 +4729,7 @@ public sealed class FusionServer : IDisposable
 
         foreach (var (tag, from, body) in variables)
         {
-            SendRpcVariable(requester, tag, from, body, paced);
+            SendRpcVariable(requester, tag, from, body);
         }
 
         if (variables.Count > 0)

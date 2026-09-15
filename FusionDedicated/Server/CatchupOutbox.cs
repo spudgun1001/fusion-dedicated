@@ -3,12 +3,15 @@ namespace FusionDedicated.Server;
 /// <summary>
 /// Spreads what a joining player is sent over time. Each player's messages leave in the
 /// order they were queued, as fast as their allowance refills.
+///
+/// What is queued is a builder, not fixed bytes, so a message reflects the world as it is
+/// when it actually leaves rather than as it was when it was queued.
 /// </summary>
 public sealed class CatchupOutbox
 {
     private sealed class Lane
     {
-        public readonly Queue<(ConnectedPlayer Player, byte[] Message, bool Reliable)> Waiting = new();
+        public readonly Queue<(ConnectedPlayer Player, Func<byte[]?> Build, bool Reliable)> Waiting = new();
         public double Tokens;
         public DateTime Refilled;
         public bool Reported;
@@ -30,8 +33,15 @@ public sealed class CatchupOutbox
         _send = send;
     }
 
-    /// <summary>Sends at once while nothing waits for this player and their allowance lasts, otherwise queues.</summary>
+    /// <summary>A fixed message, for a sender that has nothing to re-check at send time.</summary>
     public void Enqueue(ConnectedPlayer player, byte[] message, bool reliable)
+        => Enqueue(player, () => message, reliable);
+
+    /// <summary>
+    /// Sends at once while nothing waits for this player and their allowance lasts, otherwise
+    /// queues the builder itself. Either way, the builder runs at the moment of sending, not now.
+    /// </summary>
+    public void Enqueue(ConnectedPlayer player, Func<byte[]?> build, bool reliable)
     {
         int rate = _perSecond();
 
@@ -45,7 +55,7 @@ public sealed class CatchupOutbox
                     Drain(paced);
                 }
 
-                _send(player, message, reliable);
+                Send(player, build, reliable);
                 return;
             }
 
@@ -54,12 +64,17 @@ public sealed class CatchupOutbox
 
             if (lane.Waiting.Count == 0 && lane.Tokens >= 1)
             {
-                lane.Tokens -= 1;
-                _send(player, message, reliable);
+                // A build that turns out to have nothing to send costs no token: nothing left,
+                // so there is nothing behind it in this lane to hold up either.
+                if (Send(player, build, reliable))
+                {
+                    lane.Tokens -= 1;
+                }
+
                 return;
             }
 
-            lane.Waiting.Enqueue((player, message, reliable));
+            lane.Waiting.Enqueue((player, build, reliable));
         }
     }
 
@@ -85,10 +100,16 @@ public sealed class CatchupOutbox
 
                 Refill(lane, rate);
 
-                while (lane.Tokens >= 1 && lane.Waiting.TryDequeue(out var next))
+                // A null build is skipped for free, so it never costs the token a real message
+                // behind it needs.
+                while (lane.Waiting.Count > 0 && lane.Tokens >= 1)
                 {
-                    lane.Tokens -= 1;
-                    _send(next.Player, next.Message, next.Reliable);
+                    var next = lane.Waiting.Dequeue();
+
+                    if (Send(next.Player, next.Build, next.Reliable))
+                    {
+                        lane.Tokens -= 1;
+                    }
                 }
             }
         }
@@ -159,7 +180,22 @@ public sealed class CatchupOutbox
     {
         while (lane.Waiting.TryDequeue(out var next))
         {
-            _send(next.Player, next.Message, next.Reliable);
+            Send(next.Player, next.Build, next.Reliable);
         }
+    }
+
+    /// <summary>Builds and sends, both under the lock, so nothing else observes half a state change.</summary>
+    /// <returns>Whether the build produced anything to send.</returns>
+    private bool Send(ConnectedPlayer player, Func<byte[]?> build, bool reliable)
+    {
+        byte[]? message = build();
+
+        if (message == null)
+        {
+            return false;
+        }
+
+        _send(player, message, reliable);
+        return true;
     }
 }

@@ -16,7 +16,7 @@ public sealed class RpcVariableCache
     /// </summary>
     public const int MaxVariables = 2048;
 
-    private readonly Dictionary<(byte Tag, string Key), (byte From, byte[] Body, bool Stale)> _values = new();
+    private readonly Dictionary<(byte Tag, string Key), (byte From, byte[] Body, bool Stale, byte[] Path)> _values = new();
     private readonly object _lock = new();
 
     public int Count
@@ -37,7 +37,7 @@ public sealed class RpcVariableCache
                 return false;
             }
 
-            _values[key] = (from, body, false);
+            _values[key] = (from, body, false, path.ToArray());
             return true;
         }
     }
@@ -135,6 +135,43 @@ public sealed class RpcVariableCache
                 .Where(v => v.Key.Key.StartsWith(prefix, StringComparison.Ordinal))
                 .Select(v => (v.Key.Tag, v.Value.From, v.Value.Body))
                 .ToList();
+        }
+    }
+
+    /// <summary>
+    /// Every held value's identity rather than its value, for a paced send that looks up what
+    /// is held at the moment it actually goes rather than what was held when it was queued.
+    /// </summary>
+    public List<(byte Tag, byte[] Path)> AllPaths()
+    {
+        lock (_lock)
+        {
+            return _values.Select(v => (v.Key.Tag, v.Value.Path)).ToList();
+        }
+    }
+
+    /// <summary>Every held value's identity on one prop. See <see cref="AllPaths"/>.</summary>
+    public List<(byte Tag, byte[] Path)> EntityPaths(ushort entityId)
+    {
+        string prefix = EntityPrefix(entityId);
+
+        lock (_lock)
+        {
+            return _values
+                .Where(v => v.Key.Key.StartsWith(prefix, StringComparison.Ordinal))
+                .Select(v => (v.Key.Tag, v.Value.Path))
+                .ToList();
+        }
+    }
+
+    /// <summary>The value currently held for one variable, or null when it has gone.</summary>
+    public (byte From, byte[] Body)? Current(byte tag, byte[] path)
+    {
+        var key = (tag, KeyFor(path));
+
+        lock (_lock)
+        {
+            return _values.TryGetValue(key, out var held) ? (held.From, held.Body) : null;
         }
     }
 

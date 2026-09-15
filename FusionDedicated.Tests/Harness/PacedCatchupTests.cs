@@ -1,4 +1,5 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Harness;
@@ -176,5 +177,114 @@ public class PacedCatchupTests
 
         Assert.Equal(12, Sent(world, late, FusionProtocol.TagSpawnResponse));
         Assert.Equal(0, PacingLines(world, "Late"));
+    }
+
+    [Fact]
+    public void A_spawn_despawned_while_queued_is_never_sent()
+    {
+        var (world, joel) = TwelveCrates(perSecond: 5);
+        using var disposing = world;
+
+        var late = world.Join(LateId, "Late");
+        Assert.Equal(5, Sent(world, late, FusionProtocol.TagSpawnResponse));
+        late.FinishLoading();
+
+        // 305 is still queued behind the first five (300-304).
+        joel.Send(ClientMessages.Despawn(joel.SmallId, 305));
+
+        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(11, Sent(world, late, FusionProtocol.TagSpawnResponse));
+        Assert.False(late.View.Entities.ContainsKey(305));
+    }
+
+    [Fact]
+    public void A_spawn_whose_owner_changed_while_queued_names_the_new_owner()
+    {
+        var (world, _) = TwelveCrates(perSecond: 5);
+        using var disposing = world;
+
+        var kanza = world.Join(76561198000000099, "Kanza");
+        kanza.FinishLoading();
+
+        // Let Kanza's own join catch-up finish, so their view knows about 306 before they grab it.
+        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        var late = world.Join(LateId, "Late");
+        Assert.Equal(5, Sent(world, late, FusionProtocol.TagSpawnResponse));
+        late.FinishLoading();
+
+        // 306 is still queued behind the first five. Kanza takes it before it is sent.
+        kanza.Grab(306);
+
+        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        // The spawn message itself, not just where the client ends up: a client that already
+        // owns nothing else to correct it from would otherwise be told the stale owner forever.
+        var spawn = world.Transport.SentTo(late.Connection)
+            .Select(s => FusionProtocol.TryReadSpawnResponse(s.Message))
+            .LastOrDefault(s => s is { } r && r.EntityId == 306);
+
+        Assert.NotNull(spawn);
+        Assert.Equal(kanza.SmallId, spawn!.OwnerId);
+        Assert.True(world.AgreeOnOwner(306));
+    }
+
+    [Fact]
+    public void A_level_variable_changed_while_queued_is_not_overwritten_by_the_stale_value()
+    {
+        using var world = new World(new ServerConfig { CullOrphanedEntities = false, CatchupMessagesPerSecond = 5 });
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+
+        for (ushort id = 300; id < 312; id++)
+        {
+            world.Server.SendRpc(RpcKind.String, RpcProtocol.PathFor(id, 0), RpcValue.OfString($"v{id}"), null);
+        }
+
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+        Assert.Equal(5, RpcsTo(world, late));
+
+        // 306 is still queued behind the first five (300-304).
+        string path = RpcProtocol.PathFor(306, 0);
+        byte[] pathBytes = Convert.FromHexString(path);
+
+        byte[] stale = GateProtocol.BuildRpcVariable((byte)RpcKind.String, late.SmallId, late.SmallId,
+            RpcProtocol.WriteValue(RpcKind.String, pathBytes, RpcValue.OfString("v306")));
+        byte[] fresh = GateProtocol.BuildRpcVariable((byte)RpcKind.String, late.SmallId, late.SmallId,
+            RpcProtocol.WriteValue(RpcKind.String, pathBytes, RpcValue.OfString("changed")));
+
+        world.Server.SendRpc(RpcKind.String, path, RpcValue.OfString("changed"), null);
+
+        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.DoesNotContain(world.Transport.SentTo(late.Connection), s => s.Message.SequenceEqual(stale));
+        Assert.Contains(world.Transport.SentTo(late.Connection), s => s.Message.SequenceEqual(fresh));
+    }
+
+    [Fact]
+    public void A_new_player_given_a_departed_players_SmallId_gets_a_full_fresh_catchup()
+    {
+        var (world, _) = TwelveCrates(perSecond: 5);
+        using var disposing = world;
+
+        var late = world.Join(LateId, "Late");
+        Assert.Equal(5, Sent(world, late, FusionProtocol.TagSpawnResponse));
+        byte reusedId = late.SmallId;
+
+        world.Leave(late, "Closing Connection");
+
+        var newcomer = world.Join(76561198000000003, "Newcomer");
+        Assert.Equal(reusedId, newcomer.SmallId);
+
+        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(12, Sent(world, newcomer, FusionProtocol.TagSpawnResponse));
     }
 }

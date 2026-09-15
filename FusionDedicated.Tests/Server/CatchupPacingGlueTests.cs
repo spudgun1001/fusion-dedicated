@@ -24,9 +24,13 @@ public class CatchupPacingGlueTests
     [Fact]
     public void Level_variables_and_their_own_props_values_are_paced()
     {
-        Assert.Contains("SendRpcVariable(player, tag, from, body, paced: true);", Method("private int SendRpcVariables("));
+        Assert.Contains("SendRpcVariable(player, tag, path);", Method("private int SendRpcVariables("));
         Assert.Contains("ReplayVariables(player, entityId, paced: true);", Method("private void ResendOwnVariables("));
     }
+
+    [Fact]
+    public void A_paced_replay_looks_up_its_value_fresh_through_the_path_based_overload()
+        => Assert.Contains("SendRpcVariable(requester, tag, path);", Method("private void ReplayVariables("));
 
     [Fact]
     public void A_data_request_is_answered_straight_away()

@@ -243,4 +243,41 @@ public class CatchupOutboxTests
         EnqueueMany(outbox, player, 3);
         Assert.Equal(2, outbox.BacklogToReport(1));
     }
+
+    [Fact]
+    public void A_null_build_spends_no_token_and_the_next_item_still_goes_out()
+    {
+        var outbox = Outbox(1);
+        var player = Player(1);
+
+        outbox.Enqueue(player, new byte[] { 0 }, reliable: true);
+        outbox.Enqueue(player, () => null, reliable: true);
+        outbox.Enqueue(player, new byte[] { 2 }, reliable: true);
+
+        Assert.Single(_sent);
+
+        Wait(1);
+        outbox.Pump();
+
+        Assert.Equal(new byte[] { 0, 2 }, _sent.Select(s => s.Message));
+        Assert.Equal(0, outbox.Waiting(1));
+    }
+
+    [Fact]
+    public void A_builder_runs_at_send_time_not_at_enqueue_time()
+    {
+        var outbox = Outbox(1);
+        var player = Player(1);
+        byte value = 1;
+
+        outbox.Enqueue(player, new byte[] { 0 }, reliable: true);
+        outbox.Enqueue(player, () => new[] { value }, reliable: true);
+
+        value = 9;
+
+        Wait(1);
+        outbox.Pump();
+
+        Assert.Equal(new byte[] { 0, 9 }, _sent.Select(s => s.Message));
+    }
 }
