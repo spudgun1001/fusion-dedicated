@@ -4434,8 +4434,10 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        // Every client that saw the seat has locked a vehicle to its driver.
-        if (WorldCatchup.DriverKeeps(next, entity.OwnerSmallId, _seats.SeatOf(releaser.SmallId)?.EntityId,
+        // Every client that saw the seat has locked a vehicle to its driver, and while anybody sits
+        // in it only its riders may take it.
+        if (WorldCatchup.RidersKeep(next, _seats.RidersOf(entityId))
+            || WorldCatchup.DriverKeeps(next, entity.OwnerSmallId, _seats.SeatOf(releaser.SmallId)?.EntityId,
                 _seats.SeatOf(next)?.EntityId, _grabs.HoldersOf(entityId), entityId))
         {
             return;

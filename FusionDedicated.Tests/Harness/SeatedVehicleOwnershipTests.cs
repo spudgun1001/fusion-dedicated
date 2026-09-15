@@ -120,6 +120,32 @@ public class SeatedVehicleOwnershipTests
     }
 
     [Fact]
+    public void An_owner_outside_letting_go_does_not_pass_it_to_a_holder_who_is_not_seated()
+    {
+        var (world, owner, rider, bystander) = CarOwnedByDriver();
+        using var __ = world;
+        rider.Send(FusionProtocol.BuildSeat(rider.SmallId, Car, 1, true));
+        owner.Send(FusionProtocol.BuildGrab(owner.SmallId, FusionProtocol.Handedness.RIGHT, 0, Car));
+        bystander.Send(FusionProtocol.BuildGrab(bystander.SmallId, FusionProtocol.Handedness.RIGHT, 0, Car));
+        var before = SentCounts(world);
+
+        owner.Send(FusionProtocol.BuildRelease(owner.SmallId, FusionProtocol.Handedness.RIGHT));
+
+        Assert.Equal(owner.SmallId, world.Server.Entities.Get(Car)!.OwnerSmallId);
+
+        for (var i = 0; i < world.Players.Count; i++)
+        {
+            bool namesBystander = world.Transport.SentTo(world.Players[i].Connection).Skip(before[i])
+                .Any(sent => FusionProtocol.TryReadOwnershipResponse(sent.Message) is { } response
+                    && response.EntityId == Car && response.PlayerId == bystander.SmallId);
+
+            Assert.False(namesBystander, $"{world.Players[i].Name} was told the bystander owns the car");
+        }
+
+        Assert.True(world.AgreeOnOwner(Car), string.Join(", ", world.OwnersOf(Car)));
+    }
+
+    [Fact]
     public void A_bystander_refused_many_times_is_logged_once()
     {
         var (world, driver, _, bystander) = CarOwnedByDriver();
