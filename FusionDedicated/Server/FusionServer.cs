@@ -75,6 +75,9 @@ public sealed class FusionServer : IDisposable
 
         _confirmations = new OwnershipConfirmations(() => Clock());
         Entities.Removed += id => _confirmations.ForgetEntity(id);
+
+        _recentRemovals = new RecentRemovals(() => Clock());
+        Entities.Removed += id => _recentRemovals.Note(id);
     }
 
     public void Start()
@@ -1931,6 +1934,9 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>Ids removed in the last few seconds, so a resent despawn for one is dropped.</summary>
+    private readonly RecentRemovals _recentRemovals;
+
     private void HandleDespawnRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = ServerProtocol.TryReadDespawnRequest(message);
@@ -1942,13 +1948,29 @@ public sealed class FusionServer : IDisposable
         }
 
         var (entityId, despawnEffect) = request.Value;
+        var target = Entities.Get(entityId);
+
+        // Later joiners are given a kept prop back, so despawning it here split the world in two.
+        // Whatever the rank, it goes from the control panel.
+        if (target is { Persistent: true })
+        {
+            Refuse(sender, "despawn", $"{sender.DisplayName} tried to despawn kept prop {entityId} " +
+                        $"('{target.ShortName}'); remove it from the control panel");
+            return;
+        }
 
         if (Config.ExtendedProtection
-            && Entities.Get(entityId) is { } target
+            && target != null
             && !DespawnAuthority.MayDespawn(target.OwnerSmallId, sender.SmallId, sender.Permission))
         {
             Refuse(sender, "despawn", $"{sender.DisplayName} tried to despawn entity {entityId}, " +
                         "which belongs to someone else");
+            return;
+        }
+
+        // A tool resends a despawn, and every copy for an id already gone went to everybody again.
+        if (target == null && _recentRemovals.Contains(entityId))
+        {
             return;
         }
 
@@ -2901,6 +2923,9 @@ public sealed class FusionServer : IDisposable
         // registry never knew is not cleared when the entities go.
         _grabs.Clear();
         _confirmations.Clear();
+
+        // After Forget, which noted every entity on the old level as removed.
+        _recentRemovals.Clear();
         _levelPropsRefused.Clear();
 
         lock (_cacheLock)
