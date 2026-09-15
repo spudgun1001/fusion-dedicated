@@ -1568,18 +1568,28 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // The rank key is the server's to set, from a join or a permission command,
+        // never from the metadata a client sends.
+        if (string.Equals(request.Value.Key, PermissionMetadataKey, StringComparison.OrdinalIgnoreCase))
+        {
+            Refuse(sender, "metadata", $"{sender.DisplayName} tried to set their own {PermissionMetadataKey}");
+            return;
+        }
+
+        var target = Players.Get(request.Value.PlayerSmallId);
+
+        // A key set to what it already holds changes nothing, so nobody is told again,
+        // and it must not spend the allowance a real change later in the same second needs.
+        bool unchanged = target is { } holder && holder.HoldsMetadata(request.Value.Key, request.Value.Value);
+
         // After the refusals, before anything is kept or sent. The finished-loading signal is
         // never dropped or counted, because LevelStateSent already stops it being repeated.
-        if (!WorldCatchup.FinishedLoading(request.Value.Key, request.Value.Value)
+        if (!unchanged
+            && !WorldCatchup.FinishedLoading(request.Value.Key, request.Value.Value)
             && !WithinBudget(sender, MessageKind.Metadata))
         {
             return;
         }
-
-        // A key set to what it already holds changes nothing, so nobody is told again.
-        // The loading checks at the end still run.
-        bool unchanged = Players.Get(request.Value.PlayerSmallId) is { } holder
-            && holder.HoldsMetadata(request.Value.Key, request.Value.Value);
 
         // A nickname is metadata like any other, so handling metadata at all
         // opened a way around both nickname guards: the reserved names that stop
@@ -1588,7 +1598,7 @@ public sealed class FusionServer : IDisposable
         // dropped and a name could only be set at the handshake.
         if (!unchanged
             && string.Equals(request.Value.Key, "Nickname", StringComparison.OrdinalIgnoreCase)
-            && Players.Get(request.Value.PlayerSmallId) is { } named)
+            && target is { } named)
         {
             var verdict = _nicknames.Allow(
                 named.SmallId, request.Value.Value, DateTime.UtcNow);
@@ -1619,7 +1629,7 @@ public sealed class FusionServer : IDisposable
         // a mod's per-player state reverted for whoever joined next.
         if (!unchanged)
         {
-            if (Players.Get(request.Value.PlayerSmallId) is { } owner
+            if (target is { } owner
                 && !owner.SetMetadata(request.Value.Key, request.Value.Value)
                 && !owner.MetadataCapLogged)
             {
@@ -1681,7 +1691,7 @@ public sealed class FusionServer : IDisposable
         }
 
         // First, so a flood of requests that would all be refused is cut off before any other work.
-        if (!_rateLimiter.Allow(sender.SmallId, DateTime.UtcNow))
+        if (!_rateLimiter.Allow(sender.SmallId, Clock()))
         {
             Refuse(sender, "spawn", $"Spawn by {sender.DisplayName} denied: over the per-second rate cap");
             return;
@@ -2470,7 +2480,9 @@ public sealed class FusionServer : IDisposable
         Entities.SetOwner(entity.Id, owner);
 
         // They did not spawn it, so it must not count against their limits.
-        entity.Inherited = true;
+        // A plugin spawn is never inherited, so it stays safe from the cull
+        // timeout even once the server that placed it has a joiner.
+        entity.Inherited = !entity.PluginSpawned;
         AnnounceOwner(entity.Id, owner);
 
         return owner;

@@ -56,7 +56,7 @@ public class AdoptionTests
     }
 
     [Fact]
-    public void A_plugin_spawn_made_with_nobody_here_is_inherited_once_a_joiner_adopts_it()
+    public void A_plugin_spawn_made_with_nobody_here_is_owned_but_not_inherited_once_a_joiner_adopts_it()
     {
         using var world = new World();
 
@@ -69,7 +69,7 @@ public class AdoptionTests
         var joel = world.Join(JoelId, "Joel");
 
         Assert.Equal((byte?)joel.SmallId, entity.OwnerSmallId);
-        Assert.True(entity.Inherited);
+        Assert.False(entity.Inherited);
         Assert.True(entity.PluginSpawned);
     }
 }

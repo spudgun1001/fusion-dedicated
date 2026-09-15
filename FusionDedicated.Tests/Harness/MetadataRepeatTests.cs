@@ -78,6 +78,25 @@ public class MetadataRepeatTests
     }
 
     [Fact]
+    public void A_player_cannot_set_their_own_rank_key()
+    {
+        using var world = new World();
+        var joel = world.Join(JoelId, "Joel");
+        var kanza = world.Join(KanzaId, "Kanza");
+        joel.FinishLoading();
+        kanza.FinishLoading();
+        int before = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.Send(ClientMessages.Metadata(joel.SmallId, FusionServer.PermissionMetadataKey, "OWNER"));
+
+        Assert.DoesNotContain(world.Transport.SentTo(kanza.Connection).Skip(before),
+            sent => Envelope.Read(sent.Message) is { Tag: GateProtocol.TagPlayerMetadataResponse } envelope
+                    && KeyOf(envelope.Payload) == FusionServer.PermissionMetadataKey);
+        Assert.Equal("DEFAULT",
+            world.Server.Players.GetByPlatformId(JoelId)!.Metadata[FusionServer.PermissionMetadataKey]);
+    }
+
+    [Fact]
     public void The_rank_lands_when_a_player_joins_with_64_keys_of_their_own()
     {
         using var world = new World();

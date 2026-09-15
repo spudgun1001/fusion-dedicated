@@ -107,6 +107,26 @@ public class FloodLimitTests
     }
 
     [Fact]
+    public void An_unchanged_repeat_does_not_spend_the_allowance_a_real_change_needs()
+    {
+        using var world = new World(Limits(metadata: 2));
+        var (joel, kanza) = Loaded(world);
+        int before = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.SendMany(new[]
+        {
+            ClientMessages.Metadata(joel.SmallId, "mod.state", "ready"),
+            ClientMessages.Metadata(joel.SmallId, "mod.state", "ready"),
+            ClientMessages.Metadata(joel.SmallId, "mod.state", "ready"),
+            ClientMessages.Metadata(joel.SmallId, "mod.other", "changed"),
+        });
+
+        Assert.Contains(world.Transport.SentTo(kanza.Connection).Skip(before),
+            sent => Envelope.Read(sent.Message) is { Tag: GateProtocol.TagPlayerMetadataResponse } envelope
+                    && KeyOf(envelope.Payload) == "mod.other");
+    }
+
+    [Fact]
     public void The_metadata_allowance_resets_each_second()
     {
         using var world = new World(Limits(metadata: 3));
