@@ -1038,8 +1038,7 @@ public sealed class FusionServer : IDisposable
         // An unqueue costs an entity that no cull reclaims, so it is held to the
         // same per player count as spawning. Without it, two thousand of these
         // filled the world permanently and nobody could spawn anything again.
-        int owned = Entities.Entities.Count(
-            e => e.OwnerSmallId == sender.SmallId && e.Discovered);
+        int owned = Entities.DiscoveredOwnedBy(sender.SmallId);
 
         bool room = Entities.Count < Config.MaxEntities * 2
             && (Config.MaxEntitiesPerPlayer <= 0 || owned < Config.MaxEntitiesPerPlayer);
@@ -1172,6 +1171,9 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Players already told they are at the limit, so it is said once.</summary>
     private readonly HashSet<byte> _unqueueRefused = new();
+
+    /// <summary>Players whose level props stopped being tracked on this level, by SteamID, so it is said once a level.</summary>
+    private readonly HashSet<ulong> _levelPropsRefused = new();
 
     private bool HasLevelVariables
     {
@@ -2734,6 +2736,7 @@ public sealed class FusionServer : IDisposable
         // Clients send no releases as the scene unloads, and a grab on an id the
         // registry never knew is not cleared when the entities go.
         _grabs.Clear();
+        _levelPropsRefused.Clear();
 
         lock (_cacheLock)
         {
@@ -4090,11 +4093,18 @@ public sealed class FusionServer : IDisposable
                 pose.Value.Position.Z - sender.LastPosition.Z).Magnitude
             : null;
 
-        Entities.NotePose(vehicleId, sender.SmallId,
+        var noted = Entities.NotePose(vehicleId, sender.SmallId,
             pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
             pose.Value.Rotation,
             pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z,
-            ownerDistance);
+            ownerDistance, Config.MaxEntitiesPerPlayer);
+
+        // The pose is still relayed, so a real level prop keeps working for everybody else.
+        if (noted == PoseNoted.OwnerAtCap && _levelPropsRefused.Add(sender.PlatformId))
+        {
+            Log("WARN", $"Not tracking more level props for {sender.DisplayName}: they already have " +
+                        $"{Entities.DiscoveredOwnedBy(sender.SmallId)}");
+        }
 
         if (known is { Persistent: true, KeptAt: { } keptAt })
         {
