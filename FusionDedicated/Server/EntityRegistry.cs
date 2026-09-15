@@ -414,6 +414,12 @@ public sealed class EntityRegistry
         {
             if (_entities.TryGetValue(id, out var entity))
             {
+                // The flag was the old owner's word. A new owner's game reports its own.
+                if (entity.OwnerSmallId != owner)
+                {
+                    entity.CulledForOwner = false;
+                }
+
                 entity.OwnerSmallId = owner;
                 entity.LastUpdate = Clock();
             }
@@ -564,6 +570,11 @@ public sealed class EntityRegistry
             foreach (var entity in _entities.Values.Where(e => e.OwnerSmallId == departedSmallId))
             {
                 byte? heir = heirFor(entity);
+
+                if (heir != entity.OwnerSmallId)
+                {
+                    entity.CulledForOwner = false;
+                }
 
                 entity.OwnerSmallId = heir;
                 entity.Inherited = heir.HasValue;
