@@ -46,3 +46,7 @@ props.json
 # Whitelist and moderation trail hold other people's SteamIDs.
 whitelist.json
 moderation.log
+
+# Local scratch from Claude sessions and test runs.
+.superpowers/
+TestResults/
