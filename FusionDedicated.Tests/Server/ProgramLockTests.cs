@@ -67,15 +67,23 @@ public class ProgramLockTests
     public void The_panel_starts_after_the_startup_pump_has_stopped()
     {
         string source = ProgramSource.Text();
+        string startup = ProgramSource.Between("await pumpTask;", "// ---- main loop ----");
 
-        int pumpStopped = source.IndexOf("await pumpTask;", StringComparison.Ordinal);
-        int panelStarts = source.IndexOf("dashboard.Start();", StringComparison.Ordinal);
-
-        Assert.True(pumpStopped >= 0, "the startup pump is not awaited");
-        Assert.True(panelStarts > pumpStopped, "the panel starts while the startup pump still runs callbacks");
+        Assert.Equal(1, source.Split("new Dashboard(").Length - 1);
+        Assert.Equal(1, source.Split("dashboard.Start();").Length - 1);
+        Assert.Contains("new Dashboard(", startup);
+        Assert.Contains("dashboard.Start();", startup);
     }
 
     [Fact]
-    public void Plugins_load_under_the_world_lock()
-        => Assert.Contains("server.Exclusive(() => plugins.LoadAll())", ProgramSource.Text());
+    public void Plugins_load_under_the_world_lock_before_the_console_starts()
+    {
+        string startup = ProgramSource.Between("// ---- main loop ----", "rcon.Start();");
+
+        int load = startup.IndexOf("server.Exclusive(() => plugins.LoadAll())", StringComparison.Ordinal);
+        int console = startup.IndexOf("StdinCommands.Start(", StringComparison.Ordinal);
+
+        Assert.True(load >= 0, "plugins do not load under the world lock");
+        Assert.True(console > load, "the console starts before the plugins have loaded");
+    }
 }

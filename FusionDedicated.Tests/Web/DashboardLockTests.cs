@@ -67,7 +67,15 @@ public class DashboardLockTests
     {
         string loop = DashboardSource.Method("private async Task LoopAsync(");
 
-        Assert.Contains("context.Response.StatusCode = 500;", loop);
-        Assert.Contains("context.Response.Close();", loop);
+        int status = loop.IndexOf("context.Response.StatusCode = 500;", StringComparison.Ordinal);
+
+        Assert.True(status >= 0, "a failed request is not given a 500");
+
+        int close = loop.IndexOf("context.Response.Close();", status, StringComparison.Ordinal);
+
+        Assert.True(close > status, "a failed request is not closed");
+
+        // Apart, so a status that can no longer be set does not stop the close.
+        Assert.Contains("catch", loop[status..close]);
     }
 }

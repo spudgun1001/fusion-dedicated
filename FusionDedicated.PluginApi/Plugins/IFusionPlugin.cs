@@ -17,13 +17,13 @@ public interface IFusionPlugin
 /// </summary>
 public interface IPluginActions
 {
-    /// <remarks>Called from a plugin's own timer, this takes effect on the server's next pass.</remarks>
+    /// <remarks>Called off the server loop, such as from a timer or panel action, this takes effect on the server's next pass.</remarks>
     void Kick(ulong platformId, string reason);
 
-    /// <remarks>Called from a plugin's own timer, this takes effect on the server's next pass.</remarks>
+    /// <remarks>Called off the server loop, such as from a timer or panel action, this takes effect on the server's next pass.</remarks>
     void Ban(ulong platformId, string reason);
 
-    /// <remarks>Called from a plugin's own timer, this takes effect on the server's next pass.</remarks>
+    /// <remarks>Called off the server loop, such as from a timer or panel action, this takes effect on the server's next pass.</remarks>
     void SetRank(ulong platformId, PermissionLevel level);
 
     /// <summary>Removes a prop. A kept one stops being kept, so it does not come back after a restart.</summary>

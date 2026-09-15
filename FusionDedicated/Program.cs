@@ -365,8 +365,6 @@ public static class Program
         // ---- main loop ----
         using var quit = new CancellationTokenSource();
 
-        StdinCommands.Start(commands, Console.WriteLine, quit.Token);
-
         using var rcon = new RconServer(commands, config.RconPassword, config.RconPort,
         (level, message) => server.Log(level, message));
 
@@ -379,7 +377,7 @@ public static class Program
             dashboard.PluginHost = plugins;
             server.PluginModules = pluginModules;
 
-            // Under the world lock, so a panel or console request waits until every plugin has started.
+            // Under the world lock, so a request that takes it waits until every plugin has started.
             int loadedPlugins = server.Exclusive(() => plugins.LoadAll());
 
             if (loadedPlugins > 0)
@@ -394,6 +392,8 @@ public static class Program
                 : "Plugins are off; set PluginsEnabled in server.json to load them");
         }
 
+        // After the plugins, so a reload typed at startup cannot run alongside LoadAll.
+        StdinCommands.Start(commands, Console.WriteLine, quit.Token);
         rcon.Start();
 
         if (rcon.Port != 0)
