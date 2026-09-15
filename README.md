@@ -288,8 +288,17 @@ the server idles at 2% CPU. The limits are therefore sized for what clients surv
 not what the server survives.
 
 Defaults: 25 spawns per 5 seconds, 300 entities per player, 3 strikes. Early strikes
-only delete the offending props; a kick follows repeated attempts. Props inherited
-from players who left do not count against whoever inherited them.
+only delete the offending props; a kick follows repeated attempts. Only a player's own
+spawns count against them. Props inherited from players who left, kept props, level
+props, constraint ends and anything a plugin spawned never count and are never purged.
+
+Metadata changes, avatar swaps and RPC messages have allowances of their own, per
+player per second: `MetadataPerSecond` (10), `AvatarSwapsPerSecond` (2) and
+`RpcMessagesPerSecond` (60). A message over its allowance is dropped before anybody
+else receives it, and the log totals each player's drops once a minute. Nobody is
+kicked for going over. Like the spawn guard, the allowances apply only while
+`AntiSpamEnabled` is on and only to players below `AntiSpamExemptLevel`. Set one to
+0 to lift that limit.
 
 Across one night of testing (140 joins, peaks of 8–12 players) the guard removed
 3,254 props and kicked 4 people.
@@ -377,17 +386,25 @@ gitignored.
 |---|---|
 | `ServerName` / `Description` | shown in the browser; Unity rich text works (`<color=#4ae08c>`) |
 | `VersionMajor` / `VersionMinor` | **must match** the Fusion build your players run |
-| `Privacy` | 0 public, 1 private, 2 friends only, 3 locked |
+| `Privacy` | 0 public, 1 private, 2 friends only, 3 locked; checked at join, see below |
 | `MaxPlayers` | slots; Fusion addresses players with one byte, so 255 is the hard ceiling |
 | `LevelBarcode` / `LevelTitle` | the map clients are told to load |
 | `LevelModId` | mod.io ID of the current map; also supplies the server's picture in the browser |
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
-| `AntiSpamExemptLevel` | rank that bypasses the spawn guard (`Owner` by default) |
+| `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
+| `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
+| `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
+| `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 
 Most of these are editable in the panel; the file is the source of truth on restart.
+
+`Privacy` follows Fusion's own rules when a player joins: public and private let
+anyone in, friends only admits Steam friends of the account the server runs as, and
+locked admits nobody new. Owners and operators are refused like anybody else, with
+Fusion's message "Server is private."
 
 ---
 
@@ -405,7 +422,8 @@ see it, check `Privacy` in `server.json` and that `VersionMajor`/`VersionMinor` 
 their Fusion build.
 
 **Players connect, then immediately drop**
-Almost always a version mismatch. The log records the rejection reason.
+Almost always a version mismatch. The log records the rejection reason. A player told
+"Server is private." was refused by `Privacy`.
 
 **`fusion-steam` restarts in a loop**
 Steam failed to start under the virtual display. Check `/tmp/steam.log` and confirm
