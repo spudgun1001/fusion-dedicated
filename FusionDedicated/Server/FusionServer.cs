@@ -353,9 +353,22 @@ public sealed class FusionServer : IDisposable
             Entities.SetAttached(weapon, false);
         }
 
-        foreach (var holders in _barcodeHolders.Values)
+        foreach (var (barcode, holders) in _barcodeHolders.ToList())
         {
             holders.Remove(player.SmallId);
+
+            // Nobody here holds it now, and keeping an empty set for every barcode ever seen only grows.
+            if (holders.Count == 0)
+            {
+                _barcodeHolders.Remove(barcode);
+            }
+        }
+
+        // A rig's RPC variables are keyed by its small id, and the next player given
+        // that id would be replayed them as their own.
+        lock (_cacheLock)
+        {
+            _rpcVariables.ForgetEntity(player.SmallId);
         }
 
         // A constraint on their rig went with it on every client, and a joiner
@@ -1232,6 +1245,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Which caches have already said they are full, so it is said once.</summary>
     private readonly HashSet<string> _cacheFull = new();
 
+    /// <summary>RPC paths already logged as too big to keep on this level, so each is said once.</summary>
+    private readonly HashSet<string> _oversizedRpcPaths = new();
+
     /// <summary>Players already told they are at the limit, so it is said once.</summary>
     private readonly HashSet<byte> _unqueueRefused = new();
 
@@ -1442,6 +1458,7 @@ public sealed class FusionServer : IDisposable
                 _rpcVariables.Forget(tag, path);
             }
 
+            NoteOversizedRpc(body.Length, path);
             return;
         }
 
@@ -1463,6 +1480,26 @@ public sealed class FusionServer : IDisposable
                             "more. A level does not have this many.");
             }
         }
+    }
+
+    /// <summary>
+    /// Says once per path per level that a value was too big to keep, so an author can
+    /// see why somebody who joins later does not get it.
+    /// </summary>
+    private void NoteOversizedRpc(int length, byte[] path)
+    {
+        string key = Convert.ToHexString(path);
+
+        lock (_cacheLock)
+        {
+            // Paths come from clients, so this is capped like the cache it reports on.
+            if (_oversizedRpcPaths.Count >= RpcVariableCache.MaxVariables || !_oversizedRpcPaths.Add(key))
+            {
+                return;
+            }
+        }
+
+        Log("WARN", $"Not keeping an RPC value of {length} bytes for {key}, players who join later will not get it");
     }
 
     /// <summary>
@@ -2078,6 +2115,9 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     /// <summary>Who has been seen using each barcode, so requests can be brokered.</summary>
     private readonly Dictionary<string, HashSet<byte>> _barcodeHolders = new();
+
+    /// <summary>How many barcodes somebody is known to hold. Exposed so leaving and level changes can be seen to shrink it.</summary>
+    public int BarcodesWithHolders => _barcodeHolders.Count;
 
     /// <summary>Forwarded requests, so the reply can be matched back to its barcode.</summary>
     private readonly Dictionary<(byte Requester, uint Tracker), (string Barcode, DateTime Asked)>
@@ -2849,8 +2889,12 @@ public sealed class FusionServer : IDisposable
             _sceneProps.Clear();
             _constraints.Clear();
             _rpcVariables.Clear();
+            _oversizedRpcPaths.Clear();
             _cacheFull.Clear();
         }
+
+        // Dropped with the rest of the level's bookkeeping, so it cannot grow for the life of the server.
+        _barcodeHolders.Clear();
 
         // A new level means new state, so everybody is owed it again.
         foreach (var player in Players.Players)
@@ -3253,6 +3297,7 @@ public sealed class FusionServer : IDisposable
                 {
                     // Too big to keep, so a smaller value held for this path is no longer what players have.
                     _rpcVariables.Forget((byte)kind, pathBytes);
+                    NoteOversizedRpc(payload.Length, pathBytes);
                 }
                 else if (_rpcVariables.IsUnchanged((byte)kind, payload, pathBytes))
                 {
