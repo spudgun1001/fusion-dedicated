@@ -75,7 +75,14 @@ public class RotationsTests
 
     [Fact]
     public void The_inverse_of_an_unnormalised_rotation_is_normalised()
-        => Assert.True(SameRotation(Quat.Identity, Rotations.Inverse(new Quat(0, 0, 0, 2))));
+    {
+        var inverse = Rotations.Inverse(new Quat(0, 0, 0, 2));
+
+        Assert.True(MathF.Abs(inverse.W - 1f) < 1e-5f, $"expected W near 1, got {inverse.W}");
+
+        float length = MathF.Sqrt((inverse.X * inverse.X) + (inverse.Y * inverse.Y) + (inverse.Z * inverse.Z) + (inverse.W * inverse.W));
+        Assert.True(MathF.Abs(length - 1f) < 1e-5f, $"expected unit length, got {length}");
+    }
 
     [Fact]
     public void A_quarter_turn_about_y_takes_x_to_minus_z()
