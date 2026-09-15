@@ -1920,6 +1920,9 @@ public sealed class FusionServer : IDisposable
             ? request.Value.Source
             : FusionProtocol.SourcePlayer;
 
+        // The request's transform is the crate root, which the first pose then measures its first body against.
+        spawned.SpawnRoot = new SpawnRoot(request.Value.Position, request.Value.Rotation);
+
         Broadcast(FusionProtocol.BuildSpawnResponse(sender.SmallId, sender.SmallId, entityId,
             request.Value.Barcode, request.Value.Position, request.Value.Rotation,
             request.Value.TrackerId, request.Value.SpawnEffect,
@@ -2552,6 +2555,14 @@ public sealed class FusionServer : IDisposable
                 // anywhere, even before that game has loaded the level.
                 var (x, y, z) = entity.KeptAt ?? (entity.X, entity.Y, entity.Z);
                 byte[] rotation = entity.KeptAt != null ? entity.KeptRotation : entity.Rotation;
+                var position = new Vec3(x, y, z);
+
+                // A spawn places the root, but a pose only tells us where the first body is.
+                if (entity.KeptAt == null && entity.RootOffset?.Apply(position, rotation) is { } root)
+                {
+                    position = root.Position;
+                    rotation = root.Rotation;
+                }
 
                 // Not tracker zero. A client counts its own spawn trackers up from
                 // zero, and a catch-up naming a tracker it is waiting on would fire
@@ -2559,7 +2570,7 @@ public sealed class FusionServer : IDisposable
                 return FusionProtocol.BuildSpawnResponse(
                     owner, owner,
                     entity.Id, entity.Barcode,
-                    new Vec3(x, y, z), rotation,
+                    position, rotation,
                     CatchupTracker,
                     spawnEffect: false, source: entity.Source);
             }, reliable: true);
@@ -2834,6 +2845,7 @@ public sealed class FusionServer : IDisposable
 
         var spawned = Entities.Register(id, barcode, owner ?? 0, x, y, z, rotation);
         spawned.PluginSpawned = true;
+        spawned.SpawnRoot = new SpawnRoot(new Vec3(x, y, z), rotation);
         Entities.SetOwner(id, owner);
 
         if (owner is { } named)
@@ -2869,6 +2881,7 @@ public sealed class FusionServer : IDisposable
 
         var spawned = Entities.Register(id, barcode, owner.SmallId, x, y, z, rotation);
         spawned.PluginSpawned = true;
+        spawned.SpawnRoot = new SpawnRoot(new Vec3(x, y, z), rotation);
 
         Broadcast(FusionProtocol.BuildSpawnResponse(owner.SmallId, owner.SmallId, id, barcode,
             new Vec3(x, y, z), rotation, CatchupTracker, spawnEffect: false), reliable: true);

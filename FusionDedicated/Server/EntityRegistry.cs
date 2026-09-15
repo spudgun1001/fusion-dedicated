@@ -55,6 +55,12 @@ public sealed class TrackedEntity
     /// </summary>
     public byte[] Rotation { get; set; } = Array.Empty<byte>();
 
+    /// <summary>Where a spawn put the crate's root, until the first pose after it. Null for anything else.</summary>
+    public SpawnRoot? SpawnRoot { get; set; }
+
+    /// <summary>How the root sits against the first body, so a joiner is sent the root. Null until learned.</summary>
+    public RootOffset? RootOffset { get; set; }
+
     /// <summary>
     /// Placed on purpose and meant to stay. Exempt from every cull, from eviction
     /// at the entity cap, and from Clear all.
@@ -477,6 +483,14 @@ public sealed class EntityRegistry
                 if (rotation is { Length: > 0 })
                 {
                     entity.Rotation = rotation;
+                }
+
+                // Once, from the first pose after a spawn, whether or not it could be learned.
+                if (entity.SpawnRoot is { } root)
+                {
+                    entity.RootOffset = RootOffset.Capture(root, entity.SpawnedAt, Clock(), new Vec3(x, y, z),
+                        rotation ?? Array.Empty<byte>());
+                    entity.SpawnRoot = null;
                 }
 
                 entity.OwnerDistanceAtPose = ownerDistance;
