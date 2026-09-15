@@ -78,6 +78,9 @@ public sealed class FusionServer : IDisposable
 
         _recentRemovals = new RecentRemovals(() => Clock());
         Entities.Removed += id => _recentRemovals.Note(id);
+
+        _catchup = new CatchupOutbox(() => Config.CatchupMessagesPerSecond, () => Clock(),
+            (player, message, reliable) => SendTo(player.Connection, message, reliable));
     }
 
     public void Start()
@@ -336,6 +339,7 @@ public sealed class FusionServer : IDisposable
         _ownershipRefusalLog.Remove(player.SmallId);
         _seatRefusalLog.Remove(player.SmallId);
         _confirmations.ForgetPlayer(player.SmallId);
+        _catchup.Forget(player.SmallId);
         SeatForgetRider(player.SmallId);
 
         // Small ids are reused, so the next holder of this one is a different
@@ -1068,6 +1072,8 @@ public sealed class FusionServer : IDisposable
                     $"{scene} scene objects, {welds} constraints, " +
                     $"level '{Config.LevelBarcode}'");
 
+        ReportPacing(player);
+
         // Everyone's copy of LobbyInfo now has a stale player list.
         PushSettings();
 
@@ -1308,7 +1314,7 @@ public sealed class FusionServer : IDisposable
                 id => Players.Get(id) != null,
                 Players.SteadiestPlayer(except: player.SmallId)?.SmallId);
 
-            SendTo(player.Connection, FusionProtocol.BuildPropCreate(
+            _catchup.Enqueue(player, FusionProtocol.BuildPropCreate(
                 owner, prop.Hash, prop.Index, prop.EntityId), reliable: true);
 
             sent++;
@@ -1358,7 +1364,7 @@ public sealed class FusionServer : IDisposable
                 : Players.SteadiestPlayer(except: player.SmallId)?.SmallId
                     ?? player.SmallId;
 
-            SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
+            _catchup.Enqueue(player, ModuleProtocol.WriteModuleToClients(
                 ModuleProtocol.ConstraintCreateTag, from, constraint.Payload), reliable: true);
 
             sent++;
@@ -1533,7 +1539,7 @@ public sealed class FusionServer : IDisposable
 
         foreach (var (tag, from, body) in variables)
         {
-            SendRpcVariable(player, tag, from, body);
+            SendRpcVariable(player, tag, from, body, paced: true);
             sent++;
         }
 
@@ -1545,12 +1551,20 @@ public sealed class FusionServer : IDisposable
     /// still here. A value stamped as the server would present whatever somebody put
     /// in the cache to every later joiner as though the level said it.
     /// </summary>
-    private void SendRpcVariable(ConnectedPlayer player, byte tag, byte from, byte[] body)
+    /// <param name="paced">Through the catch-up outbox, for values the player did not ask for.</param>
+    private void SendRpcVariable(ConnectedPlayer player, byte tag, byte from, byte[] body, bool paced = false)
     {
         byte source = Players.Get(from) != null ? from : player.SmallId;
+        byte[] message = GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body);
 
-        SendTo(player.Connection,
-            GateProtocol.BuildRpcVariable(tag, player.SmallId, source, body), reliable: true);
+        if (paced)
+        {
+            _catchup.Enqueue(player, message, reliable: true);
+        }
+        else
+        {
+            SendTo(player.Connection, message, reliable: true);
+        }
     }
 
     private void HandleMetadataRequest(ConnectedPlayer sender, byte[] message)
@@ -1684,6 +1698,8 @@ public sealed class FusionServer : IDisposable
                 Log("INFO", $"{sender.DisplayName} finished loading, sent {replayed} " +
                             "level variables");
             }
+
+            ReportPacing(sender);
         }
 
         // Holsters and magazines again. The sends after joining are thrown away by
@@ -2488,7 +2504,7 @@ public sealed class FusionServer : IDisposable
             // Not tracker zero. A client counts its own spawn trackers up from
             // zero, and a catch-up naming a tracker it is waiting on would fire
             // that callback with the wrong thing. Nothing counts this high.
-            SendTo(player.Connection, FusionProtocol.BuildSpawnResponse(
+            _catchup.Enqueue(player, FusionProtocol.BuildSpawnResponse(
                 owner, owner,
                 entity.Id, entity.Barcode,
                 new Vec3(x, y, z), rotation,
@@ -2932,6 +2948,9 @@ public sealed class FusionServer : IDisposable
         // registry never knew is not cleared when the entities go.
         _grabs.Clear();
         _confirmations.Clear();
+
+        // Before the new SceneLoad, so nothing meant for the old level is sent after it.
+        _catchup.Clear();
 
         // After Forget, which noted every entity on the old level as removed.
         _recentRemovals.Clear();
@@ -3513,6 +3532,9 @@ public sealed class FusionServer : IDisposable
 
     private readonly object _deferredLock = new();
 
+    /// <summary>What a joining player is caught up with, paced by CatchupMessagesPerSecond.</summary>
+    private readonly CatchupOutbox _catchup;
+
     /// <summary>What deferred work counts time by. Tests set it to step through delays.</summary>
     public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
 
@@ -3574,6 +3596,8 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     public void PumpDeferred()
     {
+        _catchup.Pump();
+
         List<Action> due;
 
         lock (_deferredLock)
@@ -3651,6 +3675,8 @@ public sealed class FusionServer : IDisposable
                 {
                     Log("INFO", $"Re-seated {sent} attachment(s) for {player.DisplayName}");
                 }
+
+                ReportPacing(player);
             });
         }
     }
@@ -3675,9 +3701,22 @@ public sealed class FusionServer : IDisposable
 
                 foreach (ushort entityId in owned)
                 {
-                    ReplayVariables(player, entityId);
+                    ReplayVariables(player, entityId, paced: true);
                 }
+
+                ReportPacing(player);
             });
+        }
+    }
+
+    /// <summary>Says once a level when a player's catch-up is more than their allowance sends at once.</summary>
+    private void ReportPacing(ConnectedPlayer player)
+    {
+        int waiting = _catchup.BacklogToReport(player.SmallId);
+
+        if (waiting > 0)
+        {
+            Log("INFO", $"Pacing catch-up for {player.DisplayName}: {waiting} messages waiting");
         }
     }
 
@@ -3723,7 +3762,7 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            SendTo(player.Connection,
+            _catchup.Enqueue(player,
                 FusionProtocol.BuildCullStatus(owner, player.SmallId, entity.Id, true),
                 reliable: true);
 
@@ -3742,7 +3781,7 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
+            _catchup.Enqueue(player, ModuleProtocol.WriteModuleToClients(
                 ModuleProtocol.MagazineInsertTag, PlayerRegistry.ServerSmallId,
                 ModuleProtocol.WriteMagazineInsert(magazine, gun)), reliable: true);
 
@@ -3766,7 +3805,7 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
+            _catchup.Enqueue(player, ModuleProtocol.WriteModuleToClients(
                 ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
                 ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index)), reliable: true);
 
@@ -4570,7 +4609,8 @@ public sealed class FusionServer : IDisposable
     /// Sends a client a prop's variables once it has the prop. The replay after
     /// loading lands before a kept prop is spawned, so those values were dropped.
     /// </summary>
-    private void ReplayVariables(ConnectedPlayer requester, ushort entityId)
+    /// <param name="paced">Through the catch-up outbox. A reply to the player's own request is not.</param>
+    private void ReplayVariables(ConnectedPlayer requester, ushort entityId, bool paced = false)
     {
         List<(byte Tag, byte From, byte[] Body)> variables;
 
@@ -4581,7 +4621,7 @@ public sealed class FusionServer : IDisposable
 
         foreach (var (tag, from, body) in variables)
         {
-            SendRpcVariable(requester, tag, from, body);
+            SendRpcVariable(requester, tag, from, body, paced);
         }
 
         if (variables.Count > 0)
