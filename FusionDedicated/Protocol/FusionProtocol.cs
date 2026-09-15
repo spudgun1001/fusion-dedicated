@@ -369,7 +369,7 @@ public static class FusionProtocol
     /// SerializedQuaternion: the three smallest components as shorts, plus a byte
     /// marking which component was dropped. See SerializedQuaternion.cs.
     /// </summary>
-    private static void WriteSerializedQuaternion(FusionNetWriter writer, Quat q)
+    internal static void WriteSerializedQuaternion(FusionNetWriter writer, Quat q)
     {
         if (q == default)
         {
