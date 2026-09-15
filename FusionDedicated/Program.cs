@@ -534,6 +534,9 @@ public static class Program
 
         await Task.Delay(400);
 
+        // The kicks above close their connections through deferred work, and the loop no longer runs it.
+        server.Exclusive(() => server.PumpDeferred());
+
         dashboard.Stop();
         lobby.Close();
 

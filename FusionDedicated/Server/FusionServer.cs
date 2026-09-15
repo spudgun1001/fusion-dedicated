@@ -251,10 +251,40 @@ public sealed class FusionServer : IDisposable
         _transport.Accept(connection);
 
         Log("INFO", $"Transport connected (conn {connection.m_HSteamNetConnection}), awaiting ConnectionRequest");
+
+        WatchForJoinRequest(connection);
+    }
+
+    private static readonly TimeSpan JoinRequestTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>When each accepted connection that has not asked to join yet was accepted.</summary>
+    private readonly Dictionary<uint, DateTime> _awaitingRequest = new();
+
+    private void WatchForJoinRequest(HSteamNetConnection connection)
+    {
+        uint handle = connection.m_HSteamNetConnection;
+        var acceptedAt = Clock();
+
+        _awaitingRequest[handle] = acceptedAt;
+
+        Defer(JoinRequestTimeout, () =>
+        {
+            // Steam reuses handles, so only the connection this timer was started for is closed.
+            if (!_awaitingRequest.TryGetValue(handle, out var waitingSince) || waitingSince != acceptedAt)
+            {
+                return;
+            }
+
+            _awaitingRequest.Remove(handle);
+            _transport.Close(connection, "Never asked to join");
+            Log("WARN", $"Closed a connection that never asked to join (conn {handle})");
+        });
     }
 
     private void HandleDisconnect(HSteamNetConnection connection, string reason)
     {
+        _awaitingRequest.Remove(connection.m_HSteamNetConnection);
+
         if (Players.Remove(connection) is { } player)
         {
             Depart(player, reason);
@@ -831,6 +861,8 @@ public sealed class FusionServer : IDisposable
 
     private void HandleConnectionRequest(HSteamNetConnection connection, byte[] message)
     {
+        _awaitingRequest.Remove(connection.m_HSteamNetConnection);
+
         var request = ServerProtocol.TryReadConnectionRequest(message);
 
         if (request == null)
@@ -854,6 +886,12 @@ public sealed class FusionServer : IDisposable
         {
             Log("WARN", $"Rejected {platformId}: {reason}");
             SendTo(connection, ServerProtocol.WriteDisconnect(platformId, reason), reliable: true);
+
+            // A joined player asking again keeps their connection, since closing it ourselves would skip Depart.
+            if (Players.GetByConnection(connection) == null)
+            {
+                CloseSoon(connection, reason);
+            }
         }
 
         if (Players.Contains(platformId))
@@ -4618,12 +4656,21 @@ public sealed class FusionServer : IDisposable
         // ConnectionRequest is the one message with no sender check, and without
         // this a kicked client could hand in a fresh request inside the window
         // before the socket closes and be let straight back in.
+        CloseSoon(connection, reason);
+    }
+
+    /// <summary>
+    /// Closes a connection a quarter second from now on the main loop, so the disconnect message sent just before gets out first.
+    /// Nothing it sends in the meantime is listened to.
+    /// </summary>
+    private void CloseSoon(HSteamNetConnection connection, string reason)
+    {
         lock (_closingLock)
         {
             _closing.Add(connection.m_HSteamNetConnection);
         }
 
-        Task.Delay(250).ContinueWith(_ =>
+        Defer(TimeSpan.FromMilliseconds(250), () =>
         {
             // Released whatever happens. Steam reuses connection handles, so one
             // left behind here silently refuses whoever lands on it next.
