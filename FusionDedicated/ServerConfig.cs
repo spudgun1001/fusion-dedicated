@@ -350,6 +350,18 @@ public sealed class ServerConfig
     /// </summary>
     public PermissionLevel AntiSpamExemptLevel { get; set; } = PermissionLevel.Owner;
 
+    /// <summary>
+    /// Metadata changes one player may send a second. Everybody is sent a copy of
+    /// each, so the ones over this are dropped. Zero means no limit.
+    /// </summary>
+    public int MetadataPerSecond { get; set; } = 10;
+
+    /// <summary>Avatar swaps one player may send a second. Zero means no limit.</summary>
+    public int AvatarSwapsPerSecond { get; set; } = 2;
+
+    /// <summary>RPC variable and event messages one player may send a second. Zero means no limit.</summary>
+    public int RpcMessagesPerSecond { get; set; } = 60;
+
     // ---- panel ----
 
     /// <summary>
