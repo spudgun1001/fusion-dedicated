@@ -21,6 +21,12 @@ public sealed class TrackedEntity
     /// </summary>
     public bool Discovered { get; set; }
 
+    /// <summary>
+    /// Put in the world by a plugin, for a player or for nobody in particular. The
+    /// owner did not spawn it, so it must not count against their limits.
+    /// </summary>
+    public bool PluginSpawned { get; set; }
+
     public DateTime SpawnedAt { get; init; } = DateTime.UtcNow;
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
@@ -131,6 +137,22 @@ public sealed class TrackedEntity
     }
 }
 
+/// <summary>What <see cref="EntityRegistry.NotePose"/> did with a pose.</summary>
+public enum PoseNoted
+{
+    /// <summary>A known entity was moved.</summary>
+    Updated,
+
+    /// <summary>An unknown id was registered as a discovered entity.</summary>
+    Discovered,
+
+    /// <summary>Not tracked, because the id is a player rig or the world is past its cap.</summary>
+    Ignored,
+
+    /// <summary>Not tracked, because the owner already has the most discovered entities allowed.</summary>
+    OwnerAtCap,
+}
+
 /// <summary>
 /// Allocates entity IDs and remembers what exists in the world.
 ///
@@ -207,6 +229,35 @@ public sealed class EntityRegistry
     public int DiscoveredCount
     {
         get { lock (_lock) { return _entities.Values.Count(e => e.Discovered); } }
+    }
+
+    /// <summary>
+    /// Whether an entity counts toward its owner's spawn limit and goes when their spawns
+    /// are purged. Only something the owner spawned themselves does.
+    /// </summary>
+    public static bool CountsAgainstOwner(TrackedEntity entity)
+        => !entity.Persistent
+            && !entity.Discovered
+            && !entity.Synthetic
+            && !entity.Inherited
+            && !entity.PluginSpawned;
+
+    /// <summary>How many entities count against this player, by <see cref="CountsAgainstOwner"/>.</summary>
+    public int SpawnsOwnedBy(byte smallId)
+    {
+        lock (_lock)
+        {
+            return _entities.Values.Count(e => e.OwnerSmallId == smallId && CountsAgainstOwner(e));
+        }
+    }
+
+    /// <summary>How many discovered entities this player owns, unqueued ones included.</summary>
+    public int DiscoveredOwnedBy(byte smallId)
+    {
+        lock (_lock)
+        {
+            return _entities.Values.Count(e => e.OwnerSmallId == smallId && e.Discovered);
+        }
     }
 
     public const ushort FirstEntityId = 256;
@@ -380,13 +431,18 @@ public sealed class EntityRegistry
     /// player joining later is told the object as it stands rather than as it was
     /// first spawned.
     /// </param>
-    public void NotePose(ushort id, byte owner, float x, float y, float z,
+    /// <param name="maxDiscoveredPerOwner">
+    /// The most discovered entities one owner may have before a pose for an unknown id
+    /// is no longer registered. Zero for no limit.
+    /// </param>
+    /// <returns>What became of the pose.</returns>
+    public PoseNoted NotePose(ushort id, byte owner, float x, float y, float z,
         byte[]? rotation = null, float vx = 0f, float vy = 0f, float vz = 0f,
-        float? ownerDistance = null)
+        float? ownerDistance = null, int maxDiscoveredPerOwner = 0)
     {
         if (id < FirstEntityId)
         {
-            return;
+            return PoseNoted.Ignored;
         }
 
         lock (_lock)
@@ -408,7 +464,7 @@ public sealed class EntityRegistry
                 entity.OwnerDistanceAtPose = ownerDistance;
                 entity.PositionKnown = true;
                 entity.LastUpdate = Clock();
-                return;
+                return PoseNoted.Updated;
             }
 
             // A pose for an id nobody spawned is how scene props are noticed, and
@@ -417,7 +473,14 @@ public sealed class EntityRegistry
             // the eviction below something a player could aim.
             if (_capacity > 0 && _entities.Count >= _capacity * 2)
             {
-                return;
+                return PoseNoted.Ignored;
+            }
+
+            // Held to the per player limit as well, so one client cannot make
+            // hundreds of permanent entities out of made-up ids.
+            if (maxDiscoveredPerOwner > 0 && DiscoveredOwnedBy(owner) >= maxDiscoveredPerOwner)
+            {
+                return PoseNoted.OwnerAtCap;
             }
 
             var discoveredAt = Clock();
@@ -440,6 +503,8 @@ public sealed class EntityRegistry
                 LastUpdate = discoveredAt,
             };
         }
+
+        return PoseNoted.Discovered;
     }
 
     public bool Remove(ushort id)
