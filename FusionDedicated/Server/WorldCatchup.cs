@@ -95,9 +95,14 @@ public static class WorldCatchup
 
     /// <summary>Whether a metadata change is a player saying they have finished loading.</summary>
     public static bool FinishedLoading(string key, string value)
+        => LoadingState(key, value) == false;
+
+    /// <summary>What a Loading metadata change says, or null when it is another key or not a bool.</summary>
+    public static bool? LoadingState(string key, string value)
         => string.Equals(key, "Loading", StringComparison.OrdinalIgnoreCase)
             && bool.TryParse(value, out bool loading)
-            && !loading;
+                ? loading
+                : null;
 
     /// <summary>
     /// Whether a seat message is passed on.

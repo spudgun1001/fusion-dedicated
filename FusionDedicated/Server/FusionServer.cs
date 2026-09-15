@@ -385,9 +385,9 @@ public sealed class FusionServer : IDisposable
 
         // Their entities lost the only machine simulating them. A vehicle goes to
         // somebody still sitting in it and a held thing to somebody still holding
-        // it, otherwise to another player if anyone is left, otherwise they hang
+        // it, otherwise to another player who has loaded if anyone is left, otherwise they hang
         // frozen until culled.
-        byte? fallback = Players.Players.FirstOrDefault()?.SmallId;
+        byte? fallback = Players.SteadiestPlayer()?.SmallId;
         var affected = Entities.OrphanWith(player.SmallId, entity =>
             WorldCatchup.HeirFor(RidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
 
@@ -1306,7 +1306,7 @@ public sealed class FusionServer : IDisposable
                 prop.OwnerSmallId,
                 player.SmallId,
                 id => Players.Get(id) != null,
-                Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId);
+                Players.SteadiestPlayer(except: player.SmallId)?.SmallId);
 
             SendTo(player.Connection, FusionProtocol.BuildPropCreate(
                 owner, prop.Hash, prop.Index, prop.EntityId), reliable: true);
@@ -1351,9 +1351,11 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            byte from = Players.Get(constraint.Owner) != null
+            // Owner != player.SmallId guards a departed maker's freed id being handed straight
+            // back to the newcomer being caught up, the same reuse PropOwner guards against.
+            byte from = constraint.Owner != player.SmallId && Players.Get(constraint.Owner) != null
                 ? constraint.Owner
-                : Players.Players.FirstOrDefault(p => p.SmallId != player.SmallId)?.SmallId
+                : Players.SteadiestPlayer(except: player.SmallId)?.SmallId
                     ?? player.SmallId;
 
             SendTo(player.Connection, ModuleProtocol.WriteModuleToClients(
@@ -1582,6 +1584,13 @@ public sealed class FusionServer : IDisposable
         {
             Refuse(sender, "metadata", $"{sender.DisplayName} tried to set their own {PermissionMetadataKey}");
             return;
+        }
+
+        // Before the budget, so a dropped change still counts. Only their own key says whether their game is loading.
+        if (request.Value.PlayerSmallId == sender.SmallId
+            && WorldCatchup.LoadingState(request.Value.Key, request.Value.Value) is { } loading)
+        {
+            sender.Loaded = !loading;
         }
 
         var target = Players.Get(request.Value.PlayerSmallId);
@@ -2503,7 +2512,7 @@ public sealed class FusionServer : IDisposable
         // something it is only being introduced to. A real host never does that,
         // and on the receiving client it also fires the spawn callback for
         // tracker 0, which is a real tracker number somebody may be waiting on.
-        byte owner = Players.LongestJoined(except: joining.SmallId)?.SmallId ?? joining.SmallId;
+        byte owner = Players.SteadiestPlayer(except: joining.SmallId)?.SmallId ?? joining.SmallId;
 
         Entities.SetOwner(entity.Id, owner);
 
@@ -2752,7 +2761,7 @@ public sealed class FusionServer : IDisposable
         }
 
         ushort id = Entities.AllocateId();
-        byte? owner = Players.LongestJoined()?.SmallId;
+        byte? owner = Players.SteadiestPlayer()?.SmallId;
 
         var spawned = Entities.Register(id, barcode, owner ?? 0, x, y, z, rotation);
         spawned.PluginSpawned = true;
@@ -2945,6 +2954,7 @@ public sealed class FusionServer : IDisposable
         {
             player.LevelStateSent = false;
             player.AttachmentsResent = false;
+            player.Loaded = false;
         }
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),

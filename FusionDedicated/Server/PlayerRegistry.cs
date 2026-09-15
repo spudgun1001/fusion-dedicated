@@ -143,6 +143,12 @@ public sealed class ConnectedPlayer
     /// </summary>
     public bool AttachmentsResent { get; set; }
 
+    /// <summary>
+    /// Whether their game has said it finished loading the level and not started loading again.
+    /// A loading game simulates nothing, so nothing is handed to it to own.
+    /// </summary>
+    public bool Loaded { get; set; }
+
     /// <summary>Set once the server has said it is not keeping all of their metadata, so it is said once.</summary>
     public bool MetadataCapLogged { get; set; }
 
@@ -234,6 +240,24 @@ public sealed class PlayerRegistry
                 .OrderBy(p => p.JoinedAt)
                 .ThenBy(p => p.SmallId)
                 .FirstOrDefault();
+        }
+    }
+
+    /// <summary>
+    /// Whoever has been connected longest and has loaded, leaving out <paramref name="except"/>.
+    /// When nobody else has loaded, the same as <see cref="LongestJoined"/>.
+    /// </summary>
+    public ConnectedPlayer? SteadiestPlayer(byte? except = null)
+    {
+        lock (_lock)
+        {
+            var loaded = _bySmallId.Values
+                .Where(p => p.SmallId != except && p.Loaded)
+                .OrderBy(p => p.JoinedAt)
+                .ThenBy(p => p.SmallId)
+                .FirstOrDefault();
+
+            return loaded ?? LongestJoined(except);
         }
     }
 
