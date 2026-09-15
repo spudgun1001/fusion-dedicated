@@ -72,6 +72,9 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += id => _poseLog.Forget(id);
 
         Entities.Removed += DropConstraintsHolding;
+
+        _confirmations = new OwnershipConfirmations(() => Clock());
+        Entities.Removed += id => _confirmations.ForgetEntity(id);
     }
 
     public void Start()
@@ -328,6 +331,7 @@ public sealed class FusionServer : IDisposable
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
+        _confirmations.ForgetPlayer(player.SmallId);
         SeatForgetRider(player.SmallId);
 
         // Small ids are reused, so the next holder of this one is a different
@@ -2895,6 +2899,7 @@ public sealed class FusionServer : IDisposable
         // Clients send no releases as the scene unloads, and a grab on an id the
         // registry never knew is not cleared when the entities go.
         _grabs.Clear();
+        _confirmations.Clear();
         _levelPropsRefused.Clear();
 
         lock (_cacheLock)
@@ -4050,6 +4055,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Keeps the "Refused an ownership request" line from repeating every tick.</summary>
     private readonly Dictionary<byte, DateTime> _ownershipRefusalLog = new();
 
+    /// <summary>When an owner asking again for what it owns was last answered.</summary>
+    private readonly OwnershipConfirmations _confirmations;
+
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = TryReadOwnership(message);
@@ -4097,6 +4105,18 @@ public sealed class FusionServer : IDisposable
                 _seats.SeatOf(sender.SmallId)?.EntityId, _grabs.HoldersOf(entityId), entityId))
         {
             SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(driver, entityId), reliable: true);
+            return;
+        }
+
+        // A client asks again on every impact, and each copy went to every player. Only the
+        // asker is answered, at most every half second, so a client whose view drifted still heals.
+        if (entity?.OwnerSmallId == requestedOwner)
+        {
+            if (_confirmations.ShouldConfirm(sender.SmallId, entityId))
+            {
+                SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(requestedOwner, entityId), reliable: true);
+            }
+
             return;
         }
 
