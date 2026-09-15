@@ -861,6 +861,7 @@
         <div><label>Metadata/s</label><input id="fMetadataRate" type="number" min="0" max="1000" data-s></div>
         <div><label>Avatars/s</label><input id="fAvatarRate" type="number" min="0" max="1000" data-s></div>
         <div><label>RPC/s</label><input id="fRpcRate" type="number" min="0" max="1000" data-s></div>
+        <div><label>Catch-up/s</label><input id="fCatchupRate" type="number" min="0" max="1000" data-s></div>
         <div class="full">
           <label>Exempt</label>
           <select id="fExempt" data-s>
@@ -1818,6 +1819,7 @@ function revert() {
   $('fMetadataRate').value = g.metadataPerSecond;
   $('fAvatarRate').value = g.avatarSwapsPerSecond;
   $('fRpcRate').value = g.rpcMessagesPerSecond;
+  $('fCatchupRate').value = g.catchupMessagesPerSecond;
   $('fExempt').value = g.exemptLevel;
 
   dirty = false;
@@ -1859,6 +1861,7 @@ async function saveSettings() {
     metadataPerSecond: $('fMetadataRate').value,
     avatarSwapsPerSecond: $('fAvatarRate').value,
     rpcMessagesPerSecond: $('fRpcRate').value,
+    catchupMessagesPerSecond: $('fCatchupRate').value,
     antiSpamExemptLevel: $('fExempt').value,
   });
 

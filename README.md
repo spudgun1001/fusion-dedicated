@@ -311,6 +311,14 @@ kicked for going over. Like the spawn guard, the allowances apply only while
 `AntiSpamEnabled` is on and only to players below `AntiSpamExemptLevel`. Set one to 0
 to lift that limit.
 
+`CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
+second: the props, scene objects and constraints already in the world when they join,
+the holsters and magazines after that, and the level's variables once they finish
+loading. Whatever goes past the cap waits and follows as the allowance refills, so a
+large world reaches them over a few seconds. Raise it if joins to a quiet server feel
+slow, or set it to 0 to send everything at once. It applies whether or not
+`AntiSpamEnabled` is on.
+
 Across one night of testing (140 joins, peaks of 8–12 players) the guard removed
 3,254 props and kicked 4 people.
 
@@ -407,6 +415,7 @@ gitignored.
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |
+| `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 

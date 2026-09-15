@@ -362,6 +362,9 @@ public sealed class ServerConfig
     /// <summary>RPC variable and event messages one player may send a second. Zero means no limit.</summary>
     public int RpcMessagesPerSecond { get; set; } = 60;
 
+    /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
+    public int CatchupMessagesPerSecond { get; set; } = 100;
+
     // ---- panel ----
 
     /// <summary>

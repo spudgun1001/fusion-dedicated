@@ -496,6 +496,7 @@ public sealed class Dashboard
                 metadataPerSecond = _config.MetadataPerSecond,
                 avatarSwapsPerSecond = _config.AvatarSwapsPerSecond,
                 rpcMessagesPerSecond = _config.RpcMessagesPerSecond,
+                catchupMessagesPerSecond = _config.CatchupMessagesPerSecond,
             },
             resources = BuildResources(),
             gameplay = new
@@ -1205,6 +1206,11 @@ public sealed class Dashboard
             if (int.TryParse(query["rpcMessagesPerSecond"], out var rpcRate) && rpcRate is >= 0 and <= 1000)
             {
                 _config.RpcMessagesPerSecond = rpcRate;
+            }
+
+            if (int.TryParse(query["catchupMessagesPerSecond"], out var catchupRate) && catchupRate is >= 0 and <= 1000)
+            {
+                _config.CatchupMessagesPerSecond = catchupRate;
             }
 
             // Zero is the off switch, so the floor is zero rather than a usable timeout.

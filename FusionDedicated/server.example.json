@@ -48,6 +48,7 @@
   "MetadataPerSecond": 10,
   "AvatarSwapsPerSecond": 2,
   "RpcMessagesPerSecond": 60,
+  "CatchupMessagesPerSecond": 100,
 
   "MaxEntities": 2000,
   "CullOrphanedEntities": true,
