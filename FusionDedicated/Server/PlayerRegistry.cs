@@ -24,9 +24,9 @@ public sealed class ConnectedPlayer
     private readonly object _stateLock = new();
 
     /// <summary>The most keys and cosmetics to hold. Both come from the client.</summary>
-    private const int MaxMetadataKeys = 64;
+    public const int MaxMetadataKeys = 64;
     private const int MaxEquippedItems = 128;
-    private const int MaxMetadataLength = 256;
+    public const int MaxMetadataLength = 256;
 
     /// <summary>A copy, safe to read while another thread is writing.</summary>
     public Dictionary<string, string> Metadata
@@ -48,26 +48,43 @@ public sealed class ConnectedPlayer
         }
     }
 
-    /// <summary>
-    /// Sets one key, within limits. Both the key and the value are whatever the
-    /// client sent, and the whole dictionary is repeated to everybody who joins
-    /// afterwards, so an unbounded one is paid for on every future join.
-    /// </summary>
-    public void SetMetadata(string key, string value)
+    /// <returns>False when the key was not kept, for its length or because they already hold the most keys.</returns>
+    public bool SetMetadata(string key, string value)
     {
         if (key.Length is 0 or > MaxMetadataLength || value.Length > MaxMetadataLength)
         {
-            return;
+            return false;
         }
 
         lock (_stateLock)
         {
             if (_metadata.Count >= MaxMetadataKeys && !_metadata.ContainsKey(key))
             {
-                return;
+                return false;
             }
 
             _metadata[key] = value;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Sets a key the server owns, such as their rank. Kept even past the limit, so a
+    /// client that fills every key cannot push the server's own out.
+    /// </summary>
+    public void SetServerMetadata(string key, string value)
+    {
+        lock (_stateLock)
+        {
+            _metadata[key] = value;
+        }
+    }
+
+    public bool HoldsMetadata(string key, string value)
+    {
+        lock (_stateLock)
+        {
+            return _metadata.TryGetValue(key, out var held) && string.Equals(held, value, StringComparison.Ordinal);
         }
     }
 
@@ -120,6 +137,9 @@ public sealed class ConnectedPlayer
     /// loading. Once a load, for the same reason as LevelStateSent.
     /// </summary>
     public bool AttachmentsResent { get; set; }
+
+    /// <summary>Set once the server has said it is not keeping all of their metadata, so it is said once.</summary>
+    public bool MetadataCapLogged { get; set; }
 
     /// <summary>
     /// Level this player joined with. Mirrored into their Fusion metadata so every

@@ -944,7 +944,7 @@ public sealed class FusionServer : IDisposable
         // what counts, so overwrite it before anyone else sees the metadata.
         player.Permission = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
 
-        player.SetMetadata(PermissionMetadataKey, player.Permission.ToFusionString());
+        player.SetServerMetadata(PermissionMetadataKey, player.Permission.ToFusionString());
 
         if (GlobalBanCheck.Find(SafetyLists?.Bans, platformId) is { } globalBan)
         {
@@ -1491,12 +1491,18 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // A key set to what it already holds changes nothing, so nobody is told again.
+        // The loading checks at the end still run.
+        bool unchanged = Players.Get(request.Value.PlayerSmallId) is { } holder
+            && holder.HoldsMetadata(request.Value.Key, request.Value.Value);
+
         // A nickname is metadata like any other, so handling metadata at all
         // opened a way around both nickname guards: the reserved names that stop
         // somebody calling themselves an operator, and the cap on how often a
         // name may change. Neither was reachable before, because this message was
         // dropped and a name could only be set at the handshake.
-        if (string.Equals(request.Value.Key, "Nickname", StringComparison.OrdinalIgnoreCase)
+        if (!unchanged
+            && string.Equals(request.Value.Key, "Nickname", StringComparison.OrdinalIgnoreCase)
             && Players.Get(request.Value.PlayerSmallId) is { } named)
         {
             var verdict = _nicknames.Allow(
@@ -1526,13 +1532,23 @@ public sealed class FusionServer : IDisposable
         // Kept as well as passed on. The join catch-up sends each player's
         // metadata, and it was only ever what they arrived with, so a nickname or
         // a mod's per-player state reverted for whoever joined next.
-        if (Players.Get(request.Value.PlayerSmallId) is { } owner)
+        if (!unchanged)
         {
-            owner.SetMetadata(request.Value.Key, request.Value.Value);
-        }
+            if (Players.Get(request.Value.PlayerSmallId) is { } owner
+                && !owner.SetMetadata(request.Value.Key, request.Value.Value)
+                && !owner.MetadataCapLogged)
+            {
+                owner.MetadataCapLogged = true;
 
-        Broadcast(FusionProtocol.BuildMetadataResponse(
-            request.Value.PlayerSmallId, request.Value.Key, request.Value.Value), reliable: true);
+                Log("WARN", $"Not keeping all of {owner.DisplayName}'s metadata: a player may hold " +
+                            $"{ConnectedPlayer.MaxMetadataKeys} keys of up to " +
+                            $"{ConnectedPlayer.MaxMetadataLength} characters each, so players who " +
+                            "join later will not get the rest");
+            }
+
+            Broadcast(FusionProtocol.BuildMetadataResponse(
+                request.Value.PlayerSmallId, request.Value.Key, request.Value.Value), reliable: true);
+        }
 
         // A client says so here when it has finished loading the level, which is
         // the only moment it will accept the level's own state. Anything sent
@@ -2838,7 +2854,7 @@ public sealed class FusionServer : IDisposable
         if (player != null)
         {
             player.Permission = level;
-            player.SetMetadata(PermissionMetadataKey, level.ToFusionString());
+            player.SetServerMetadata(PermissionMetadataKey, level.ToFusionString());
 
             Broadcast(ServerProtocol.WritePlayerMetadataResponse(
                 player.SmallId, PermissionMetadataKey, level.ToFusionString()), reliable: true);
