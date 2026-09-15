@@ -70,7 +70,7 @@ public class DriverKeepsTests
     }
 
     [Fact]
-    public void The_asker_is_told_the_driver_owns_it()
-        => Assert.Contains("FusionProtocol.BuildOwnershipResponse(driver, entityId)",
+    public void The_asker_is_not_answered_when_the_driver_keeps_it()
+        => Assert.DoesNotContain("FusionProtocol.BuildOwnershipResponse(driver, entityId)",
             FusionServerSource.Method("private void HandleOwnershipRequest("));
 }

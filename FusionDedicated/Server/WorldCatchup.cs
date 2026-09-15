@@ -85,6 +85,10 @@ public static class WorldCatchup
            && ownerSeatEntity == entity
            && !(requesterSeatEntity == entity && holders.Contains(requester) && !holders.Contains(driver));
 
+    /// <summary>Whether a vehicle stays with the people sitting in it, so a request from anybody else is refused.</summary>
+    public static bool RidersKeep(byte requester, IReadOnlyList<SeatRecord> riders)
+        => riders.Count > 0 && !riders.Any(r => r.Rider == requester);
+
     /// <summary>The props a player owns. A client never asks about those, so their values are sent to it unasked.</summary>
     public static IReadOnlyList<ushort> OwnedBy(IEnumerable<(ushort Id, byte? Owner)> entities, byte player)
         => entities.Where(e => e.Owner == player).Select(e => e.Id).ToList();

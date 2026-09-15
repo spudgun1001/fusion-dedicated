@@ -331,6 +331,7 @@ public sealed class FusionServer : IDisposable
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
+        _seatRefusalLog.Remove(player.SmallId);
         _confirmations.ForgetPlayer(player.SmallId);
         SeatForgetRider(player.SmallId);
 
@@ -4055,6 +4056,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Keeps the "Refused an ownership request" line from repeating every tick.</summary>
     private readonly Dictionary<byte, DateTime> _ownershipRefusalLog = new();
 
+    /// <summary>Keeps the line for a request refused because somebody sits in the vehicle to one per player.</summary>
+    private readonly Dictionary<byte, DateTime> _seatRefusalLog = new();
+
     /// <summary>When an owner asking again for what it owns was last answered.</summary>
     private readonly OwnershipConfirmations _confirmations;
 
@@ -4098,13 +4102,29 @@ public sealed class FusionServer : IDisposable
 
         var entity = Entities.Get(entityId);
 
-        // Every client that saw the seat has locked the owner to the driver, so
-        // granting it to somebody who bumped into it only set the owner bouncing.
+        // Riding or bumping a car sends a request on every impact, and granting them set the owner
+        // bouncing. Nobody is answered, since a client only changes owner when it is told to.
+        if (WorldCatchup.RidersKeep(sender.SmallId, _seats.RidersOf(entityId)))
+        {
+            DateTime now = Clock();
+            var lastRefusal = _seatRefusalLog.TryGetValue(sender.SmallId, out var when) ? when : (DateTime?)null;
+
+            if (PoseLogThrottle.ShouldLog(lastRefusal, now))
+            {
+                _seatRefusalLog[sender.SmallId] = now;
+                Log("INFO", $"Refused {sender.DisplayName} ownership of entity {entityId}, which somebody " +
+                            "is sitting in", console: false);
+            }
+
+            return;
+        }
+
+        // Every client that saw the seat has locked the owner to the driver, so granting it to a
+        // fellow rider only set the owner bouncing. This is refused silently too.
         if (entity?.OwnerSmallId is { } driver
             && WorldCatchup.DriverKeeps(sender.SmallId, driver, _seats.SeatOf(driver)?.EntityId,
                 _seats.SeatOf(sender.SmallId)?.EntityId, _grabs.HoldersOf(entityId), entityId))
         {
-            SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(driver, entityId), reliable: true);
             return;
         }
 
