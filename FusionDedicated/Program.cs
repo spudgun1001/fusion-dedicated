@@ -336,6 +336,9 @@ public static class Program
                                "Steam may still be signing in; trying again every 30s.");
         }
 
+        startupPump.Cancel();
+        await pumpTask;
+
         // ---- dashboard ----
         var dashboard = new Dashboard(server, config, lobby);
 
@@ -353,9 +356,6 @@ public static class Program
             server.Log("ERROR", $"Control panel failed to start ({ex.Message}). " +
                                 $"Port {config.DashboardPort} is busy, or this needs elevated rights.");
         }
-
-        startupPump.Cancel();
-        await pumpTask;
 
         Console.WriteLine();
         Console.WriteLine($"  Panel:   {dashboard.Url}");
@@ -379,7 +379,8 @@ public static class Program
             dashboard.PluginHost = plugins;
             server.PluginModules = pluginModules;
 
-            int loadedPlugins = plugins.LoadAll();
+            // Under the world lock, so a panel or console request waits until every plugin has started.
+            int loadedPlugins = server.Exclusive(() => plugins.LoadAll());
 
             if (loadedPlugins > 0)
             {

@@ -62,4 +62,20 @@ public class ProgramLockTests
         Assert.True(exclusive >= 0 && pump > exclusive, "the shutdown does not run queued plugin actions inside the world lock");
         Assert.True(pump < shutdown.IndexOf("server.Kick(player.SmallId", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void The_panel_starts_after_the_startup_pump_has_stopped()
+    {
+        string source = ProgramSource.Text();
+
+        int pumpStopped = source.IndexOf("await pumpTask;", StringComparison.Ordinal);
+        int panelStarts = source.IndexOf("dashboard.Start();", StringComparison.Ordinal);
+
+        Assert.True(pumpStopped >= 0, "the startup pump is not awaited");
+        Assert.True(panelStarts > pumpStopped, "the panel starts while the startup pump still runs callbacks");
+    }
+
+    [Fact]
+    public void Plugins_load_under_the_world_lock()
+        => Assert.Contains("server.Exclusive(() => plugins.LoadAll())", ProgramSource.Text());
 }
