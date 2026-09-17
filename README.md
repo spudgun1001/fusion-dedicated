@@ -294,17 +294,32 @@ props, constraint ends and anything a plugin spawned never count and are never p
 Creating a constraint is held to the same per-second spawn rate cap and spawn guard,
 so constraint spam earns the same strikes, purge and kick.
 
-`BlockHolsterDuplicates` (on) refuses a spawn when the request carries source 0,
-EntitySource None, and names a barcode the player already has in one of their holster
-slots. That pair is how a duplication mod works: it asks for the item it just pulled
-out of the slot a second time and puts the copy back, which turns one holstered gun
-into as many as the player cares to draw. Fusion itself sends None for loot drops from
-destructibles, gamemode drops and the items a level puts into slots as it loads, and
-those name barcodes the player is not already holstering, so they are untouched. A
-refusal strikes the spawn guard like a flood does, purging the player's own spawns and
-kicking a repeat offender, and it applies at every rank, `AntiSpamExemptLevel` and
-Owner included. A slot records the entity rather than the barcode, so a slot whose
-entity the server has since forgotten is passed over and the spawn is allowed.
+`BlockHolsterDuplicates` (on) watches for an item being pulled out of a holster slot
+and asked for again. A duplication mod does that by sending a spawn request for the
+same barcode with source 0, EntitySource None, then putting the copy back in the slot,
+which turns one holstered gun into as many as the player cares to draw. Fusion asks
+the same way for loot dropped by a destructible and for the items a level puts into
+slots as it loads, and either can name something the player is already carrying, so a
+single match is allowed and noted only in the detailed log. The second and later
+spawns of that barcode by that player inside `HolsterDuplicateWindowSeconds` (10) are
+refused and strike the spawn guard, with the kick at the usual `SpamStrikesBeforeKick`.
+A strike from this rule purges nothing, since a dropped request left nothing behind.
+
+The copy request and the game's own message saying the slot is now empty are sent by
+two different mods on the same grab, so they arrive in either order. An item therefore
+stays protected for `HolsterDrawSeconds` (3) after it leaves a slot, and that memory is
+dropped when the item goes back into a slot, when the player leaves and when the level
+changes. A slot records the entity rather than the barcode, so a slot whose entity the
+server cannot name is passed over.
+
+The rule has its own switch and does not read `AntiSpamEnabled`, so it still refuses
+and strikes on a server with the rest of the spam guard turned off, and it applies at
+every rank, `AntiSpamExemptLevel` and Owner included. It runs before the rank check and
+before the blocklist, so listing `0` in `SpawningExemptSources` does not get a repeat
+past it, and a blocklisted barcode that is holstered is logged here rather than as a
+blocklist refusal. Only slots on a player's own body count: a gun rack, locker or other
+prop with slots is recorded against the prop rather than the player, so duplicating out
+of one of those is not covered.
 
 `MaxEntitiesPerPlayer` also caps the level props a player's own game reports by pose,
 the props nobody spawned but that a client still tracks. Past the cap the server stops
@@ -457,7 +472,9 @@ gitignored.
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
-| `BlockHolsterDuplicates` | refuses a source None spawn of a barcode the player already has holstered, at every rank (on by default) |
+| `BlockHolsterDuplicates` | refuses a repeat source None spawn of a barcode the player has holstered or just drew, at every rank (on by default) |
+| `HolsterDrawSeconds` | how long an item a player has drawn still counts as holstered for that check (3 by default) |
+| `HolsterDuplicateWindowSeconds` | how long a first match is remembered, so the next one inside it is refused (10 by default) |
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |

@@ -21,6 +21,24 @@ public sealed class HolsterSlots
     public IReadOnlyList<(ushort Slot, byte Index, ushort Weapon)> All()
         => _slots.Select(s => (s.Key.Slot, s.Key.Index, s.Value)).ToList();
 
+    /// <summary>One body's slots, lowest index first.</summary>
+    public IReadOnlyList<(byte Index, ushort Weapon)> SlotsOf(ushort slot)
+    {
+        var found = new List<(byte Index, ushort Weapon)>();
+
+        foreach (var entry in _slots)
+        {
+            if (entry.Key.Slot == slot)
+            {
+                found.Add((entry.Key.Index, entry.Value));
+            }
+        }
+
+        found.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+        return found;
+    }
+
     /// <summary>Where a weapon is, or null when it is not in a slot.</summary>
     public (ushort Slot, byte Index)? Find(ushort weapon)
     {

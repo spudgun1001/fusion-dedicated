@@ -388,12 +388,25 @@ public sealed class ServerConfig
     public PermissionLevel AntiSpamExemptLevel { get; set; } = PermissionLevel.Owner;
 
     /// <summary>
-    /// Refuses a spawn of a barcode the player already has in a holster slot when the
-    /// request carries source 0, EntitySource None. That pair is how a duplication mod
-    /// copies a holstered item; the game's own None spawns, loot drops and level-load
-    /// slot fills, are for barcodes the player is not holstering. Checked at every rank.
+    /// Refuses a repeat spawn of a barcode the player has in a holster slot, or has
+    /// just drawn from one, when the request carries source 0, EntitySource None.
+    /// Checked at every rank, and switched here rather than by <see cref="AntiSpamEnabled"/>.
     /// </summary>
     public bool BlockHolsterDuplicates { get; set; } = true;
+
+    /// <summary>
+    /// How long an item a player has drawn out of a slot still counts as theirs. The
+    /// copy request and the game's own slot drop arrive in either order, so a copy that
+    /// lands first is missed without this.
+    /// </summary>
+    public int HolsterDrawSeconds { get; set; } = 3;
+
+    /// <summary>
+    /// How long a match is remembered, so a second spawn of the same barcode inside it
+    /// is the one refused. The first is allowed, since the game's own spawns can name
+    /// something the player is already carrying.
+    /// </summary>
+    public int HolsterDuplicateWindowSeconds { get; set; } = 10;
 
     /// <summary>
     /// Metadata changes one player may send a second; everybody is sent a copy of

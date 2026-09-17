@@ -114,9 +114,9 @@ public sealed class SpawnGuard
     }
 
     /// <summary>
-    /// Strikes a player for something that is not a flood, like a spawn request
-    /// carrying a source no client sends. Counted at every rank, because the
-    /// exemption is for building quickly rather than for a forged request.
+    /// Strikes a player for something that is not a flood, like respawning what they
+    /// have holstered. Counted at every rank, because the exemption is for building
+    /// quickly rather than for a forged request.
     /// </summary>
     public Verdict StrikeFor(ConnectedPlayer player, string what)
     {
@@ -128,7 +128,9 @@ public sealed class SpawnGuard
                 _byPlayer[player.SmallId] = tracker;
             }
 
-            return Strike(tracker, DateTime.UtcNow, what);
+            // Nothing to purge. The request was dropped, so it left nothing behind, and
+            // taking their props for one refusal costs more than the refusal saves.
+            return Strike(tracker, DateTime.UtcNow, what) with { Purge = false };
         }
     }
 

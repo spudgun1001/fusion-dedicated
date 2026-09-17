@@ -343,6 +343,7 @@ public sealed class FusionServer : IDisposable
         NoteDeparture(player.DisplayName, reason);
 
         Guard.Forget(player.SmallId);
+        _dupes.Forget(player.SmallId);
         _rateLimiter.Forget(player.SmallId);
         _budget.Forget(player.SmallId);
         _hits.Forget(player.SmallId);
@@ -1838,23 +1839,33 @@ public sealed class FusionServer : IDisposable
         }
 
         // Before the rank check and at every rank. A duplication mod copies a
-        // holstered item by asking for the same barcode again with EntitySource None
-        // and putting the copy back in the slot. The game sends None for loot drops
-        // and level-load slot fills as well, so the barcode has to match too.
+        // holstered item by asking for the same barcode again with EntitySource None,
+        // and the game asks the same way for loot drops and slot fills, so one match
+        // is allowed and the repeat is the tell.
         if (Config.BlockHolsterDuplicates
             && request.Value.Source == FusionProtocol.SourceNone
-            && HolsteredSlotOf(sender.SmallId, request.Value.Barcode) is { } slotIndex)
+            && !string.IsNullOrWhiteSpace(request.Value.Barcode)
+            && HolsterSlotFor(sender.SmallId, request.Value.Barcode) is { } slotIndex)
         {
-            Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
-                        $"denied: it is already in their holster slot {slotIndex}");
+            int attempt = _dupes.Note(sender.SmallId, request.Value.Barcode, Clock(),
+                Seconds(Config.HolsterDuplicateWindowSeconds));
 
-            EnforceSpamVerdict(
-                sender,
-                Guard.StrikeFor(sender, $"asked to spawn '{request.Value.Barcode}', already in " +
-                                        $"their holster slot {slotIndex}"),
-                "Kicked for duplicating a holstered item");
+            if (attempt > 1)
+            {
+                Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+                            $"denied: attempt {attempt} to respawn what is in their holster slot {slotIndex}");
 
-            return;
+                EnforceSpamVerdict(
+                    sender,
+                    Guard.StrikeFor(sender, $"asked to spawn '{request.Value.Barcode}' from their " +
+                                            $"holster slot {slotIndex}, attempt {attempt}"),
+                    "Kicked for duplicating a holstered item");
+
+                return;
+            }
+
+            Log("INFO", $"Holster: {sender.DisplayName} spawned '{request.Value.Barcode}' while their " +
+                        $"slot {slotIndex} holds one, allowed as a first match", console: false);
         }
 
         // blocklist.json is reread when saved; server.json is not, so the exemptions
@@ -3171,6 +3182,7 @@ public sealed class FusionServer : IDisposable
 
         // Dropped with the rest of the level's bookkeeping, so it cannot grow for the life of the server.
         _barcodeHolders.Clear();
+        _dupes.Clear();
 
         // A new level means new state, so everybody is owed it again.
         foreach (var player in Players.Players)
@@ -3701,24 +3713,25 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>A setting in seconds, never negative.</summary>
+    private static TimeSpan Seconds(int value) => TimeSpan.FromSeconds(Math.Max(0, value));
+
     /// <summary>
-    /// Which of a player's own body slots holds this barcode, or null when none does.
-    /// A slot records the entity rather than the barcode, so an entity the registry
-    /// has forgotten cannot be named and is passed over.
+    /// Which of a player's own body slots holds this barcode, or which one they drew it
+    /// from a moment ago. Slots hold entities rather than barcodes, so one the registry
+    /// cannot name is passed over.
     /// </summary>
-    private byte? HolsteredSlotOf(byte smallId, string barcode)
+    private byte? HolsterSlotFor(byte smallId, string barcode)
     {
-        List<(byte Index, ushort Weapon)> slots;
+        IReadOnlyList<(byte Index, ushort Weapon)> slots;
 
         lock (_cacheLock)
         {
-            slots = _slotted.All()
-                .Where(s => s.Slot == smallId)
-                .Select(s => (s.Index, s.Weapon))
-                .ToList();
+            slots = _slotted.SlotsOf(smallId);
         }
 
-        foreach (var slot in slots.OrderBy(s => s.Index))
+        // Lowest index first, so a barcode in two slots always names the same one.
+        foreach (var slot in slots)
         {
             if (string.Equals(Entities.Get(slot.Weapon)?.Barcode, barcode, StringComparison.OrdinalIgnoreCase))
             {
@@ -3726,7 +3739,7 @@ public sealed class FusionServer : IDisposable
             }
         }
 
-        return null;
+        return _dupes.DrawnFrom(smallId, barcode, Clock(), Seconds(Config.HolsterDrawSeconds));
     }
 
     /// <summary>What one player is holding, for a plugin.</summary>
@@ -3753,6 +3766,9 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly HolsterSlots _slotted = new();
+
+    /// <summary>What each player has just drawn or already respawned once, so a copy is told from a loot drop.</summary>
+    private readonly HolsterDuplicates _dupes = new();
 
     /// <summary>Which gun each magazine is in, so a newcomer can be told.</summary>
     private readonly Dictionary<ushort, ushort> _loaded = new();
@@ -4143,6 +4159,12 @@ public sealed class FusionServer : IDisposable
                     _slotted.Insert(change.Slot, change.SlotIndex, change.Entity);
                 }
 
+                // The slots know where it is again, so the drawn memory has nothing left to hold.
+                if (Entities.Get(change.Entity)?.Barcode is { } stowed)
+                {
+                    _dupes.Holstered(sender.SmallId, stowed);
+                }
+
                 LogHolsterChange(sender, change, change.Entity);
 
                 return;
@@ -4158,6 +4180,13 @@ public sealed class FusionServer : IDisposable
                     {
                         Entities.SetAttached(weapon, false);
                     }
+                }
+
+                // A copy request rides on the same grab as this drop, and the two mods
+                // sending them can arrive in either order.
+                if (dropped is { } drawn && Entities.Get(drawn)?.Barcode is { } drawnBarcode)
+                {
+                    _dupes.Drew(sender.SmallId, drawnBarcode, change.SlotIndex, Clock());
                 }
 
                 LogHolsterChange(sender, change, dropped);

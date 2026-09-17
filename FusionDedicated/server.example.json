@@ -46,6 +46,8 @@
   "SpamStrikesBeforeKick": 3,
   "AntiSpamExemptLevel": "Owner",
   "BlockHolsterDuplicates": true,
+  "HolsterDrawSeconds": 3,
+  "HolsterDuplicateWindowSeconds": 10,
   "MetadataPerSecond": 10,
   "AvatarSwapsPerSecond": 2,
   "RpcMessagesPerSecond": 60,
