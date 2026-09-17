@@ -24,6 +24,9 @@ public interface ISocketTransport : IDisposable
     /// <summary>Why the most recent failed send failed, such as a Steam result name. Null until one has.</summary>
     string? LastSendFailure { get; }
 
+    /// <summary>Steam's live measurements of a connection, or null when it has none.</summary>
+    ConnectionHealth? Health(HSteamNetConnection connection);
+
     /// <summary>Hands up to <paramref name="max"/> waiting messages to the handler.</summary>
     /// <returns>How many there were.</returns>
     int Receive(int max, Action<HSteamNetConnection, byte[]> handle);

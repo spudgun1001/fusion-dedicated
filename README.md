@@ -317,6 +317,16 @@ hits on someone they are holding are always dropped, since those were knocking h
 players out. The log totals each pair's dropped hits once a minute. These apply
 while `ExtendedProtection` is on, to every rank.
 
+A moving prop's poses go to players further than `PoseThinDistance` (60 m) from it only
+`FarPosesPerSecond` (5) times a second instead of about 20. Fusion only freezes a prop
+after half a second without a pose, so far props keep moving, a little less smoothly.
+Player movement and a prop's resting pose are always sent, and so is everything to a
+player whose position is not known yet. Set either to 0 to send every pose to everyone.
+
+Once a minute the log gets a line per player with what Steam measures of their
+connection: ping, quality, send rate, bytes waiting and queue time. A ping over 250 ms,
+quality under 90% or a queue over half a second makes it a warning on the console.
+
 `CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
 the holsters and magazines after that, and the level's variables once they finish
@@ -422,6 +432,8 @@ gitignored.
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
+| `PoseThinDistance` | metres from a moving prop past which a player gets fewer of its poses (60 by default, 0 sends all) |
+| `FarPosesPerSecond` | poses a second those far players get (5 by default, 0 sends all) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |

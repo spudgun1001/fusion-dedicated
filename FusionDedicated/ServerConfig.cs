@@ -311,6 +311,18 @@ public sealed class ServerConfig
     /// </summary>
     public int HitsPerSecond { get; set; } = 20;
 
+    /// <summary>
+    /// Players further than this many metres from a moving prop get its poses only
+    /// <see cref="FarPosesPerSecond"/> times a second. Zero sends every pose to everyone.
+    /// </summary>
+    public float PoseThinDistance { get; set; } = 60f;
+
+    /// <summary>
+    /// Poses a second a far player gets of a moving prop. Fusion freezes a prop after half a
+    /// second without one, so keep this above 2. Zero sends every pose to everyone.
+    /// </summary>
+    public int FarPosesPerSecond { get; set; } = 5;
+
     /// <summary>Only players listed in whitelist.json may join when this is on.</summary>
     public bool WhitelistEnabled { get; set; }
 

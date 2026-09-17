@@ -154,6 +154,8 @@ public class SocketSeamTests
 
         public int Receive(int max, Action<Steamworks.HSteamNetConnection, byte[]> handle) => 0;
 
+        public ConnectionHealth? Health(Steamworks.HSteamNetConnection connection) => null;
+
         public void Dispose()
         {
         }

@@ -98,6 +98,28 @@ public sealed class SteamSocketTransport : ISocketTransport
         }
     }
 
+    public ConnectionHealth? Health(HSteamNetConnection connection)
+    {
+        var status = new SteamNetConnectionRealTimeStatus_t();
+        var lanes = new SteamNetConnectionRealTimeLaneStatus_t();
+
+        try
+        {
+            if (SteamNetworkingSockets.GetConnectionRealTimeStatus(connection, ref status, 0, ref lanes) != EResult.k_EResultOK)
+            {
+                return null;
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return new ConnectionHealth(status.m_nPing, status.m_flConnectionQualityLocal, status.m_flConnectionQualityRemote,
+            status.m_flOutBytesPerSec, status.m_cbPendingUnreliable + status.m_cbPendingReliable + status.m_cbSentUnackedReliable,
+            (long)status.m_usecQueueTime);
+    }
+
     public int Receive(int max, Action<HSteamNetConnection, byte[]> handle)
     {
         if (max > _messageBuffer.Length)

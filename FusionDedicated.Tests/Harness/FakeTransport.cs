@@ -111,6 +111,25 @@ public sealed class FakeTransport : ISocketTransport
         return true;
     }
 
+    private readonly Dictionary<uint, ConnectionHealth> _health = new();
+
+    /// <summary>What Health reports for a connection from now on.</summary>
+    public void SetHealth(HSteamNetConnection connection, ConnectionHealth health)
+    {
+        lock (_lock)
+        {
+            _health[connection.m_HSteamNetConnection] = health;
+        }
+    }
+
+    public ConnectionHealth? Health(HSteamNetConnection connection)
+    {
+        lock (_lock)
+        {
+            return _health.TryGetValue(connection.m_HSteamNetConnection, out var health) ? health : null;
+        }
+    }
+
     public int Receive(int max, Action<HSteamNetConnection, byte[]> handle)
     {
         int count = 0;

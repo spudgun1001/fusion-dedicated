@@ -72,6 +72,7 @@ public sealed class FusionServer : IDisposable
 
         // A removed id can be handed out again, so its throttle history must not linger.
         Entities.Removed += id => _poseLog.Forget(id);
+        Entities.Removed += id => _thinning.ForgetEntity(id);
 
         Entities.Removed += DropConstraintsHolding;
 
@@ -338,6 +339,7 @@ public sealed class FusionServer : IDisposable
         _rateLimiter.Forget(player.SmallId);
         _budget.Forget(player.SmallId);
         _hits.Forget(player.SmallId);
+        _thinning.ForgetPlayer(player.SmallId);
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
@@ -749,8 +751,17 @@ public sealed class FusionServer : IDisposable
                 break;
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
-                TrackEntityPose(sender, message);
-                break;
+            {
+                var pose = FusionProtocol.TryReadEntityPose(message);
+
+                if (pose is { } read)
+                {
+                    TrackEntityPose(sender, read);
+                }
+
+                RelayEntityPose(sender, message, pose);
+                return;
+            }
 
             case FusionProtocol.TagPlayerRepGrab when sender != null:
                 NoteGrab(sender, message);
@@ -4504,16 +4515,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Keeps the ignored-pose and kept-prop-moved log lines from repeating every tick.</summary>
     private readonly PoseLogThrottle _poseLog = new();
 
-    private void TrackEntityPose(ConnectedPlayer sender, byte[] message)
+    private void TrackEntityPose(ConnectedPlayer sender, (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation) pose)
     {
-        var pose = FusionProtocol.TryReadEntityPose(message);
-
-        if (pose == null)
-        {
-            return;
-        }
-
-        ushort vehicleId = pose.Value.EntityId;
+        ushort vehicleId = pose.EntityId;
 
         // Only a client that believes it owns a vehicle sends its poses, and
         // Fusion's AtvExtender makes that the driver. So this follows who drives
@@ -4564,15 +4568,15 @@ public sealed class FusionServer : IDisposable
         // How far the sender stood from it, for the ammo cull's log line.
         float? ownerDistance = sender.HasPosition
             ? new Vec3(
-                pose.Value.Position.X - sender.LastPosition.X,
-                pose.Value.Position.Y - sender.LastPosition.Y,
-                pose.Value.Position.Z - sender.LastPosition.Z).Magnitude
+                pose.Position.X - sender.LastPosition.X,
+                pose.Position.Y - sender.LastPosition.Y,
+                pose.Position.Z - sender.LastPosition.Z).Magnitude
             : null;
 
         var noted = Entities.NotePose(vehicleId, sender.SmallId,
-            pose.Value.Position.X, pose.Value.Position.Y, pose.Value.Position.Z,
-            pose.Value.Rotation,
-            pose.Value.Velocity.X, pose.Value.Velocity.Y, pose.Value.Velocity.Z,
+            pose.Position.X, pose.Position.Y, pose.Position.Z,
+            pose.Rotation,
+            pose.Velocity.X, pose.Velocity.Y, pose.Velocity.Z,
             ownerDistance, Config.MaxEntitiesPerPlayer);
 
         // The pose is still relayed, so a real level prop keeps working for everybody else.
@@ -4591,6 +4595,49 @@ public sealed class FusionServer : IDisposable
             {
                 Log("INFO", $"Kept '{known.ShortName}' (entity {vehicleId}) is {moved:0.0} m from where " +
                             $"it was kept, pose from {sender.DisplayName}", console: false);
+            }
+        }
+    }
+
+    private readonly PoseThinning _thinning = new();
+
+    /// <summary>
+    /// Passes a prop's pose on, sending a moving prop's poses to players far from it only a few
+    /// times a second. Its resting pose is reliable and always sent, so it still ends up in place.
+    /// </summary>
+    private void RelayEntityPose(ConnectedPlayer sender, byte[] message,
+        (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation)? pose)
+    {
+        var (relayType, channel, _) = ServerProtocol.ReadRoute(message);
+
+        if (Config.PoseThinDistance <= 0 || Config.FarPosesPerSecond <= 0 || pose is not { } read
+            || relayType != 3 || channel != 1)
+        {
+            Relay(sender, message);
+            return;
+        }
+
+        var stamped = ServerProtocol.StampSender(message, sender.SmallId);
+        var now = Clock();
+
+        foreach (var player in Players.Players)
+        {
+            if (player.SmallId == sender.SmallId)
+            {
+                continue;
+            }
+
+            if (player.HasPosition
+                && new Vec3(read.Position.X - player.LastPosition.X, read.Position.Y - player.LastPosition.Y,
+                    read.Position.Z - player.LastPosition.Z).Magnitude > Config.PoseThinDistance
+                && !_thinning.ShouldSend(read.EntityId, player.SmallId, now, Config.FarPosesPerSecond))
+            {
+                continue;
+            }
+
+            if (SendTo(player.Connection, stamped, reliable: false))
+            {
+                player.BytesOut += stamped.Length;
             }
         }
     }
@@ -5019,6 +5066,32 @@ public sealed class FusionServer : IDisposable
         _lastRefusalSummary = now;
     }
 
+    private DateTime _lastHealthLog = DateTime.MinValue;
+
+    /// <summary>
+    /// Once a minute, what Steam measures of each player's connection, so a player who lags can be told
+    /// apart from one whose game is slow. Only a bad connection reaches the console.
+    /// </summary>
+    private void LogConnectionHealth()
+    {
+        var now = Clock();
+
+        if (now - _lastHealthLog < TimeSpan.FromMinutes(1))
+        {
+            return;
+        }
+
+        _lastHealthLog = now;
+
+        foreach (var player in Players.Players)
+        {
+            if (_transport.Health(player.Connection) is { } health)
+            {
+                Log(health.IsPoor ? "WARN" : "INFO", health.Describe(player.DisplayName), console: health.IsPoor);
+            }
+        }
+    }
+
     public void Kick(byte smallId, string reason)
     {
         var player = Players.Get(smallId);
@@ -5103,6 +5176,8 @@ public sealed class FusionServer : IDisposable
         LogDroppedMessages();
 
         SummariseRefusedSends();
+
+        LogConnectionHealth();
 
         if (!Config.CullOrphanedEntities)
         {
