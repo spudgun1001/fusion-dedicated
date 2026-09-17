@@ -305,6 +305,12 @@ public sealed class ServerConfig
     /// <summary>Largest single hit a client may deal to another. 0 disables the cap.</summary>
     public float MaxRemoteDamage { get; set; } = 200f;
 
+    /// <summary>
+    /// Hits one player may land on another a second. A client can send one on every physics
+    /// tick, so the ones over this are dropped. Zero means no limit.
+    /// </summary>
+    public int HitsPerSecond { get; set; } = 20;
+
     /// <summary>Only players listed in whitelist.json may join when this is on.</summary>
     public bool WhitelistEnabled { get; set; }
 

@@ -311,6 +311,12 @@ kicked for going over. Like the spawn guard, the allowances apply only while
 `AntiSpamEnabled` is on and only to players below `AntiSpamExemptLevel`. Set one to 0
 to lift that limit.
 
+Hits from one player on another are held to `HitsPerSecond` (20), counted for each
+pair of players, because a client can send a hit on every physics tick. A player's
+hits on someone they are holding are always dropped, since those were knocking held
+players out. The log totals each pair's dropped hits once a minute. These apply
+while `ExtendedProtection` is on, to every rank.
+
 `CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
 the holsters and magazines after that, and the level's variables once they finish
@@ -415,6 +421,7 @@ gitignored.
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |
+| `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |

@@ -74,6 +74,23 @@ public static class ClientMessages
         return Module(player, ModuleProtocol.InventorySlotDropTag, payload.ToArray(), ToOtherClients);
     }
 
+    /// <summary>A PlayerRepDamage hit sent to one player: the damage float first, then the rest of the attack.</summary>
+    public static byte[] Damage(byte attacker, byte target, float damage)
+    {
+        var payload = new byte[45];
+        BinaryPrimitives.WriteSingleBigEndian(payload.AsSpan(0, 4), damage);
+
+        var message = new FusionNetWriter(64);
+        message.Write(GateProtocol.TagPlayerRepDamage);
+        message.Write((byte)4);     // ToTarget
+        message.Write(Reliable);
+        message.WriteNullable(target);
+        message.WriteNullable(attacker);
+        message.WriteBlock(payload);
+
+        return message.ToArray();
+    }
+
     private static byte[] Module(byte player, long handler, byte[] handlerPayload, byte relayType)
     {
         var body = new FusionNetWriter(handlerPayload.Length + ModuleProtocol.HandlerTagBytes);

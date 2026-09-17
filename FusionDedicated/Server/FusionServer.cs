@@ -46,6 +46,7 @@ public sealed class FusionServer : IDisposable
     private RefusalGuard _refusals = new(0, TimeSpan.FromSeconds(5));
     private NicknameGuard _nicknames = new(0, Array.Empty<string>());
     private readonly MessageBudget _budget;
+    private readonly HitBudget _hits;
 
     public FusionServer(ServerConfig config, ISocketTransport? transport = null)
     {
@@ -56,6 +57,7 @@ public sealed class FusionServer : IDisposable
         Entities.Clock = () => Clock();
         Guard = new SpawnGuard(config);
         _budget = new MessageBudget(config);
+        _hits = new HitBudget(config);
         _refusals = new RefusalGuard(config.RefusalKickPerSecond, TimeSpan.FromSeconds(5));
 
         // A prop's saved variables go with it, or a busy level fills the cache and
@@ -335,6 +337,7 @@ public sealed class FusionServer : IDisposable
         Guard.Forget(player.SmallId);
         _rateLimiter.Forget(player.SmallId);
         _budget.Forget(player.SmallId);
+        _hits.Forget(player.SmallId);
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
@@ -347,8 +350,9 @@ public sealed class FusionServer : IDisposable
         // person with a different set of mods and has never been asked anything.
         _askedFor.RemoveWhere(a => a.Holder == player.SmallId);
 
-        // The next player given this small id starts with empty hands.
+        // The next player given this small id starts with empty hands, and nobody is holding them.
         _grabs.ForgetPlayer(player.SmallId);
+        _grabs.ForgetEntity(player.SmallId);
 
         // Their body slots go with them, so nobody is told to holster anything on
         // a rig that no longer exists. A rig's slots are keyed by its small id,
@@ -1971,7 +1975,7 @@ public sealed class FusionServer : IDisposable
                     return false;
                 }
 
-                return true;
+                return HitAllowed(sender, message);
 
             case GateProtocol.TagPlayerRepTeleport:
                 if (!sender.Permission.IsAtLeast(Config.Teleportation))
@@ -2088,6 +2092,26 @@ public sealed class FusionServer : IDisposable
         || sender.Permission.IsAtLeast(Config.AntiSpamExemptLevel)
         || _budget.Allow(sender.SmallId, kind, Clock());
 
+    /// <summary>
+    /// A client holding another player sends them a hit on every physics tick, which knocks them
+    /// out, so hits on a held player are dropped and the rest are held to an allowance.
+    /// </summary>
+    private bool HitAllowed(ConnectedPlayer sender, byte[] message)
+    {
+        if (ServerProtocol.ReadRoute(message).Target is not { } target)
+        {
+            return true;
+        }
+
+        if (_grabs.HoldersOf(target).Contains(sender.SmallId))
+        {
+            _hits.DropWhileHolding(sender.SmallId, target, Clock());
+            return false;
+        }
+
+        return _hits.Allow(sender.SmallId, target, Clock());
+    }
+
     /// <summary>One line per player and kind for messages dropped over the allowance, at most once a minute.</summary>
     private void LogDroppedMessages()
     {
@@ -2095,6 +2119,14 @@ public sealed class FusionServer : IDisposable
         {
             string name = Players.Get(smallId)?.DisplayName ?? $"player {smallId}";
             Log("WARN", $"Dropped {dropped} {MessageBudget.Word(kind)} messages from {name} in the last minute");
+        }
+
+        foreach (var (attacker, target, dropped, whileHolding) in _hits.DueSummaries(Clock()))
+        {
+            string from = Players.Get(attacker)?.DisplayName ?? $"player {attacker}";
+            string on = Players.Get(target)?.DisplayName ?? $"player {target}";
+            string held = whileHolding > 0 ? $", {whileHolding} while holding them" : "";
+            Log("WARN", $"Dropped {dropped} hits from {from} on {on} in the last minute{held}");
         }
     }
 
@@ -3575,7 +3607,8 @@ public sealed class FusionServer : IDisposable
     /// <summary>What one player is holding, for a plugin.</summary>
     public IReadOnlyList<ushort> HeldBy(ulong platformId)
         => Players.GetByPlatformId(platformId) is { } player
-            ? _grabs.All().Where(h => h.Player == player.SmallId).Select(h => h.EntityId).Distinct().ToList()
+            ? _grabs.All().Where(h => h.Player == player.SmallId && h.EntityId >= EntityRegistry.FirstEntityId)
+                .Select(h => h.EntityId).Distinct().ToList()
             : Array.Empty<ushort>();
 
     /// <summary>What players are holding or have holstered, for the cull and the eviction to leave alone.</summary>
