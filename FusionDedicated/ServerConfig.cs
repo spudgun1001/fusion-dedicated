@@ -312,6 +312,24 @@ public sealed class ServerConfig
     public int HitsPerSecond { get; set; } = 20;
 
     /// <summary>
+    /// Heaviest avatar a client may send, in total. Other players' games give the model
+    /// this mass, and a huge one flings whoever it touches.
+    /// </summary>
+    public float MaxAvatarMass { get; set; } = 1000f;
+
+    /// <summary>Heaviest arm, chest, head, leg or pelvis an avatar may have.</summary>
+    public float MaxAvatarPartMass { get; set; } = 500f;
+
+    public float MinAvatarScale { get; set; } = 0.05f;
+
+    public float MaxAvatarScale { get; set; } = 10f;
+
+    /// <summary>Avatars with impossible stats inside the window that get a player kicked. Zero never kicks.</summary>
+    public int AvatarStrikesBeforeKick { get; set; } = 3;
+
+    public int AvatarStrikeWindowSeconds { get; set; } = 60;
+
+    /// <summary>
     /// Players further than this many metres from a moving prop get its poses only
     /// <see cref="FarPosesPerSecond"/> times a second. Zero sends every pose to everyone.
     /// </summary>

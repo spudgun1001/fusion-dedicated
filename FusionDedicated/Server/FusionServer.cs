@@ -47,6 +47,7 @@ public sealed class FusionServer : IDisposable
     private NicknameGuard _nicknames = new(0, Array.Empty<string>());
     private readonly MessageBudget _budget;
     private readonly HitBudget _hits;
+    private readonly AvatarStrikes _avatarStrikes;
 
     public FusionServer(ServerConfig config, ISocketTransport? transport = null)
     {
@@ -58,6 +59,7 @@ public sealed class FusionServer : IDisposable
         Guard = new SpawnGuard(config);
         _budget = new MessageBudget(config);
         _hits = new HitBudget(config);
+        _avatarStrikes = new AvatarStrikes(config);
         _refusals = new RefusalGuard(config.RefusalKickPerSecond, TimeSpan.FromSeconds(5));
 
         // A prop's saved variables go with it, or a busy level fills the cache and
@@ -339,6 +341,7 @@ public sealed class FusionServer : IDisposable
         _rateLimiter.Forget(player.SmallId);
         _budget.Forget(player.SmallId);
         _hits.Forget(player.SmallId);
+        _avatarStrikes.Forget(player.SmallId);
         _thinning.ForgetPlayer(player.SmallId);
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
@@ -2000,6 +2003,22 @@ public sealed class FusionServer : IDisposable
                 return true;
 
             case GateProtocol.TagPlayerRepAvatar:
+                // Every other game gives the model these masses, so a huge one flings whoever it touches.
+                var stats = GateProtocol.TryReadAvatarStats(message);
+                string? problem = stats == null ? "no stats block" : AvatarStatsCheck.Problem(stats, Config);
+
+                if (problem != null)
+                {
+                    Log("WARN", $"{sender.DisplayName} sent an avatar with {problem}, dropped");
+
+                    if (_avatarStrikes.Strike(sender.SmallId, Clock()))
+                    {
+                        Kick(sender.SmallId, "Kicked for sending impossible avatar stats");
+                    }
+
+                    return false;
+                }
+
                 string? barcode = GateProtocol.TryReadAvatarBarcode(message);
 
                 if (barcode != null)

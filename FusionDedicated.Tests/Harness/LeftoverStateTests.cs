@@ -19,7 +19,7 @@ public class LeftoverStateTests
     private static byte[] AvatarSwap(FakePlayer player, string barcode)
     {
         var payload = new FusionNetWriter(FusionProtocol.AvatarStatsSize + 64);
-        payload.WriteRaw(new byte[FusionProtocol.AvatarStatsSize]);
+        payload.WriteRaw(ClientMessages.AvatarStats());
         payload.Write(barcode);
 
         var message = new FusionNetWriter(FusionProtocol.AvatarStatsSize + 96);

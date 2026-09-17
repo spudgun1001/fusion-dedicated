@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
+using FusionDedicated.Server.Safety;
 
 namespace FusionDedicated.Tests.Harness;
 
@@ -87,6 +88,61 @@ public static class ClientMessages
         message.WriteNullable(target);
         message.WriteNullable(attacker);
         message.WriteBlock(payload);
+
+        return message.ToArray();
+    }
+
+    /// <summary>A plausible avatar's proportions: every float 1, and masses adding up to 80.</summary>
+    public static byte[] AvatarStats()
+    {
+        var stats = new byte[FusionProtocol.AvatarStatsSize];
+
+        for (var i = 0; i < FusionProtocol.AvatarStatFloatCount; i++)
+        {
+            BinaryPrimitives.WriteSingleBigEndian(stats.AsSpan(i * 4, 4), 1f);
+        }
+
+        SetAvatarStat(stats, "massArm", 5f);
+        SetAvatarStat(stats, "massChest", 25f);
+        SetAvatarStat(stats, "massHead", 6f);
+        SetAvatarStat(stats, "massLeg", 12f);
+        SetAvatarStat(stats, "massPelvis", 15f);
+        SetAvatarStat(stats, "massTotal", 80f);
+
+        return stats;
+    }
+
+    public static void SetAvatarStat(byte[] stats, string field, float value)
+    {
+        int index = AvatarStatsCheck.FieldNames.ToList().IndexOf(field);
+
+        if (index < 0)
+        {
+            throw new ArgumentException($"No avatar stat called {field}", nameof(field));
+        }
+
+        BinaryPrimitives.WriteSingleBigEndian(stats.AsSpan(index * 4, 4), value);
+    }
+
+    /// <summary>A PlayerRepAvatar message: the proportions block, then the barcode. Sent to one player when a target is given.</summary>
+    public static byte[] Avatar(byte player, string barcode, byte[] stats, byte? target = null)
+    {
+        var payload = new FusionNetWriter(stats.Length + 64);
+        payload.WriteRaw(stats);
+        payload.Write(barcode);
+
+        if (target is not { } victim)
+        {
+            return Wrap(GateProtocol.TagPlayerRepAvatar, ToOtherClients, player, payload.ToArray());
+        }
+
+        var message = new FusionNetWriter(stats.Length + 96);
+        message.Write(GateProtocol.TagPlayerRepAvatar);
+        message.Write((byte)4);     // ToTarget
+        message.Write(Reliable);
+        message.WriteNullable(victim);
+        message.WriteNullable(player);
+        message.WriteBlock(payload.ToArray());
 
         return message.ToArray();
     }

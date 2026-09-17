@@ -54,7 +54,7 @@ public class FloodLimitTests
     private static byte[] Avatar(FakePlayer player, string barcode)
     {
         var payload = new FusionNetWriter(512);
-        payload.WriteRaw(new byte[FusionProtocol.AvatarStatFloatCount * 4]);
+        payload.WriteRaw(ClientMessages.AvatarStats());
         payload.Write(barcode);
 
         var message = new FusionNetWriter(600);

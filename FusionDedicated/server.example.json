@@ -50,6 +50,13 @@
   "RpcMessagesPerSecond": 60,
   "CatchupMessagesPerSecond": 100,
 
+  "MaxAvatarMass": 1000,
+  "MaxAvatarPartMass": 500,
+  "MinAvatarScale": 0.05,
+  "MaxAvatarScale": 10,
+  "AvatarStrikesBeforeKick": 3,
+  "AvatarStrikeWindowSeconds": 60,
+
   "MaxEntities": 2000,
   "CullOrphanedEntities": true,
   "OrphanTimeoutSeconds": 120,

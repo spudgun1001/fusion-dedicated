@@ -317,6 +317,17 @@ hits on someone they are holding are always dropped, since those were knocking h
 players out. The log totals each pair's dropped hits once a minute. These apply
 while `ExtendedProtection` is on, to every rank.
 
+An avatar swap carries the avatar's proportions and masses, and every other game gives
+the model those numbers, so a modded client sending a huge mass flings whoever it
+touches. A swap is dropped, and nobody receives it, when any of its numbers is not a
+real number, its scale is outside `MinAvatarScale` to `MaxAvatarScale` (0.05 to 10), an
+arm, chest, head, leg or pelvis weighs more than `MaxAvatarPartMass` (500) or less than
+0, or the whole avatar weighs more than `MaxAvatarMass` (1000) or not more than 0. Each
+one is a strike, and `AvatarStrikesBeforeKick` (3) strikes inside
+`AvatarStrikeWindowSeconds` (60) kick the player. Set `AvatarStrikesBeforeKick` to 0 to
+drop the swaps without kicking. This applies while `ExtendedProtection` is on, to every
+rank.
+
 A moving prop's poses go to players further than `PoseThinDistance` (60 m) from it only
 `FarPosesPerSecond` (5) times a second instead of about 20. Fusion only freezes a prop
 after half a second without a pose, so far props keep moving, a little less smoothly.
@@ -432,6 +443,9 @@ gitignored.
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
+| `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (1000 and 500 by default) |
+| `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send (0.05 and 10 by default) |
+| `AvatarStrikesBeforeKick` | avatars with impossible stats inside `AvatarStrikeWindowSeconds` (60) that get a player kicked (3 by default, 0 never kicks) |
 | `PoseThinDistance` | metres from a moving prop past which a player gets fewer of its poses (60 by default, 0 sends all) |
 | `FarPosesPerSecond` | poses a second those far players get (5 by default, 0 sends all) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
