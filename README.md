@@ -397,6 +397,18 @@ after half a second without a pose, so far props keep moving, a little less smoo
 Player movement and a prop's resting pose are always sent, and so is everything to a
 player whose position is not known yet. Set either to 0 to send every pose to everyone.
 
+A fly mod spawns its gun on the player's own machine through BoneLib, so the server never
+sees the gun, only where their body goes. `FlightSpeed` (6 m/s) and `FlightWindowSeconds`
+(2) set what counts as flying: keeping that speed up or down for that long. A jump is over
+in under a second, a ladder is about 1 m/s and a lift 2 to 3 m/s. A fall is not counted,
+because it speeds up all the way down and then holds a speed far above
+`FlightMaxFallSpeed` (25 m/s), and a fall that lands is not counted either, since they stop
+moving. Each flight is a warning naming the player, their speed and whether they hold a
+Nimbus gun the server spawned. `FlightStrikesBeforeKick` (3) flights inside
+`FlightStrikeWindowSeconds` (60) is a kick, and 0 strikes only logs them. `FlightExemptLevel`
+(Operator) and above are never checked, and so is anybody sitting in a vehicle. Set
+`FlightSpeed` to 0 to turn the whole check off.
+
 Once a minute the log gets a line per player with what Steam measures of their
 connection: ping, quality, send rate, bytes waiting and queue time. A ping over 250 ms,
 quality under 90% or a queue over half a second makes it a warning on the console.
@@ -514,6 +526,12 @@ gitignored.
 | `AvatarStrikesBeforeKick` | avatars with impossible stats inside `AvatarStrikeWindowSeconds` (60) that get a player kicked (3 by default, 0 never kicks) |
 | `PoseThinDistance` | metres from a moving prop past which a player gets fewer of its poses (60 by default, 0 sends all) |
 | `FarPosesPerSecond` | poses a second those far players get (5 by default, 0 sends all) |
+| `FlightSpeed` | metres a second up or down that counts as flying (6 by default, 0 turns the check off) |
+| `FlightWindowSeconds` | how long they must keep that speed to be called a flier (2 by default) |
+| `FlightMaxFallSpeed` | a drop faster than this is a fall, not a flight (25 by default) |
+| `FlightStrikesBeforeKick` | flights inside the window before a kick (3 by default, 0 only logs) |
+| `FlightStrikeWindowSeconds` | how long a flight counts against a player (60 by default) |
+| `FlightExemptLevel` | rank never checked for flying (`Operator` by default) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |

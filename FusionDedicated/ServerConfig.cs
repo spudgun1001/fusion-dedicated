@@ -342,6 +342,29 @@ public sealed class ServerConfig
     /// </summary>
     public int FarPosesPerSecond { get; set; } = 5;
 
+    /// <summary>
+    /// Metres a second up or down that counts as flying. A fly mod's gun is spawned on the player's
+    /// own machine and never reaches the server, so only how they move gives it away. Zero turns the
+    /// check off.
+    /// </summary>
+    public float FlightSpeed { get; set; } = 6f;
+
+    /// <summary>Seconds they must keep that speed up. A jump is over long before this.</summary>
+    public double FlightWindowSeconds { get; set; } = 2;
+
+    /// <summary>
+    /// A drop faster than this many metres a second is a fall off something high, not a flight.
+    /// </summary>
+    public float FlightMaxFallSpeed { get; set; } = 25f;
+
+    /// <summary>Flights inside the window before the player is kicked. Zero only logs them.</summary>
+    public int FlightStrikesBeforeKick { get; set; } = 3;
+
+    public double FlightStrikeWindowSeconds { get; set; } = 60;
+
+    /// <summary>This rank and above are never called fliers, since staff fly with Nimbus and dev tools.</summary>
+    public PermissionLevel FlightExemptLevel { get; set; } = PermissionLevel.Operator;
+
     /// <summary>Only players listed in whitelist.json may join when this is on.</summary>
     public bool WhitelistEnabled { get; set; }
 

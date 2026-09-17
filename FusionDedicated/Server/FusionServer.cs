@@ -47,6 +47,7 @@ public sealed class FusionServer : IDisposable
     private NicknameGuard _nicknames = new(0, Array.Empty<string>());
     private readonly MessageBudget _budget;
     private readonly HitBudget _hits;
+    private readonly FlightCheck _flight;
     private readonly AvatarStrikes _avatarStrikes;
 
     public FusionServer(ServerConfig config, ISocketTransport? transport = null)
@@ -59,6 +60,7 @@ public sealed class FusionServer : IDisposable
         Guard = new SpawnGuard(config);
         _budget = new MessageBudget(config);
         _hits = new HitBudget(config);
+        _flight = new FlightCheck(config);
         _avatarStrikes = new AvatarStrikes(config);
         _refusals = new RefusalGuard(config.RefusalKickPerSecond, TimeSpan.FromSeconds(5));
 
@@ -347,6 +349,7 @@ public sealed class FusionServer : IDisposable
         _rateLimiter.Forget(player.SmallId);
         _budget.Forget(player.SmallId);
         _hits.Forget(player.SmallId);
+        _flight.Forget(player.SmallId);
         _avatarStrikes.Forget(player.SmallId);
         _thinning.ForgetPlayer(player.SmallId);
         _refusals.Forget(player.SmallId);
@@ -4625,6 +4628,8 @@ public sealed class FusionServer : IDisposable
         sender.LastPosition = pose.Value.Pose.PelvisPosition;
         sender.HasPosition = true;
 
+        CheckForFlight(sender);
+
         // An egress is sent once and can be missed, which would leave the rider
         // replayed into a vehicle they are nowhere near.
         if (_seats.SeatOf(sender.SmallId) is { } seat
@@ -4639,6 +4644,44 @@ public sealed class FusionServer : IDisposable
                         $"taken out of seat {seat.Index}", console: false);
         }
     }
+
+    /// <summary>
+    /// Watches a player's height for a flight. A fly mod spawns its gun on the player's own machine, so
+    /// the server never sees the gun, only where their body goes. Staff, and anybody in a seat, are left
+    /// alone, and enough flights inside the window are a kick.
+    /// </summary>
+    private void CheckForFlight(ConnectedPlayer sender)
+    {
+        if (sender.Permission.IsAtLeast(Config.FlightExemptLevel) || _seats.SeatOf(sender.SmallId) != null)
+        {
+            return;
+        }
+
+        var now = Clock();
+        var flight = _flight.Note(sender.SmallId, sender.LastPosition.Y, now);
+
+        if (flight.Kind == FlightKind.None)
+        {
+            return;
+        }
+
+        string way = flight.Kind == FlightKind.Climb ? "climbed" : "descended";
+        string tool = HoldsANimbus(sender.SmallId) ? ", holding a Nimbus gun" : "";
+
+        Log("WARN", $"{sender.DisplayName} {way} {flight.Speed:0.0} m/s for " +
+                    $"{Config.FlightWindowSeconds:0.#} s at {sender.LastPosition.Y:0} m{tool}, which looks like flying");
+
+        if (_flight.Strike(sender.SmallId, now))
+        {
+            Kick(sender.SmallId, "Flying");
+        }
+    }
+
+    /// <summary>Whether a player holds a nimbus gun the server knows about, which only a spawned one is.</summary>
+    private bool HoldsANimbus(byte smallId)
+        => _grabs.All()
+            .Where(h => h.Player == smallId)
+            .Any(h => Entities.Get(h.EntityId) is { } entity && ToolGate.Family(entity.Barcode) == ToolFamily.Nimbus);
 
     /// <summary>
     /// Notes a hit for the panel. Kept off the console because a firefight would
