@@ -986,6 +986,18 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Everybody here would be sent these stats, the same as an avatar swap carries.
+        if (Config.ExtendedProtection && AvatarStatsCheck.Problem(request.AvatarStats, Config) is { } statsProblem)
+        {
+            string name = request.Metadata.GetValueOrDefault("Username", "");
+
+            Log("WARN", $"{(string.IsNullOrWhiteSpace(name) ? platformId.ToString() : name)} joined with an " +
+                        $"avatar with {statsProblem}, refused");
+            SendTo(connection, ServerProtocol.WriteDisconnect(platformId, "impossible avatar stats"), reliable: true);
+            CloseSoon(connection, "impossible avatar stats");
+            return;
+        }
+
         // Before a slot is given, so a plugin refusing costs nothing.
         var pluginJoin = Plugins?.Joining.Raise(new Plugins.JoinEvent(
             platformId, request.Metadata.GetValueOrDefault("Username", ""),

@@ -13,11 +13,11 @@ public static class ClientMessages
     private const byte ToOtherClients = 3;
     private const byte Reliable = 0;
 
-    public static byte[] Join(ServerConfig config, ulong platformId, string name)
+    public static byte[] Join(ServerConfig config, ulong platformId, string name, byte[]? avatarStats = null)
         => FusionProtocol.BuildConnectionRequest(
             platformId, new Version(config.VersionMajor, config.VersionMinor, 0),
             "SLZ.BONELAB.Content.Avatar.FordBW",
-            new Dictionary<string, string> { ["Username"] = name }, new List<string>());
+            new Dictionary<string, string> { ["Username"] = name }, new List<string>(), avatarStats);
 
     public static byte[] Metadata(byte player, string key, string value) => MetadataFor(player, player, key, value);
 

@@ -325,8 +325,9 @@ arm, chest, head, leg or pelvis weighs more than `MaxAvatarPartMass` (500) or le
 0, or the whole avatar weighs more than `MaxAvatarMass` (1000) or not more than 0. Each
 one is a strike, and `AvatarStrikesBeforeKick` (3) strikes inside
 `AvatarStrikeWindowSeconds` (60) kick the player. Set `AvatarStrikesBeforeKick` to 0 to
-drop the swaps without kicking. This applies while `ExtendedProtection` is on, to every
-rank.
+drop the swaps without kicking. A join is checked against the same limits, and one
+that fails is refused with "impossible avatar stats" before anybody is told of it. This
+applies while `ExtendedProtection` is on, to every rank.
 
 A moving prop's poses go to players further than `PoseThinDistance` (60 m) from it only
 `FarPosesPerSecond` (5) times a second instead of about 20. Fusion only freezes a prop
