@@ -294,13 +294,17 @@ props, constraint ends and anything a plugin spawned never count and are never p
 Creating a constraint is held to the same per-second spawn rate cap and spawn guard,
 so constraint spam earns the same strikes, purge and kick.
 
-`AllowedSpawnSources` holds a spawn request to the sources the game itself uses, 1
-Scene and 2 Player. A duplication mod copies a holstered item by asking for the same
-barcode again with 0, EntitySource None, which no client sends on its own, so a
-request carrying a source outside the list is refused and strikes the spawn guard like
-a flood does: the player's own spawns are purged and a repeat offender is kicked. It
-applies at every rank, `AntiSpamExemptLevel` and Owner included, since an ordinary
-client never sends one of these. Empty the list to take any source.
+`BlockHolsterDuplicates` (on) refuses a spawn when the request carries source 0,
+EntitySource None, and names a barcode the player already has in one of their holster
+slots. That pair is how a duplication mod works: it asks for the item it just pulled
+out of the slot a second time and puts the copy back, which turns one holstered gun
+into as many as the player cares to draw. Fusion itself sends None for loot drops from
+destructibles, gamemode drops and the items a level puts into slots as it loads, and
+those name barcodes the player is not already holstering, so they are untouched. A
+refusal strikes the spawn guard like a flood does, purging the player's own spawns and
+kicking a repeat offender, and it applies at every rank, `AntiSpamExemptLevel` and
+Owner included. A slot records the entity rather than the barcode, so a slot whose
+entity the server has since forgotten is passed over and the spawn is allowed.
 
 `MaxEntitiesPerPlayer` also caps the level props a player's own game reports by pose,
 the props nobody spawned but that a client still tracks. Past the cap the server stops
@@ -453,7 +457,7 @@ gitignored.
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
-| `AllowedSpawnSources` | spawn sources a request may carry, checked at every rank (`[1, 2]`, Scene and Player, by default; empty takes any) |
+| `BlockHolsterDuplicates` | refuses a source None spawn of a barcode the player already has holstered, at every rank (on by default) |
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |

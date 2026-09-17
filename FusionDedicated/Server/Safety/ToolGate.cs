@@ -176,28 +176,6 @@ public static class SpawnAuthority
         return new BlockVerdict(true, "rank", $"spawning needs {required.ToFusionString()}");
     }
 
-    /// <summary>
-    /// Whether a request's spawn source is one the server takes at all. An empty
-    /// list takes any. This is a different question from the exempt sources, which
-    /// only say which sources skip the rank.
-    /// </summary>
-    public static bool SourceAllowed(byte source, IEnumerable<int> allowed)
-    {
-        bool listed = false;
-
-        foreach (int entry in allowed)
-        {
-            listed = true;
-
-            if (entry == source)
-            {
-                return true;
-            }
-        }
-
-        return !listed;
-    }
-
     public static bool IsExempt(string barcode, IEnumerable<string> exempt)
     {
         if (string.IsNullOrWhiteSpace(barcode))

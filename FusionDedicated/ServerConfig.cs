@@ -388,12 +388,12 @@ public sealed class ServerConfig
     public PermissionLevel AntiSpamExemptLevel { get; set; } = PermissionLevel.Owner;
 
     /// <summary>
-    /// Spawn sources a request may carry: 1 Scene and 2 Player, the two the game
-    /// uses. A duplication mod respawns a holstered item with 0, EntitySource None,
-    /// which no client asks for on its own, so anything outside this list is refused
-    /// at every rank and strikes the spawn guard. Empty means any source is taken.
+    /// Refuses a spawn of a barcode the player already has in a holster slot when the
+    /// request carries source 0, EntitySource None. That pair is how a duplication mod
+    /// copies a holstered item; the game's own None spawns, loot drops and level-load
+    /// slot fills, are for barcodes the player is not holstering. Checked at every rank.
     /// </summary>
-    public List<int> AllowedSpawnSources { get; set; } = new() { 1, 2 };
+    public bool BlockHolsterDuplicates { get; set; } = true;
 
     /// <summary>
     /// Metadata changes one player may send a second; everybody is sent a copy of

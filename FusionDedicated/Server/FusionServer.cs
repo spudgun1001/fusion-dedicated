@@ -1838,18 +1838,21 @@ public sealed class FusionServer : IDisposable
         }
 
         // Before the rank check and at every rank. A duplication mod copies a
-        // holstered item by asking for it again with EntitySource None, which no
-        // ordinary client sends.
-        if (!SpawnAuthority.SourceAllowed(request.Value.Source, Config.AllowedSpawnSources))
+        // holstered item by asking for the same barcode again with EntitySource None
+        // and putting the copy back in the slot. The game sends None for loot drops
+        // and level-load slot fills as well, so the barcode has to match too.
+        if (Config.BlockHolsterDuplicates
+            && request.Value.Source == FusionProtocol.SourceNone
+            && HolsteredSlotOf(sender.SmallId, request.Value.Barcode) is { } slotIndex)
         {
             Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
-                        $"denied: spawn source {request.Value.Source} is not allowed");
+                        $"denied: it is already in their holster slot {slotIndex}");
 
             EnforceSpamVerdict(
                 sender,
-                Guard.StrikeFor(sender,
-                    $"asked to spawn '{request.Value.Barcode}' with source {request.Value.Source}"),
-                "Kicked for spawning with a forged source");
+                Guard.StrikeFor(sender, $"asked to spawn '{request.Value.Barcode}', already in " +
+                                        $"their holster slot {slotIndex}"),
+                "Kicked for duplicating a holstered item");
 
             return;
         }
@@ -3696,6 +3699,34 @@ public sealed class FusionServer : IDisposable
                 .Select(s => new FusionDedicated.Plugins.PluginSlot(s.Index, s.Weapon))
                 .ToList();
         }
+    }
+
+    /// <summary>
+    /// Which of a player's own body slots holds this barcode, or null when none does.
+    /// A slot records the entity rather than the barcode, so an entity the registry
+    /// has forgotten cannot be named and is passed over.
+    /// </summary>
+    private byte? HolsteredSlotOf(byte smallId, string barcode)
+    {
+        List<(byte Index, ushort Weapon)> slots;
+
+        lock (_cacheLock)
+        {
+            slots = _slotted.All()
+                .Where(s => s.Slot == smallId)
+                .Select(s => (s.Index, s.Weapon))
+                .ToList();
+        }
+
+        foreach (var slot in slots.OrderBy(s => s.Index))
+        {
+            if (string.Equals(Entities.Get(slot.Weapon)?.Barcode, barcode, StringComparison.OrdinalIgnoreCase))
+            {
+                return slot.Index;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>What one player is holding, for a plugin.</summary>
