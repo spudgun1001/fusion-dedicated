@@ -13,9 +13,9 @@ namespace FusionDedicated.Server;
 public sealed class HolsterDuplicates
 {
     /// <summary>
-    /// Draws and suspicions kept per player, after which the oldest draw goes and a
-    /// new barcode is counted without being kept. A bounded memory has to fail one way
-    /// or the other, and letting a spawn through is the cheaper mistake.
+    /// Draws and suspicions kept per player, after which the least recently seen one
+    /// goes. Dropping the new barcode instead would let a client pick sixteen it does
+    /// not care about and hide the seventeenth behind them.
     /// </summary>
     public const int MaxRemembered = 16;
 
@@ -144,10 +144,12 @@ public sealed class HolsterDuplicates
             int count = known ? seen.Count + 1 : 1;
             byte index = slot ?? (known ? seen.Slot : (byte)0);
 
-            if (known || tracker.Suspect.Count < MaxRemembered)
+            if (!known && tracker.Suspect.Count >= MaxRemembered)
             {
-                tracker.Suspect[barcode] = (now, count, index);
+                tracker.Suspect.Remove(tracker.Suspect.OrderBy(s => s.Value.At).First().Key);
             }
+
+            tracker.Suspect[barcode] = (now, count, index);
 
             return (count, index);
         }

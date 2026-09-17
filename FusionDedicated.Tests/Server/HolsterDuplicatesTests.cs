@@ -91,21 +91,45 @@ public class HolsterDuplicatesTests
         Assert.Null(dupes.DrawnFrom(Joel, Pistol, Noon.AddSeconds(4), TimeSpan.FromSeconds(3)));
     }
 
-    [Fact]
-    public void Past_the_cap_a_new_barcode_is_counted_but_not_kept()
+    /// <summary>Filled one a second, so every entry has a different time to sort by.</summary>
+    private static HolsterDuplicates FullOfDecoys(TimeSpan window)
     {
         var dupes = new HolsterDuplicates();
 
         for (int i = 0; i < HolsterDuplicates.MaxRemembered; i++)
         {
-            dupes.Note(Joel, $"Pack.Spawnable.Item{i}", 1, Noon, Window);
+            dupes.Note(Joel, $"Pack.Spawnable.Item{i}", 1, Noon.AddSeconds(i), window);
         }
 
-        // Nothing is refused on the back of a barcode there was no room to keep, which
-        // is the safe way for a bounded memory to fail.
-        Assert.Equal(1, dupes.Note(Joel, "Pack.Spawnable.Spare", 1, Noon, Window).Attempt);
-        Assert.Equal(1, dupes.Note(Joel, "Pack.Spawnable.Spare", 1, Noon, Window).Attempt);
-        Assert.False(dupes.Armed(Joel, "Pack.Spawnable.Spare", Noon, Window));
+        return dupes;
+    }
+
+    [Fact]
+    public void Past_the_cap_the_barcode_nobody_has_touched_goes()
+    {
+        var window = TimeSpan.FromMinutes(10);
+        var dupes = FullOfDecoys(window);
+
+        // Sixteen decoys cannot hide a seventeenth barcode, because it is the oldest
+        // decoy that is dropped to make room rather than the newcomer.
+        Assert.Equal(1, dupes.Note(Joel, "Pack.Spawnable.Spare", 1, Noon.AddSeconds(20), window).Attempt);
+        Assert.Equal(2, dupes.Note(Joel, "Pack.Spawnable.Spare", 1, Noon.AddSeconds(21), window).Attempt);
+
+        Assert.False(dupes.Armed(Joel, "Pack.Spawnable.Item0", Noon.AddSeconds(21), window));
+        Assert.True(dupes.Armed(Joel, "Pack.Spawnable.Item15", Noon.AddSeconds(21), window));
+    }
+
+    [Fact]
+    public void A_barcode_kept_fresh_survives_the_cap()
+    {
+        var window = TimeSpan.FromMinutes(10);
+        var dupes = FullOfDecoys(window);
+
+        dupes.Note(Joel, "Pack.Spawnable.Item0", 1, Noon.AddSeconds(20), window);
+        dupes.Note(Joel, "Pack.Spawnable.Spare", 1, Noon.AddSeconds(21), window);
+
+        Assert.True(dupes.Armed(Joel, "Pack.Spawnable.Item0", Noon.AddSeconds(21), window));
+        Assert.False(dupes.Armed(Joel, "Pack.Spawnable.Item1", Noon.AddSeconds(21), window));
     }
 
     [Fact]

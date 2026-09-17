@@ -305,8 +305,8 @@ spawn guard, and each refusal keeps the barcode suspect for another
 paying. The suspicion does not go back to the slots, because the mod returns the copy
 without telling the server, so a refusal no longer depends on the server still having a
 slot record. A player who stops for the length of the window starts clean again, which
-means a patient duper who waits it out still gets one copy per window, six an hour at
-the default.
+means a patient duper who waits it out still gets one copy per window, six a minute at
+the default and 360 an hour.
 
 A strike from this rule purges nothing, since a dropped request left nothing behind, and
 the kick comes at the usual `SpamStrikesBeforeKick`.
@@ -317,14 +317,17 @@ leaves a slot, because the copy request and the game's own message saying the sl
 empty are sent by two different mods on the same grab and arrive in either order. Set
 either window to 0 to turn that half off: no draw is remembered at 0, and with the
 duplicate window at 0 nothing is ever refused. Each player is tracked for at most 16
-drawn items and 16 suspected barcodes, and past that a new barcode is allowed rather
-than refused.
+drawn items and 16 suspected barcodes, and past that it is the barcode nobody has
+spawned for longest that is forgotten, so decoys cannot crowd out the one that matters.
 
 The price of catching the copy is that a second genuine spawn of the same barcode inside
 the window is refused and struck as well. Two loot drops of the same gun eight seconds
-apart, while the player is carrying one, cost them a strike, and three strikes inside
-the guard's own window kick them. Raise `HolsterDuplicateWindowSeconds` to catch more
-duping, or lower it to punish fewer honest players.
+apart cost the player a strike, and only the first of the two has to find the gun in a
+slot: once a barcode is suspect the slots are not asked about it again, so somebody who
+has since thrown that gun away is refused all the same while the drops keep coming inside
+the window. At most one strike is counted per `SpawnWindowSeconds`, and
+`SpamStrikesBeforeKick` (3) of them kick. Raise `HolsterDuplicateWindowSeconds` to catch
+more duping, or lower it to punish fewer honest players.
 
 The rule has its own switch and does not read `AntiSpamEnabled`, so it still refuses and
 strikes on a server with the rest of the spam guard turned off, and it applies at every
@@ -337,6 +340,16 @@ have them struck over it. Only slots on a player's own body are searched, so an 
 taken off a gun rack or a locker is covered for `HolsterDrawSeconds` and no longer than
 that. A slot records the entity rather than the barcode, so a slot whose entity the
 server cannot name is passed over.
+
+Two limits are worth knowing before you rely on it. A modded client can erase its own
+slot record with a message the server has no way to disprove, either an insert naming a
+prop or a drop naming its own slot, and a later pull then records no draw either, so the
+rule has nothing to arm on for that barcode until the item is holstered again through a
+real hand drop. The mod this was written against does none of that, and a client can only
+do it to itself, since a record is never written onto another player's body and taking
+one off theirs only ever makes them harder to refuse. Refusals also pass through the
+shared refusal limiter, so a client spamming them past `RefusalKickPerSecond` (50) is
+removed for flooding first and the log names that reason instead of this one.
 
 `MaxEntitiesPerPlayer` also caps the level props a player's own game reports by pose,
 the props nobody spawned but that a client still tracks. Past the cap the server stops

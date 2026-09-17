@@ -1846,15 +1846,18 @@ public sealed class FusionServer : IDisposable
             && request.Value.Source == FusionProtocol.SourceNone
             && !string.IsNullOrWhiteSpace(request.Value.Barcode))
         {
+            // One reading for the pair. Two would let the arming check pass on a
+            // suspicion that the count then prunes as stale.
+            var now = Clock();
             var window = Seconds(Config.HolsterDuplicateWindowSeconds);
-            byte? carried = HolsterSlotFor(sender.SmallId, request.Value.Barcode);
+            byte? carried = HolsterSlotFor(sender.SmallId, request.Value.Barcode, now);
 
             // The cheat puts its copy back itself, so the slots stop knowing about it
             // after the first draw and only the suspicion is left to go on.
-            if (carried != null || _dupes.Armed(sender.SmallId, request.Value.Barcode, Clock(), window))
+            if (carried != null || _dupes.Armed(sender.SmallId, request.Value.Barcode, now, window))
             {
                 var (attempt, slotIndex) = _dupes.Note(
-                    sender.SmallId, request.Value.Barcode, carried, Clock(), window);
+                    sender.SmallId, request.Value.Barcode, carried, now, window);
 
                 if (attempt > 1)
                 {
@@ -3726,7 +3729,7 @@ public sealed class FusionServer : IDisposable
     /// from a moment ago. Slots hold entities rather than barcodes, so one the registry
     /// cannot name is passed over.
     /// </summary>
-    private byte? HolsterSlotFor(byte smallId, string barcode)
+    private byte? HolsterSlotFor(byte smallId, string barcode, DateTime now)
     {
         IReadOnlyList<(byte Index, ushort Weapon)> slots;
 
@@ -3744,7 +3747,7 @@ public sealed class FusionServer : IDisposable
             }
         }
 
-        return _dupes.DrawnFrom(smallId, barcode, Clock(), Seconds(Config.HolsterDrawSeconds));
+        return _dupes.DrawnFrom(smallId, barcode, now, Seconds(Config.HolsterDrawSeconds));
     }
 
     /// <summary>What one player is holding, for a plugin.</summary>
