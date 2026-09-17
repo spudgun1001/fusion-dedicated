@@ -395,16 +395,16 @@ public sealed class ServerConfig
     public bool BlockHolsterDuplicates { get; set; } = true;
 
     /// <summary>
-    /// How long an item a player has drawn out of a slot still counts as theirs. The
-    /// copy request and the game's own slot drop arrive in either order, so a copy that
-    /// lands first is missed without this.
+    /// How long an item a player has drawn out of a slot still counts as theirs, since
+    /// the copy request and the game's own slot drop arrive in either order. Zero
+    /// remembers no draws.
     /// </summary>
     public int HolsterDrawSeconds { get; set; } = 3;
 
     /// <summary>
-    /// How long a match is remembered, so a second spawn of the same barcode inside it
-    /// is the one refused. The first is allowed, since the game's own spawns can name
-    /// something the player is already carrying.
+    /// How long a barcode stays suspect after it has matched once, so every spawn of it
+    /// inside that time is refused. The first is allowed, since the game's own spawns
+    /// can name something the player is carrying, and zero refuses nothing.
     /// </summary>
     public int HolsterDuplicateWindowSeconds { get; set; } = 10;
 

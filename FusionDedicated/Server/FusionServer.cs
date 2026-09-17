@@ -1838,34 +1838,41 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        // Before the rank check and at every rank. A duplication mod copies a
-        // holstered item by asking for the same barcode again with EntitySource None,
-        // and the game asks the same way for loot drops and slot fills, so one match
-        // is allowed and the repeat is the tell.
+        // Before the rank check and at every rank. A duplication mod asks for a
+        // holstered barcode again with EntitySource None, and the game asks the same way
+        // for loot drops, so the first match is allowed and the barcode is suspected
+        // from then on.
         if (Config.BlockHolsterDuplicates
             && request.Value.Source == FusionProtocol.SourceNone
-            && !string.IsNullOrWhiteSpace(request.Value.Barcode)
-            && HolsterSlotFor(sender.SmallId, request.Value.Barcode) is { } slotIndex)
+            && !string.IsNullOrWhiteSpace(request.Value.Barcode))
         {
-            int attempt = _dupes.Note(sender.SmallId, request.Value.Barcode, Clock(),
-                Seconds(Config.HolsterDuplicateWindowSeconds));
+            var window = Seconds(Config.HolsterDuplicateWindowSeconds);
+            byte? carried = HolsterSlotFor(sender.SmallId, request.Value.Barcode);
 
-            if (attempt > 1)
+            // The cheat puts its copy back itself, so the slots stop knowing about it
+            // after the first draw and only the suspicion is left to go on.
+            if (carried != null || _dupes.Armed(sender.SmallId, request.Value.Barcode, Clock(), window))
             {
-                Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
-                            $"denied: attempt {attempt} to respawn what is in their holster slot {slotIndex}");
+                var (attempt, slotIndex) = _dupes.Note(
+                    sender.SmallId, request.Value.Barcode, carried, Clock(), window);
 
-                EnforceSpamVerdict(
-                    sender,
-                    Guard.StrikeFor(sender, $"asked to spawn '{request.Value.Barcode}' from their " +
-                                            $"holster slot {slotIndex}, attempt {attempt}"),
-                    "Kicked for duplicating a holstered item");
+                if (attempt > 1)
+                {
+                    Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+                                $"denied: attempt {attempt} to respawn what is in their holster slot {slotIndex}");
 
-                return;
+                    EnforceSpamVerdict(
+                        sender,
+                        Guard.StrikeFor(sender, $"asked to spawn '{request.Value.Barcode}' from their " +
+                                                $"holster slot {slotIndex}, attempt {attempt}"),
+                        "Kicked for duplicating a holstered item");
+
+                    return;
+                }
+
+                Log("INFO", $"Holster: {sender.DisplayName} spawned '{request.Value.Barcode}' while their " +
+                            $"slot {slotIndex} holds one, allowed as a first match", console: false);
             }
-
-            Log("INFO", $"Holster: {sender.DisplayName} spawned '{request.Value.Barcode}' while their " +
-                        $"slot {slotIndex} holds one, allowed as a first match", console: false);
         }
 
         // blocklist.json is reread when saved; server.json is not, so the exemptions
@@ -3705,9 +3712,7 @@ public sealed class FusionServer : IDisposable
 
         lock (_cacheLock)
         {
-            return _slotted.All()
-                .Where(s => s.Slot == player.SmallId)
-                .OrderBy(s => s.Index)
+            return _slotted.SlotsOf(player.SmallId)
                 .Select(s => new FusionDedicated.Plugins.PluginSlot(s.Index, s.Weapon))
                 .ToList();
         }
@@ -4149,6 +4154,16 @@ public sealed class FusionServer : IDisposable
                 return;
 
             case ModuleProtocol.AttachmentKind.SlotInsert:
+                // Only their own body. A record on somebody else's is a claim about a
+                // player who did not make it, and this rule can kick over one.
+                if (change.Slot < EntityRegistry.FirstEntityId && change.Slot != sender.SmallId)
+                {
+                    Log("INFO", $"Holster: {sender.DisplayName} claimed slot {change.SlotIndex} on " +
+                                $"{HolsterLog.SlotOwner(change.Slot, id => Players.Get(id)?.DisplayName)}, " +
+                                "which is not theirs", console: false);
+                    return;
+                }
+
                 Entities.SetAttached(change.Entity, true);
 
                 // A hand lets go of what it holsters. The release message can be lost, so the slot insert itself ends the hold.
@@ -4159,8 +4174,9 @@ public sealed class FusionServer : IDisposable
                     _slotted.Insert(change.Slot, change.SlotIndex, change.Entity);
                 }
 
-                // The slots know where it is again, so the drawn memory has nothing left to hold.
-                if (Entities.Get(change.Entity)?.Barcode is { } stowed)
+                // Their own body only. Reporting the item onto a prop instead would
+                // otherwise clear the memory while the copy stays in the slot.
+                if (change.Slot == sender.SmallId && Entities.Get(change.Entity)?.Barcode is { } stowed)
                 {
                     _dupes.Holstered(sender.SmallId, stowed);
                 }

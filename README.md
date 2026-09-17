@@ -294,32 +294,49 @@ props, constraint ends and anything a plugin spawned never count and are never p
 Creating a constraint is held to the same per-second spawn rate cap and spawn guard,
 so constraint spam earns the same strikes, purge and kick.
 
-`BlockHolsterDuplicates` (on) watches for an item being pulled out of a holster slot
-and asked for again. A duplication mod does that by sending a spawn request for the
-same barcode with source 0, EntitySource None, then putting the copy back in the slot,
-which turns one holstered gun into as many as the player cares to draw. Fusion asks
-the same way for loot dropped by a destructible and for the items a level puts into
-slots as it loads, and either can name something the player is already carrying, so a
-single match is allowed and noted only in the detailed log. The second and later
-spawns of that barcode by that player inside `HolsterDuplicateWindowSeconds` (10) are
-refused and strike the spawn guard, with the kick at the usual `SpamStrikesBeforeKick`.
-A strike from this rule purges nothing, since a dropped request left nothing behind.
+`BlockHolsterDuplicates` (on) caps duplication rather than stopping it. A duplication
+mod pulls an item out of a holster slot, asks for the same barcode again with source 0,
+EntitySource None, and puts the copy back in the slot itself. The first such spawn is
+allowed, because Fusion asks the same way for loot dropped by a destructible and for the
+items a level puts into slots, and either can name something the player is already
+carrying. Every later spawn of that barcode by that player is refused and strikes the
+spawn guard, and each refusal keeps the barcode suspect for another
+`HolsterDuplicateWindowSeconds` (10), so a spree costs the duper one copy and then stops
+paying. The suspicion does not go back to the slots, because the mod returns the copy
+without telling the server, so a refusal no longer depends on the server still having a
+slot record. A player who stops for the length of the window starts clean again, which
+means a patient duper who waits it out still gets one copy per window, six an hour at
+the default.
 
-The copy request and the game's own message saying the slot is now empty are sent by
-two different mods on the same grab, so they arrive in either order. An item therefore
-stays protected for `HolsterDrawSeconds` (3) after it leaves a slot, and that memory is
-dropped when the item goes back into a slot, when the player leaves and when the level
-changes. A slot records the entity rather than the barcode, so a slot whose entity the
+A strike from this rule purges nothing, since a dropped request left nothing behind, and
+the kick comes at the usual `SpamStrikesBeforeKick`.
+
+Two memories back it, each held per player and both dropped when the player leaves and
+when the level changes. An item stays protected for `HolsterDrawSeconds` (3) after it
+leaves a slot, because the copy request and the game's own message saying the slot is
+empty are sent by two different mods on the same grab and arrive in either order. Set
+either window to 0 to turn that half off: no draw is remembered at 0, and with the
+duplicate window at 0 nothing is ever refused. Each player is tracked for at most 16
+drawn items and 16 suspected barcodes, and past that a new barcode is allowed rather
+than refused.
+
+The price of catching the copy is that a second genuine spawn of the same barcode inside
+the window is refused and struck as well. Two loot drops of the same gun eight seconds
+apart, while the player is carrying one, cost them a strike, and three strikes inside
+the guard's own window kick them. Raise `HolsterDuplicateWindowSeconds` to catch more
+duping, or lower it to punish fewer honest players.
+
+The rule has its own switch and does not read `AntiSpamEnabled`, so it still refuses and
+strikes on a server with the rest of the spam guard turned off, and it applies at every
+rank, `AntiSpamExemptLevel` and Owner included. It runs before the rank check and before
+the blocklist, so listing `0` in `SpawningExemptSources` does not get a repeat past it,
+and a blocklisted barcode that is holstered is logged here rather than as a blocklist
+refusal. A holster record is kept only when a player reports it on their own body or on
+a prop, never on somebody else's body, so nobody can plant one on another player and
+have them struck over it. Only slots on a player's own body are searched, so an item
+taken off a gun rack or a locker is covered for `HolsterDrawSeconds` and no longer than
+that. A slot records the entity rather than the barcode, so a slot whose entity the
 server cannot name is passed over.
-
-The rule has its own switch and does not read `AntiSpamEnabled`, so it still refuses
-and strikes on a server with the rest of the spam guard turned off, and it applies at
-every rank, `AntiSpamExemptLevel` and Owner included. It runs before the rank check and
-before the blocklist, so listing `0` in `SpawningExemptSources` does not get a repeat
-past it, and a blocklisted barcode that is holstered is logged here rather than as a
-blocklist refusal. Only slots on a player's own body count: a gun rack, locker or other
-prop with slots is recorded against the prop rather than the player, so duplicating out
-of one of those is not covered.
 
 `MaxEntitiesPerPlayer` also caps the level props a player's own game reports by pose,
 the props nobody spawned but that a client still tracks. Past the cap the server stops
@@ -473,8 +490,8 @@ gitignored.
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
 | `BlockHolsterDuplicates` | refuses a repeat source None spawn of a barcode the player has holstered or just drew, at every rank (on by default) |
-| `HolsterDrawSeconds` | how long an item a player has drawn still counts as holstered for that check (3 by default) |
-| `HolsterDuplicateWindowSeconds` | how long a first match is remembered, so the next one inside it is refused (10 by default) |
+| `HolsterDrawSeconds` | how long an item a player has drawn still counts as holstered for that check (3 by default, 0 remembers no draws) |
+| `HolsterDuplicateWindowSeconds` | how long a barcode stays suspect, so every spawn of it inside that time is refused (10 by default, 0 never refuses) |
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |

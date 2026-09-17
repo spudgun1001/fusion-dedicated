@@ -195,6 +195,21 @@ public class HolsterSlotTests
         => Assert.Empty(new HolsterSlots().ForgetRig(3));
 
     [Fact]
+    public void One_bodys_slots_come_back_lowest_index_first()
+    {
+        var slots = new HolsterSlots();
+        slots.Insert(MyHip, 3, Gun);
+        slots.Insert(MyHip, 1, 301);
+        slots.Insert(TheirHip, 0, 302);
+
+        Assert.Equal(new[] { ((byte)1, (ushort)301), ((byte)3, Gun) }, slots.SlotsOf(MyHip));
+    }
+
+    [Fact]
+    public void A_body_with_nothing_in_its_slots_comes_back_empty()
+        => Assert.Empty(new HolsterSlots().SlotsOf(MyHip));
+
+    [Fact]
     public void Slots_on_a_prop_are_left_alone()
     {
         // 259 is a prop id whose low byte is 3, which must not read as player 3.
