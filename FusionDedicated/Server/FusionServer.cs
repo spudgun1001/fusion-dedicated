@@ -4765,7 +4765,25 @@ public sealed class FusionServer : IDisposable
     {
         if (FusionProtocol.TryReadSeat(message) is { } seat)
         {
-            bool known = Entities.Get(seat.SeatId) != null;
+            var vehicle = Entities.Get(seat.SeatId);
+            bool known = vehicle != null;
+
+            // A catch-up reply names whoever answered rather than the rider, so only live seats are asked about.
+            if (WorldCatchup.IsLiveSeat(seat.RelayType))
+            {
+                var seatVerdict = Plugins?.Seat.Raise(new Plugins.SeatEvent(
+                    sender.PlatformId, sender.SmallId, sender.DisplayName, sender.Permission,
+                    seat.SeatId, vehicle?.Barcode ?? "", seat.Index, seat.Ingress));
+
+                if (seat.Ingress && seatVerdict is { Allowed: false })
+                {
+                    StandUp(sender, seat.SeatId, seat.Index);
+
+                    Log("INFO", $"A plugin refused {sender.DisplayName} seat {seat.Index} of entity " +
+                                $"{seat.SeatId}: {seatVerdict.Reason}", console: false);
+                    return;
+                }
+            }
 
             if (!seat.Ingress)
             {
@@ -4796,6 +4814,21 @@ public sealed class FusionServer : IDisposable
         }
 
         Relay(sender, message);
+    }
+
+    /// <summary>
+    /// Stands a rider up in their own game with an egress stamped as theirs, then tells them who owns
+    /// the vehicle, since sitting down locked it to them.
+    /// </summary>
+    private void StandUp(ConnectedPlayer rider, ushort entityId, byte index)
+    {
+        SendTo(rider.Connection, FusionProtocol.BuildSeat(rider.SmallId, entityId, index, ingress: false),
+            reliable: true);
+
+        if (Entities.Get(entityId)?.OwnerSmallId is { } owner)
+        {
+            SendTo(rider.Connection, FusionProtocol.BuildOwnershipResponse(owner, entityId), reliable: true);
+        }
     }
 
     /// <summary>

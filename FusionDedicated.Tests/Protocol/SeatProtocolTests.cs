@@ -126,4 +126,11 @@ public class SeatProtocolTests
         Assert.Null(FusionProtocol.TryReadSeat(new byte[] { 8, 3 }));
         Assert.Null(FusionProtocol.TryReadSeat(ReadOnlySpan<byte>.Empty));
     }
+
+    [Fact]
+    public void An_egress_stamped_with_the_rider_is_the_bytes_Fusion_would_have_written()
+    {
+        // Sent to the rider alone it names them as sender, so their own game stands its rig up.
+        Assert.Equal(FusionLiveSeat(5, 400, 0, false), FusionProtocol.BuildSeat(5, 400, 0, false));
+    }
 }
