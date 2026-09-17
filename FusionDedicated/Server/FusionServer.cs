@@ -4754,7 +4754,7 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>
     /// Keeps the seat book in step with PlayerRepSeat, then passes the message on
-    /// as before.
+    /// as before. A plugin may refuse a live ingress, which stands the rider up instead.
     ///
     /// Only a live seat is kept. One sent ToTarget is Fusion's catch-up reply,
     /// stamped with whoever answered rather than the rider. A seat in an entity
@@ -4769,7 +4769,9 @@ public sealed class FusionServer : IDisposable
             bool known = vehicle != null;
 
             // A catch-up reply names whoever answered rather than the rider, so only live seats are asked about.
-            if (WorldCatchup.IsLiveSeat(seat.RelayType))
+            // An egress is asked about only when there is a recorded seat to leave.
+            if (WorldCatchup.IsLiveSeat(seat.RelayType)
+                && (seat.Ingress || _seats.SeatOf(sender.SmallId) != null))
             {
                 var seatVerdict = Plugins?.Seat.Raise(new Plugins.SeatEvent(
                     sender.PlatformId, sender.SmallId, sender.DisplayName, sender.Permission,
@@ -4777,6 +4779,13 @@ public sealed class FusionServer : IDisposable
 
                 if (seat.Ingress && seatVerdict is { Allowed: false })
                 {
+                    // Sitting down means leaving any seat on record, so the others are told of that too.
+                    if (_seats.SeatOf(sender.SmallId) is { } left && SeatEgress(sender.SmallId))
+                    {
+                        Broadcast(FusionProtocol.BuildSeat(sender.SmallId, left.EntityId, left.Index, ingress: false),
+                            reliable: true, except: sender.SmallId);
+                    }
+
                     StandUp(sender, seat.SeatId, seat.Index);
 
                     Log("INFO", $"A plugin refused {sender.DisplayName} seat {seat.Index} of entity " +

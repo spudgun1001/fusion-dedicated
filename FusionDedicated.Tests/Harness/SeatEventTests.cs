@@ -1,5 +1,6 @@
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Plugins;
+using FusionDedicated.Protocol;
 using FusionDedicated.Tests.Protocol;
 
 namespace FusionDedicated.Tests.Harness;
@@ -174,6 +175,88 @@ public class SeatEventTests
         kanza.Send(CatchupSeat(answerer: kanza.SmallId, target: joel.SmallId, seatId: Car, index: 0));
 
         Assert.Equal(0, raised);
+    }
+
+    [Fact]
+    public void A_refused_ingress_clears_the_riders_old_seat_and_tells_the_others()
+    {
+        var (world, joel, kanza, dennis) = PoliceCarOwnedByJoel();
+        using var _ = world;
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Car, 1, true));
+        OnlyJoelDrives(world);
+        int dennisBefore = world.Transport.SentTo(dennis.Connection).Count;
+
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Car, 0, true));
+        kanza.Send(FusionProtocol.BuildEntityPoseUpdate(kanza.SmallId, Car, new Vec3(1, 2, 3), default, default, default));
+
+        Assert.Empty(world.Server.RidersOf(Car));
+        Assert.Equal(joel.SmallId, world.Server.Entities.Get(Car)!.OwnerSmallId);
+        Assert.True(world.AgreeOnOwner(Car), string.Join(", ", world.OwnersOf(Car)));
+
+        var toDennis = world.Transport.SentTo(dennis.Connection).Skip(dennisBefore).ToList();
+        Assert.Contains(toDennis, sent => sent.Message.SequenceEqual(FusionProtocol.BuildSeat(kanza.SmallId, Car, 1, false)));
+        Assert.False(dennis.View.Seats.ContainsKey(kanza.SmallId));
+        Assert.False(joel.View.Seats.ContainsKey(kanza.SmallId));
+    }
+
+    [Fact]
+    public void An_egress_with_no_recorded_seat_is_not_put_to_plugins()
+    {
+        var (world, _, kanza, _) = PoliceCarOwnedByJoel();
+        using var __ = world;
+        int raised = 0;
+        var events = new PluginEvents(new PluginHealth(), (_, _) => { });
+        events.Seat.Subscribe("counter", _ => { raised++; return PluginVerdict.Allow; });
+        world.Server.Plugins = events;
+
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Car, 1, false));
+
+        Assert.Equal(0, raised);
+    }
+
+    [Fact]
+    public void A_refused_ingress_into_an_unknown_entity_sends_only_the_egress()
+    {
+        const ushort Unknown = 999;
+        var (world, _, kanza, dennis) = PoliceCarOwnedByJoel();
+        using var __ = world;
+        var seen = new List<SeatEvent>();
+        var events = new PluginEvents(new PluginHealth(), (_, _) => { });
+        events.Seat.Subscribe("refuser", e => { seen.Add(e); return PluginVerdict.Refuse("no"); });
+        world.Server.Plugins = events;
+        int kanzaBefore = world.Transport.SentTo(kanza.Connection).Count;
+        int dennisBefore = world.Transport.SentTo(dennis.Connection).Count;
+
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Unknown, 0, true));
+
+        Assert.Equal("", Assert.Single(seen).Barcode);
+        var toKanza = world.Transport.SentTo(kanza.Connection).Skip(kanzaBefore).ToList();
+        Assert.Equal(FusionProtocol.BuildSeat(kanza.SmallId, Unknown, 0, false), Assert.Single(toKanza).Message);
+        Assert.Equal(dennisBefore, world.Transport.SentTo(dennis.Connection).Count);
+    }
+
+    [Fact]
+    public void A_refused_riders_later_egress_is_relayed_without_side_effects()
+    {
+        var (world, joel, kanza, dennis) = PoliceCarOwnedByJoel();
+        using var _ = world;
+        var seen = new List<SeatEvent>();
+        var events = new PluginEvents(new PluginHealth(), (_, _) => { });
+        events.Seat.Subscribe("gangs", e => { seen.Add(e); return PluginVerdict.Refuse("police only"); });
+        world.Server.Plugins = events;
+
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Car, 0, true));
+        int dennisBefore = world.Transport.SentTo(dennis.Connection).Count;
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Car, 0, false));
+
+        Assert.True(Assert.Single(seen).Ingress);
+        Assert.Empty(world.Server.RidersOf(Car));
+        Assert.Equal(joel.SmallId, world.Server.Entities.Get(Car)!.OwnerSmallId);
+        Assert.True(world.AgreeOnOwner(Car), string.Join(", ", world.OwnersOf(Car)));
+
+        var toDennis = world.Transport.SentTo(dennis.Connection).Skip(dennisBefore).ToList();
+        Assert.Equal(FusionProtocol.BuildSeat(kanza.SmallId, Car, 0, false), Assert.Single(toDennis).Message);
+        Assert.False(dennis.View.Seats.ContainsKey(kanza.SmallId));
     }
 
     /// <summary>SeatExtender's catch-up reply: ToTarget, stamped with whoever answered.</summary>

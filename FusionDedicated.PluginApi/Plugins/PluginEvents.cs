@@ -27,7 +27,10 @@ public readonly record struct OwnershipEvent(
     ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
     ushort EntityId, string Barcode, ulong OwnerPlatformId);
 
-/// <summary>A player sitting in or getting out of a vehicle seat. SeatIndex is the seat's order in the vehicle's entity.</summary>
+/// <summary>
+/// A player sitting in or getting out of a vehicle seat. SeatIndex is the seat's order in the vehicle's entity.
+/// An egress is raised only for a seat the server had recorded.
+/// </summary>
 public readonly record struct SeatEvent(
     ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
     ushort EntityId, string Barcode, byte SeatIndex, bool Ingress);
