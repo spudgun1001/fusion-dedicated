@@ -86,4 +86,14 @@ public class ProgramLockTests
         Assert.True(load >= 0, "plugins do not load under the world lock");
         Assert.True(console > load, "the console starts before the plugins have loaded");
     }
+
+    [Fact]
+    public void Plugin_unseat_stays_direct_and_seats_are_looked_up()
+    {
+        string actions = ProgramSource.Between("new ServerPluginActions(", "var pluginPanel");
+        string world = ProgramSource.Between("var pluginWorld = new PluginWorld", "var plugins = new PluginHost(");
+
+        Assert.Contains("platformId => server.UnseatForPlugin(platformId)", actions);
+        Assert.Contains("SeatOfLookup = server.SeatOfPlayer,", world);
+    }
 }

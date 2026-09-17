@@ -262,7 +262,8 @@ public static class Program
             id => server.ForgetProp(id),
             (id, platformId) => server.GiveOwner(id, platformId),
             (barcode, x, y, z, rotation, platformId) => server.SpawnForPlayer(barcode, x, y, z, rotation, platformId),
-            (id, platformId, index) => server.HolsterForPlugin(id, platformId, index));
+            (id, platformId, index) => server.HolsterForPlugin(id, platformId, index),
+            platformId => server.UnseatForPlugin(platformId));
 
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));
@@ -308,6 +309,7 @@ public static class Program
                     : ((float X, float Y, float Z)?)null),
             HolsteredLookup = server.HolsteredBy,
             HeldLookup = server.HeldBy,
+            SeatOfLookup = server.SeatOfPlayer,
         };
 
         var plugins = new PluginHost(

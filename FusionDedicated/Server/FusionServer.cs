@@ -4752,6 +4752,33 @@ public sealed class FusionServer : IDisposable
     public IReadOnlyList<byte> RidersOf(ushort entityId)
         => _seats.RidersOf(entityId).Select(s => s.Rider).ToList();
 
+    /// <summary>Stands a seated player up for everybody, for a plugin. False when they are not here or not seated.</summary>
+    public bool UnseatForPlugin(ulong platformId)
+    {
+        if (Players.GetByPlatformId(platformId) is not { } rider
+            || _seats.SeatOf(rider.SmallId) is not { } seat
+            || !SeatEgress(rider.SmallId))
+        {
+            return false;
+        }
+
+        StandUp(rider, seat.EntityId, seat.Index);
+
+        Broadcast(FusionProtocol.BuildSeat(rider.SmallId, seat.EntityId, seat.Index, ingress: false),
+            reliable: true, except: rider.SmallId);
+
+        Log("INFO", $"A plugin stood {rider.DisplayName} up from seat {seat.Index} of entity {seat.EntityId}",
+            console: false);
+
+        return true;
+    }
+
+    /// <summary>The seat a player sits in, for a plugin, or null.</summary>
+    public FusionDedicated.Plugins.PluginSeat? SeatOfPlayer(ulong platformId)
+        => Players.GetByPlatformId(platformId) is { } player && _seats.SeatOf(player.SmallId) is { } seat
+            ? new FusionDedicated.Plugins.PluginSeat(seat.EntityId, seat.Index)
+            : null;
+
     /// <summary>
     /// Keeps the seat book in step with PlayerRepSeat, then passes the message on
     /// as before. A plugin may refuse a live ingress, which stands the rider up instead.
