@@ -161,6 +161,41 @@ public class PluginActionsTests
         Assert.False(actions.Holster(301, 7, 2));
     }
 
+    [Fact]
+    public void Unseat_reaches_the_server_call_behind_it()
+    {
+        var made = new List<string>();
+
+        var actions = new ServerPluginActions(
+            (id, reason) => { },
+            (id, reason) => { },
+            (id, level) => { },
+            id => { },
+            (id, tag, payload) => { },
+            (tag, payload) => { },
+            (barcode, x, y, z, rotation) => 0,
+            (id, note) => false,
+            id => false,
+            (id, platformId) => false,
+            (barcode, x, y, z, rotation, owner) => 0,
+            (id, platformId, index) => false,
+            platformId => { made.Add($"unseat {platformId}"); return true; });
+
+        Assert.True(actions.Unseat(76561198000000001));
+        Assert.Equal(new[] { "unseat 76561198000000001" }, made);
+    }
+
+    [Fact]
+    public void Unseat_refuses_when_the_server_has_none()
+    {
+        IPluginActions built = new ServerPluginActions(
+            (id, reason) => { }, (id, reason) => { }, (id, level) => { }, id => { },
+            (id, tag, payload) => { }, (tag, payload) => { });
+
+        Assert.False(built.Unseat(7));
+        Assert.False(((IPluginActions)new OlderActions()).Unseat(7));
+    }
+
     private sealed class OlderActions : IPluginActions
     {
         public void Kick(ulong platformId, string reason) { }

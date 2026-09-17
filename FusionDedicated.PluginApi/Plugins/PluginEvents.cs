@@ -27,6 +27,11 @@ public readonly record struct OwnershipEvent(
     ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
     ushort EntityId, string Barcode, ulong OwnerPlatformId);
 
+/// <summary>A player sitting in or getting out of a vehicle seat. SeatIndex is the seat's order in the vehicle's entity.</summary>
+public readonly record struct SeatEvent(
+    ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
+    ushort EntityId, string Barcode, byte SeatIndex, bool Ingress);
+
 /// <summary>
 /// Everything a plugin can watch. Each is a channel of its own, so subscribing to
 /// one costs nothing on the others, and every one can refuse except those that
@@ -47,6 +52,7 @@ public sealed class PluginEvents
         Constraint = new EventChannel<ConstraintEvent>(health, log);
         Moderation = new EventChannel<ModerationEvent>(health, log);
         Ownership = new EventChannel<OwnershipEvent>(health, log);
+        Seat = new EventChannel<SeatEvent>(health, log);
     }
 
     public EventChannel<SpawnEvent> Spawn { get; }
@@ -68,6 +74,9 @@ public sealed class PluginEvents
     /// <summary>Raised after MayHold, so a plugin sees only a request the server itself already allows.</summary>
     public EventChannel<OwnershipEvent> Ownership { get; }
 
+    /// <summary>Raised for live seats only. Refusing an ingress stands the rider up, and refusing an egress does nothing.</summary>
+    public EventChannel<SeatEvent> Seat { get; }
+
     /// <summary>Detaches a plugin from everything, so unloading leaves nothing behind.</summary>
     public void RemoveAll(string plugin)
     {
@@ -82,5 +91,6 @@ public sealed class PluginEvents
         Constraint.RemoveAll(plugin);
         Moderation.RemoveAll(plugin);
         Ownership.RemoveAll(plugin);
+        Seat.RemoveAll(plugin);
     }
 }

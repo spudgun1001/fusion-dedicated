@@ -55,4 +55,7 @@ public interface IPluginActions
 
     /// <summary>Puts an entity into one of a player's body slots for everybody. False when the player or the entity is missing.</summary>
     bool Holster(ushort entityId, ulong platformId, byte slotIndex) => false;
+
+    /// <summary>Stands a seated player up for everybody. False when they are not here or not seated.</summary>
+    bool Unseat(ulong platformId) => false;
 }

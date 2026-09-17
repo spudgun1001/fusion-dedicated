@@ -19,6 +19,7 @@ public sealed class ServerPluginActions : IPluginActions
     private readonly Func<ushort, ulong, bool>? _giveOwner;
     private readonly Func<string, float, float, float, byte[], ulong, ushort>? _spawnFor;
     private readonly Func<ushort, ulong, byte, bool>? _holster;
+    private readonly Func<ulong, bool>? _unseat;
 
     public ServerPluginActions(Action<ulong, string> kick, Action<ulong, string> ban,
         Action<ulong, PermissionLevel> setRank, Action<ushort> despawn,
@@ -71,6 +72,21 @@ public sealed class ServerPluginActions : IPluginActions
         _holster = holster;
     }
 
+    /// <summary>The one that also stands seated players up.</summary>
+    public ServerPluginActions(Action<ulong, string> kick, Action<ulong, string> ban,
+        Action<ulong, PermissionLevel> setRank, Action<ushort> despawn,
+        Action<ulong, long, byte[]> sendModule, Action<long, byte[]> broadcastModule,
+        Func<string, float, float, float, byte[], ushort> spawn,
+        Func<ushort, string, bool> keep, Func<ushort, bool> forget,
+        Func<ushort, ulong, bool> giveOwner,
+        Func<string, float, float, float, byte[], ulong, ushort> spawnFor,
+        Func<ushort, ulong, byte, bool> holster,
+        Func<ulong, bool> unseat)
+        : this(kick, ban, setRank, despawn, sendModule, broadcastModule, spawn, keep, forget, giveOwner, spawnFor, holster)
+    {
+        _unseat = unseat;
+    }
+
     public void Kick(ulong platformId, string reason) => _kick(platformId, reason);
 
     public void Ban(ulong platformId, string reason) => _ban(platformId, reason);
@@ -99,4 +115,6 @@ public sealed class ServerPluginActions : IPluginActions
 
     public bool Holster(ushort entityId, ulong platformId, byte slotIndex)
         => _holster?.Invoke(entityId, platformId, slotIndex) ?? false;
+
+    public bool Unseat(ulong platformId) => _unseat?.Invoke(platformId) ?? false;
 }

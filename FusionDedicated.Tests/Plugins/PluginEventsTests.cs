@@ -101,4 +101,33 @@ public class PluginEventsTests
         Assert.True(events.Ownership.Raise(
             new OwnershipEvent(1, 1, "a", PermissionLevel.Default, 400, "b", 0)).Allowed);
     }
+
+    [Fact]
+    public void A_driver_seat_ingress_can_be_refused_by_barcode_and_seat()
+    {
+        var events = Events();
+
+        events.Seat.Subscribe("gangs", e => e.Ingress && e.SeatIndex == 0
+                                            && e.Barcode.StartsWith("spudgun1001.BabasPolice.")
+            ? PluginVerdict.Refuse("police only")
+            : PluginVerdict.Allow);
+
+        Assert.False(events.Seat.Raise(new SeatEvent(2, 2, "Kanza", PermissionLevel.Default, 400,
+            "spudgun1001.BabasPolice.Spawnable.SedanPolice", 0, true)).Allowed);
+
+        Assert.True(events.Seat.Raise(new SeatEvent(2, 2, "Kanza", PermissionLevel.Default, 400,
+            "spudgun1001.BabasPolice.Spawnable.SedanPolice", 1, true)).Allowed);
+    }
+
+    [Fact]
+    public void Removing_a_plugin_detaches_it_from_the_seat_event()
+    {
+        var events = Events();
+
+        events.Seat.Subscribe("gangs", _ => PluginVerdict.Refuse("no"));
+        events.RemoveAll("gangs");
+
+        Assert.True(events.Seat.Raise(
+            new SeatEvent(1, 1, "a", PermissionLevel.Default, 400, "b", 0, true)).Allowed);
+    }
 }
