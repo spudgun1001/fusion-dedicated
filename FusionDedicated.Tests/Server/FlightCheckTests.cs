@@ -82,6 +82,40 @@ public class FlightCheckTests
         Assert.Equal(FlightKind.None, verdict.Kind);
     }
 
+    /// <summary>
+    /// Being flung by an explosion or a throw: straight up at the speed that height needs, then
+    /// slowing under gravity and falling back. People do this to themselves, so it must not count.
+    /// </summary>
+    [Theory]
+    [InlineData(10f)]
+    [InlineData(15f)]
+    [InlineData(25f)]
+    [InlineData(40f)]
+    [InlineData(60f)]
+    public void Being_flung_into_the_air_is_not_a_flight(float peak)
+    {
+        float launch = MathF.Sqrt(2f * 9.8f * peak);
+        var verdict = Fly(new FlightCheck(Config()), at => Math.Max(0f, launch * at - 4.9f * at * at), 12f);
+
+        Assert.Equal(FlightKind.None, verdict.Kind);
+    }
+
+    [Fact]
+    public void A_flight_that_bobs_about_is_still_a_flight()
+    {
+        var verdict = Fly(new FlightCheck(Config()), at => at * 8f + 0.3f * MathF.Sin(at * 9f), 4f);
+
+        Assert.Equal(FlightKind.Climb, verdict.Kind);
+    }
+
+    [Fact]
+    public void A_fast_dive_under_the_fall_speed_is_a_flight()
+    {
+        var verdict = Fly(new FlightCheck(Config()), at => 200f - at * 20f, 4f);
+
+        Assert.Equal(FlightKind.Descent, verdict.Kind);
+    }
+
     [Fact]
     public void A_player_who_stands_still_is_not_a_flight()
     {

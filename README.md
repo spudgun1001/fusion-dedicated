@@ -399,11 +399,13 @@ player whose position is not known yet. Set either to 0 to send every pose to ev
 
 A fly mod spawns its gun on the player's own machine through BoneLib, so the server never
 sees the gun, only where their body goes. `FlightSpeed` (6 m/s) and `FlightWindowSeconds`
-(2) set what counts as flying: keeping that speed up or down for that long. A jump is over
-in under a second, a ladder is about 1 m/s and a lift 2 to 3 m/s. A fall is not counted,
-because it speeds up all the way down and then holds a speed far above
-`FlightMaxFallSpeed` (25 m/s), and a fall that lands is not counted either, since they stop
-moving. Each flight is a warning naming the player, their speed and whether they hold a
+(2) set what counts as flying: holding that speed up or down for that long at an even pace.
+Gravity is what tells the two apart. A jump, a fling off an explosion and a fall are all
+pulled by it, so their speed changes by about 5 m/s inside each quarter of the window, while
+a flight holds one speed throughout. So jumping, being flung tens of metres, falling off a
+building and landing are all left alone, as are a ladder at about 1 m/s and a lift at 2 to 3.
+A fall long enough to stop speeding up holds a speed above `FlightMaxFallSpeed` (25 m/s),
+which is also left alone. Each flight is a warning naming the player, their speed and whether they hold a
 Nimbus gun the server spawned. `FlightStrikesBeforeKick` (3) flights inside
 `FlightStrikeWindowSeconds` (60) is a kick, and 0 strikes only logs them. `FlightExemptLevel`
 (Operator) and above are never checked, and so is anybody sitting in a vehicle. Set

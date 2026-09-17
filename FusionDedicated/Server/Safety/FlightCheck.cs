@@ -12,13 +12,20 @@ public readonly record struct FlightVerdict(FlightKind Kind, float Speed);
 
 /// <summary>
 /// Spots a player flying from their rig's height alone, since a fly mod's gun is spawned on their own
-/// machine and never reaches the server. A jump is short, a ladder and a lift are slow, and a real fall
-/// speeds up until it reaches its own steady speed, which is far faster than anybody flies.
+/// machine and never reaches the server.
+///
+/// Whatever throws a player about, gravity pulls them at about 9.8 m/s squared all the while: a jump, a
+/// fling off an explosion and a fall off a building all speed up or slow down at that rate, which is about
+/// 5 m/s inside each quarter of the window. Flying holds one speed instead, so the window is split in four
+/// and a flight is one that moves at nearly the same speed in all of them. A fall that goes on long enough
+/// to stop speeding up is holding a speed far above anybody's flight.
 /// </summary>
 public sealed class FlightCheck
 {
-    /// <summary>How much faster a descent may get inside the window before it is a fall rather than a flight.</summary>
-    private const float FallAcceleration = 4f;
+    /// <summary>How much the speed may vary across the window's quarters. Gravity changes it by about 5.</summary>
+    private const float SteadySpread = 3f;
+
+    private const int Quarters = 4;
 
     private readonly ServerConfig _config;
     private readonly Dictionary<byte, List<(DateTime At, float Height)>> _heights = new();
@@ -125,32 +132,46 @@ public sealed class FlightCheck
         }
 
         float speed = (height - start.Height) / span;
+        var none = new FlightVerdict(FlightKind.None, 0f);
 
-        // Still going at the end of the window, so a jump that has peaked or a fall that has landed
-        // is not taken for a flight on the way it started.
-        var recent = heights[Math.Max(oldest, heights.Count - 1 - Math.Max(1, heights.Count / 8))];
-        float tail = SpeedBetween(recent, (now, height));
-
-        if (speed >= _config.FlightSpeed)
+        if (Math.Abs(speed) < _config.FlightSpeed)
         {
-            return tail >= _config.FlightSpeed
-                ? new FlightVerdict(FlightKind.Climb, speed)
-                : new FlightVerdict(FlightKind.None, 0f);
+            return none;
         }
 
-        // A drop is only a flight while it holds one speed. A real fall keeps speeding up, and once it
-        // stops it is already going faster than anybody flies.
-        if (-speed < _config.FlightSpeed || -speed > _config.FlightMaxFallSpeed || -tail < _config.FlightSpeed)
+        // A fall long enough to stop speeding up holds a speed nobody flies at.
+        if (speed < 0 && -speed > _config.FlightMaxFallSpeed)
         {
-            return new FlightVerdict(FlightKind.None, 0f);
+            return none;
         }
 
-        var middle = heights[(oldest + heights.Count - 1) / 2];
-        float firstHalf = SpeedBetween(start, middle);
-        float secondHalf = SpeedBetween(middle, (now, height));
+        // Gravity is still pulling them, so they are jumping, flung or falling rather than flying.
+        int last = heights.Count - 1;
+        float slowest = float.MaxValue;
+        float fastest = float.MinValue;
 
-        return firstHalf - secondHalf > FallAcceleration
-            ? new FlightVerdict(FlightKind.None, 0f)
+        for (var quarter = 0; quarter < Quarters; quarter++)
+        {
+            var from = heights[(oldest * (Quarters - quarter) + last * quarter) / Quarters];
+            var to = heights[(oldest * (Quarters - quarter - 1) + last * (quarter + 1)) / Quarters];
+
+            if (to.At <= from.At)
+            {
+                return none;
+            }
+
+            float quarterSpeed = SpeedBetween(from, to);
+            slowest = Math.Min(slowest, quarterSpeed);
+            fastest = Math.Max(fastest, quarterSpeed);
+        }
+
+        if (fastest - slowest > SteadySpread)
+        {
+            return none;
+        }
+
+        return speed > 0
+            ? new FlightVerdict(FlightKind.Climb, speed)
             : new FlightVerdict(FlightKind.Descent, -speed);
     }
 
