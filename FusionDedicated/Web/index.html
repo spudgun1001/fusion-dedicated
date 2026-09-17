@@ -1635,11 +1635,19 @@ function renderBans(d) {
         '</div></td></tr>').join('') + '</tbody></table>';
 }
 
+/* The list is fetched every second. It is left alone while the pointer is on it, so a button
+   is not replaced mid click, and redrawn at once after Keep, Drop or Remove. */
+let worldHeld = false;
+let worldForce = false;
+let worldHtml = '';
+
 function renderWorld(d) {
   $('worldNote').textContent = d.entities.total + ' tracked, ' + d.entities.orphaned +
     ' orphaned, ' + (d.entities.discovered || 0) + ' from the level';
 
-  $('entities').innerHTML = !d.entities.recent.length
+  if (worldHeld && !worldForce) return;
+
+  const html = !d.entities.recent.length
     ? empty('No entities')
     : '<table class="stack"><thead><tr>' +
       '<th>ID</th><th>Item</th><th>Owner</th><th class="right">Position</th>' +
@@ -1665,7 +1673,15 @@ function renderWorld(d) {
           '<button class="bad" onclick="despawn(' + e.id + ')">Remove</button>' +
         '</div></td>' +
         '</tr>').join('') + '</tbody></table>';
+
+  worldForce = false;
+  if (html === worldHtml) return;
+  worldHtml = html;
+  $('entities').innerHTML = html;
 }
+
+$('entities').addEventListener('pointerenter', () => { worldHeld = true; });
+$('entities').addEventListener('pointerleave', () => { worldHeld = false; });
 
 /* ---------- settings ---------- */
 
@@ -1933,6 +1949,7 @@ async function despawn(id) {
 
   if (!r.ok) { alert(r.error || 'That did not work.'); }
 
+  worldForce = true;
   poll();
 }
 
@@ -1941,6 +1958,7 @@ async function persist(id, keep) {
 
   if (!r.ok) { alert(r.error || 'That did not work.'); }
 
+  worldForce = true;
   poll();
 }
 

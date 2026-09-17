@@ -616,8 +616,9 @@ public sealed class Dashboard
                 total = _server.Entities.Count,
                 orphaned = _server.Entities.OrphanCount,
                 discovered = _server.Entities.DiscoveredCount,
+                // By id, so rows only move when something spawns or goes, and a button stays clickable.
                 recent = _server.Entities.Entities
-                    .OrderByDescending(e => e.LastUpdate)
+                    .OrderByDescending(e => e.Id)
                     .Take(60)
                     .Select(e => new
                     {
