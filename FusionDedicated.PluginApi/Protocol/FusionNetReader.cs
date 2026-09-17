@@ -22,7 +22,13 @@ public ref struct FusionNetReader
 
     public byte ReadByte() => _buffer[_position++];
 
-    public bool ReadBool() => ReadByte() != 0;
+    /// <summary>As Fusion's NetReader: 1 is true and 0 is false. Anything else would be read differently by a client.</summary>
+    public bool ReadBool() => ReadByte() switch
+    {
+        1 => true,
+        0 => false,
+        var other => throw new InvalidDataException($"A bool of {other}"),
+    };
 
     public int ReadInt32()
     {

@@ -13,6 +13,9 @@ public sealed class ConnectedPlayer
     public string Nickname { get; set; } = "";
     public string AvatarBarcode { get; set; } = "";
     public byte[] AvatarStats { get; set; } = Array.Empty<byte>();
+
+    /// <summary>Messages dropped because their prefix was not in Fusion's shape.</summary>
+    public int MalformedMessages { get; set; }
     /// <summary>
     /// Their metadata. Written from the message loop when they change a key and
     /// from the panel when a rank changes, and read on the message loop when

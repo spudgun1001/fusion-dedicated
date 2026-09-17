@@ -126,7 +126,16 @@ public sealed class World : IDisposable
         => _players.Select(p => string.Join(";", p.View.Slots.OrderBy(s => s.Key).Select(s => $"{s.Key}={s.Value}")))
             .Distinct().Count() <= 1;
 
-    public void Dispose() => Server.Dispose();
+    public void Dispose()
+    {
+        Server.Dispose();
+
+        // Skipped while a test is already failing, so its own assertion is the one reported.
+        if (System.Runtime.InteropServices.Marshal.GetExceptionPointers() == IntPtr.Zero)
+        {
+            Assert.Empty(Transport.NonCanonicalSends);
+        }
+    }
 }
 
 public sealed class FakePlayer

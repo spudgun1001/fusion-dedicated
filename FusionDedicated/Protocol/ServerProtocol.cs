@@ -349,7 +349,7 @@ public static class ServerProtocol
     public static byte[]? RetargetToTarget(byte[] message, byte newTarget)
     {
         // Prefix: tag, relayType, channel, target(nullable)...
-        if (message.Length < 5 || message[1] != 4 || message[3] == 0)
+        if (message.Length < 5 || message[1] != 4 || message[3] != 1)
         {
             return null;
         }
@@ -526,7 +526,12 @@ public static class ServerProtocol
 
         if (relayType == 4) // ToTarget: nullable byte target
         {
-            offset += message[offset] != 0 ? 2 : 1;
+            if (message[offset] > 1)
+            {
+                return message;
+            }
+
+            offset += message[offset] == 1 ? 2 : 1;
         }
         else if (relayType == 5) // ToTargets: int length + bytes
         {
@@ -547,11 +552,30 @@ public static class ServerProtocol
             offset += 4 + count;
         }
 
-        if (offset + 1 < stamped.Length)
+        if (offset >= message.Length)
         {
-            stamped[offset] = 1;                 // Sender.HasValue
-            stamped[offset + 1] = senderSmallId; // Sender
+            return message;
         }
+
+        // A null sender is one byte, so the sender goes in rather than over the payload length.
+        if (message[offset] == 0)
+        {
+            var widened = new byte[message.Length + 1];
+            message.AsSpan(0, offset).CopyTo(widened);
+            widened[offset] = 1;
+            widened[offset + 1] = senderSmallId;
+            message.AsSpan(offset + 1).CopyTo(widened.AsSpan(offset + 2));
+
+            return widened;
+        }
+
+        if (message[offset] != 1 || offset + 1 >= stamped.Length)
+        {
+            return message;
+        }
+
+        stamped[offset] = 1;                 // Sender.HasValue
+        stamped[offset + 1] = senderSmallId; // Sender
 
         return stamped;
     }
@@ -621,7 +645,7 @@ public static class ServerProtocol
         byte channel = message[2];
         byte? target = null;
 
-        if (relayType == 4 && message.Length > 4 && message[3] != 0)
+        if (relayType == 4 && message.Length > 4 && message[3] == 1)
         {
             target = message[4];
         }

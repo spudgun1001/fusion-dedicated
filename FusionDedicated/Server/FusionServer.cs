@@ -650,6 +650,16 @@ public sealed class FusionServer : IDisposable
                         $"hex={Convert.ToHexString(message.AsSpan(0, Math.Min(message.Length, 24)))}");
         }
 
+        // Clients read the prefix with Fusion's rules, so any other shape could show them bytes nothing here checked.
+        if (WirePrefix.Problem(message) is { } malformed)
+        {
+            string count = sender != null ? $" ({++sender.MalformedMessages} so far)" : "";
+
+            Log("WARN", $"Dropped a malformed message from {sender?.DisplayName ?? "an unidentified connection"}: " +
+                        $"tag {tag}, {malformed}{count}", console: false);
+            return;
+        }
+
         switch (tag)
         {
             case FusionProtocol.TagConnectionRequest:

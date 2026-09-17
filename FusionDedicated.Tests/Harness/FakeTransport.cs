@@ -19,6 +19,9 @@ public sealed class FakeTransport : ISocketTransport
 
     public List<(uint Connection, string? Reason)> Closed { get; } = new();
 
+    /// <summary>Anything the server sent that is not in the shape Fusion's own writer produces.</summary>
+    public List<string> NonCanonicalSends { get; } = new();
+
     /// <summary>How long the server took over each message it was handed.</summary>
     public List<TimeSpan> HandleTimes { get; } = new();
 
@@ -106,6 +109,11 @@ public sealed class FakeTransport : ISocketTransport
             }
 
             list.Add((message, reliable));
+
+            if (FusionDedicated.Tests.Protocol.OracleMessage.NotCanonical(message) is { } problem)
+            {
+                NonCanonicalSends.Add($"tag {message[0]}: {problem}");
+            }
         }
 
         return true;
