@@ -63,6 +63,7 @@ public class AvatarStatsGateTests
         int toMax = world.Transport.SentTo(max.Connection).Count;
 
         joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy(), target: kanza.SmallId));
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
 
         Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
         Assert.Equal(0, AvatarsTo(world, max, toMax));
@@ -225,7 +226,7 @@ public class AvatarStatsGateTests
         Assert.Equal("impossible avatar stats", ConnectionCloseTests.RefusalSentTo(world, connection));
         Assert.False(ToldAbout(world, joel.Connection, KanzaId));
         Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN" && e.Message.StartsWith("Kanza joined with an avatar with massTotal 100000000", StringComparison.Ordinal)
+            e => e.Level == "WARN" && e.Message.StartsWith($"Rejected {KanzaId}: Kanza joined with an avatar with massTotal 100000000", StringComparison.Ordinal)
                  && e.Message.EndsWith(", refused", StringComparison.Ordinal));
 
         world.Advance(TimeSpan.FromMilliseconds(250));
@@ -259,5 +260,141 @@ public class AvatarStatsGateTests
         AskWith(world, KanzaId, "Kanza", HeavyTotal());
 
         Assert.NotNull(world.Server.Players.GetByPlatformId(KanzaId));
+    }
+
+    private static byte[] OverTheLimit()
+    {
+        var stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "massTotal", 2000f);
+
+        return stats;
+    }
+
+    private static float StatOf(byte[] stats, string field)
+        => System.Buffers.Binary.BinaryPrimitives.ReadSingleBigEndian(
+            stats.AsSpan(global::FusionDedicated.Server.Safety.AvatarStatsCheck.FieldNames.ToList().IndexOf(field) * 4, 4));
+
+    [Fact]
+    public void A_swap_merely_over_the_limits_is_dropped_without_a_strike()
+    {
+        using var world = new World(Config());
+        var (joel, kanza, max) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+
+        for (var i = 0; i < 5; i++)
+        {
+            joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, OverTheLimit()));
+        }
+
+        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
+        Assert.False(Kicked(world, JoelId));
+        Assert.Contains(world.Server.RecentLog(2000),
+            e => e.Level == "WARN" && e.Message.StartsWith("Joel sent an avatar with massTotal 2000", StringComparison.Ordinal)
+                 && e.Message.EndsWith(", dropped", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_join_merely_over_the_limits_is_let_in_with_its_stats_clamped()
+    {
+        using var world = new World(Config());
+        var joel = world.Join(JoelId, "Joel");
+
+        AskWith(world, KanzaId, "Kanza", OverTheLimit());
+
+        var kanza = world.Server.Players.GetByPlatformId(KanzaId);
+        Assert.NotNull(kanza);
+        Assert.Equal(1000f, StatOf(kanza.AvatarStats, "massTotal"));
+        Assert.Null(global::FusionDedicated.Server.Safety.AvatarStatsCheck.Problem(kanza.AvatarStats, world.Server.Config));
+        Assert.Contains(world.Server.RecentLog(2000),
+            e => e.Level == "WARN" && e.Message == "Kanza joined with an avatar with massTotal 2000, over 1000, clamped to the limits");
+
+        var told = world.Transport.SentTo(joel.Connection)
+            .Select(sent => Envelope.Read(sent.Message))
+            .OfType<Envelope>()
+            .Last(envelope => envelope.Tag == FusionProtocol.TagConnectionResponse
+                              && System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(envelope.Payload) == KanzaId);
+        Assert.True(told.Payload.AsSpan().IndexOf(kanza.AvatarStats) > 0);
+    }
+
+    [Fact]
+    public void Swaps_to_everyone_including_the_sender_are_gated_too()
+    {
+        using var world = new World(Config());
+        var (joel, kanza, _) = Loaded(world);
+        int toJoel = world.Transport.SentTo(joel.Connection).Count;
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.Send(ToClients(joel, Heavy()));
+
+        Assert.Equal(0, AvatarsTo(world, joel, toJoel));
+        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
+
+        joel.Send(ToClients(joel, ClientMessages.AvatarStats()));
+
+        Assert.Equal(1, AvatarsTo(world, joel, toJoel));
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+    }
+
+    private static byte[] ToClients(FakePlayer player, byte[] stats)
+    {
+        byte[] message = ClientMessages.Avatar(player.SmallId, Barcode, stats);
+        message[1] = 2;
+
+        return message;
+    }
+
+    [Fact]
+    public void Swaps_are_not_checked_while_extended_protection_is_off()
+    {
+        var config = Config();
+        config.ExtendedProtection = false;
+        using var world = new World(config);
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+    }
+
+    [Theory]
+    [InlineData(59.9, true)]
+    [InlineData(60, false)]
+    public void A_strike_a_full_window_old_no_longer_counts(double thirdAfterSeconds, bool kicked)
+    {
+        using var world = new World(Config());
+        var (joel, kanza, _) = Loaded(world);
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy(), target: kanza.SmallId));
+        world.Advance(TimeSpan.FromSeconds(30));
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy(), target: kanza.SmallId));
+        world.Advance(TimeSpan.FromSeconds(thirdAfterSeconds - 30));
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy(), target: kanza.SmallId));
+
+        Assert.Equal(kicked, Kicked(world, JoelId));
+    }
+
+    [Fact]
+    public void A_swap_whose_barcode_does_not_parse_is_dropped()
+    {
+        using var world = new World(Config());
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+
+        var payload = new BonelabServerBrowser.Fusion.FusionNetWriter(512);
+        payload.WriteRaw(ClientMessages.AvatarStats());
+        payload.Write(1000);
+
+        var message = new BonelabServerBrowser.Fusion.FusionNetWriter(600);
+        message.Write(GateProtocol.TagPlayerRepAvatar);
+        message.Write((byte)3);
+        message.Write((byte)0);
+        message.WriteNullable(joel.SmallId);
+        message.WriteBlock(payload.ToArray());
+
+        joel.Send(message.ToArray());
+
+        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
+        Assert.False(Kicked(world, JoelId));
     }
 }

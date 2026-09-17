@@ -313,13 +313,14 @@ public sealed class ServerConfig
 
     /// <summary>
     /// Heaviest avatar a client may send, in total. Other players' games give the model
-    /// this mass, and a huge one flings whoever it touches.
+    /// this mass, and a huge one flings whoever it touches. Zero or less means no limit.
     /// </summary>
     public float MaxAvatarMass { get; set; } = 1000f;
 
-    /// <summary>Heaviest arm, chest, head, leg or pelvis an avatar may have.</summary>
+    /// <summary>Heaviest arm, chest, head, leg or pelvis an avatar may have. Zero or less means no limit.</summary>
     public float MaxAvatarPartMass { get; set; } = 500f;
 
+    /// <summary>Avatar scale limits, which also bound height. Zero or less leaves that side open.</summary>
     public float MinAvatarScale { get; set; } = 0.05f;
 
     public float MaxAvatarScale { get; set; } = 10f;

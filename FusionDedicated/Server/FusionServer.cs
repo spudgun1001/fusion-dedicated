@@ -95,6 +95,11 @@ public sealed class FusionServer : IDisposable
 
         RebuildBlocklist();
 
+        if (AvatarStatsCheck.SettingsProblem(Config) is { } avatarSettings)
+        {
+            Log("WARN", avatarSettings);
+        }
+
         Log("INFO", $"Relay socket listening as SteamID {_transport.LocalSteamId}");
     }
 
@@ -997,15 +1002,23 @@ public sealed class FusionServer : IDisposable
         }
 
         // Everybody here would be sent these stats, the same as an avatar swap carries.
-        if (Config.ExtendedProtection && AvatarStatsCheck.Problem(request.AvatarStats, Config) is { } statsProblem)
-        {
-            string name = request.Metadata.GetValueOrDefault("Username", "");
+        byte[] joinStats = request.AvatarStats;
+        var joinVerdict = Config.ExtendedProtection ? AvatarStatsCheck.Check(joinStats, Config) : default;
 
-            Log("WARN", $"{(string.IsNullOrWhiteSpace(name) ? platformId.ToString() : name)} joined with an " +
-                        $"avatar with {statsProblem}, refused");
-            SendTo(connection, ServerProtocol.WriteDisconnect(platformId, "impossible avatar stats"), reliable: true);
-            CloseSoon(connection, "impossible avatar stats");
-            return;
+        if (joinVerdict.Problem != null)
+        {
+            string joiner = request.Metadata.GetValueOrDefault("Username", "") is { Length: > 0 } username
+                ? username
+                : platformId.ToString();
+
+            if (joinVerdict.Impossible)
+            {
+                Reject("impossible avatar stats", $"{joiner} joined with an avatar with {joinVerdict.Problem}, refused");
+                return;
+            }
+
+            Log("WARN", $"{joiner} joined with an avatar with {joinVerdict.Problem}, clamped to the limits");
+            joinStats = AvatarStatsCheck.Clamp(joinStats, Config);
         }
 
         // Before a slot is given, so a plugin refusing costs nothing.
@@ -1033,7 +1046,7 @@ public sealed class FusionServer : IDisposable
             PlatformId = platformId,
             SmallId = smallId.Value,
             AvatarBarcode = request.AvatarBarcode,
-            AvatarStats = request.AvatarStats,
+            AvatarStats = joinStats,
             Metadata = request.Metadata,
             EquippedItems = request.EquippedItems,
             Version = request.Version,
@@ -2027,13 +2040,22 @@ public sealed class FusionServer : IDisposable
             case GateProtocol.TagPlayerRepAvatar:
                 // Every other game gives the model these masses, so a huge one flings whoever it touches.
                 var stats = GateProtocol.TryReadAvatarStats(message);
-                string? problem = stats == null ? "no stats block" : AvatarStatsCheck.Problem(stats, Config);
+                string? barcode = GateProtocol.TryReadAvatarBarcode(message);
 
-                if (problem != null)
+                if (stats == null || barcode == null)
                 {
-                    Log("WARN", $"{sender.DisplayName} sent an avatar with {problem}, dropped");
+                    Log("WARN", $"{sender.DisplayName} sent an avatar with no readable stats or barcode, dropped");
+                    return false;
+                }
 
-                    if (_avatarStrikes.Strike(sender.SmallId, Clock()))
+                var statsVerdict = AvatarStatsCheck.Check(stats, Config);
+
+                if (statsVerdict.Problem != null)
+                {
+                    Log("WARN", $"{sender.DisplayName} sent an avatar with {statsVerdict.Problem}, dropped");
+
+                    // Only values no real avatar has count, so a big modded avatar is never kicked for its size.
+                    if (statsVerdict.Impossible && _avatarStrikes.Strike(sender.SmallId, Clock()))
                     {
                         Kick(sender.SmallId, "Kicked for sending impossible avatar stats");
                     }
@@ -2041,18 +2063,13 @@ public sealed class FusionServer : IDisposable
                     return false;
                 }
 
-                string? barcode = GateProtocol.TryReadAvatarBarcode(message);
+                var verdict = _blocklist.Check(barcode, sender.Permission);
 
-                if (barcode != null)
+                if (verdict.Blocked)
                 {
-                    var verdict = _blocklist.Check(barcode, sender.Permission);
-
-                    if (verdict.Blocked)
-                    {
-                        Log("WARN", $"{sender.DisplayName} tried to wear '{barcode}', denied by " +
-                                    $"the {verdict.Layer} blocklist: {verdict.Reason}");
-                        return false;
-                    }
+                    Log("WARN", $"{sender.DisplayName} tried to wear '{barcode}', denied by " +
+                                $"the {verdict.Layer} blocklist: {verdict.Reason}");
+                    return false;
                 }
 
                 return true;
