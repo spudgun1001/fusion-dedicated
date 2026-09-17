@@ -388,6 +388,14 @@ public sealed class ServerConfig
     public PermissionLevel AntiSpamExemptLevel { get; set; } = PermissionLevel.Owner;
 
     /// <summary>
+    /// Spawn sources a request may carry: 1 Scene and 2 Player, the two the game
+    /// uses. A duplication mod respawns a holstered item with 0, EntitySource None,
+    /// which no client asks for on its own, so anything outside this list is refused
+    /// at every rank and strikes the spawn guard. Empty means any source is taken.
+    /// </summary>
+    public List<int> AllowedSpawnSources { get; set; } = new() { 1, 2 };
+
+    /// <summary>
     /// Metadata changes one player may send a second; everybody is sent a copy of
     /// each, so the ones over this are dropped. Zero means no limit.
     /// </summary>

@@ -1837,6 +1837,23 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Before the rank check and at every rank. A duplication mod copies a
+        // holstered item by asking for it again with EntitySource None, which no
+        // ordinary client sends.
+        if (!SpawnAuthority.SourceAllowed(request.Value.Source, Config.AllowedSpawnSources))
+        {
+            Refuse(sender, "spawn", $"Spawn of '{request.Value.Barcode}' by {sender.DisplayName} " +
+                        $"denied: spawn source {request.Value.Source} is not allowed");
+
+            EnforceSpamVerdict(
+                sender,
+                Guard.StrikeFor(sender,
+                    $"asked to spawn '{request.Value.Barcode}' with source {request.Value.Source}"),
+                "Kicked for spawning with a forged source");
+
+            return;
+        }
+
         // blocklist.json is reread when saved; server.json is not, so the exemptions
         // there can be tuned without a restart.
         var exempt = Config.SpawningExempt
@@ -1941,23 +1958,7 @@ public sealed class FusionServer : IDisposable
 
         if (!verdict.Allowed)
         {
-            Log("WARN", $"Spam guard: {sender.DisplayName} {verdict.Reason}");
-
-            if (verdict.Purge)
-            {
-                int purged = PurgeEntitiesOf(sender.SmallId);
-
-                if (purged > 0)
-                {
-                    Log("WARN", $"Removed {purged} entities spawned by {sender.DisplayName}");
-                }
-            }
-
-            if (verdict.Kick)
-            {
-                Kick(sender.SmallId, "Kicked for spawning too many items too quickly");
-            }
-
+            EnforceSpamVerdict(sender, verdict, "Kicked for spawning too many items too quickly");
             return;
         }
 
@@ -2134,6 +2135,30 @@ public sealed class FusionServer : IDisposable
             reliable: true);
 
         Log("INFO", $"Despawn: id={entityId} by {sender.DisplayName}");
+    }
+
+    /// <summary>
+    /// What a spawn guard strike does: say so, take back what they spawned, and
+    /// remove them once the strikes run out.
+    /// </summary>
+    private void EnforceSpamVerdict(ConnectedPlayer sender, SpawnGuard.Verdict verdict, string kickReason)
+    {
+        Log("WARN", $"Spam guard: {sender.DisplayName} {verdict.Reason}");
+
+        if (verdict.Purge)
+        {
+            int purged = PurgeEntitiesOf(sender.SmallId);
+
+            if (purged > 0)
+            {
+                Log("WARN", $"Removed {purged} entities spawned by {sender.DisplayName}");
+            }
+        }
+
+        if (verdict.Kick)
+        {
+            Kick(sender.SmallId, kickReason);
+        }
     }
 
     /// <summary>Logs a refused request without letting a flood of them stall the server, and kicks whoever floods.</summary>
@@ -4266,23 +4291,7 @@ public sealed class FusionServer : IDisposable
 
         if (!verdict.Allowed)
         {
-            Log("WARN", $"Spam guard: {sender.DisplayName} {verdict.Reason}");
-
-            if (verdict.Purge)
-            {
-                int purged = PurgeEntitiesOf(sender.SmallId);
-
-                if (purged > 0)
-                {
-                    Log("WARN", $"Removed {purged} entities spawned by {sender.DisplayName}");
-                }
-            }
-
-            if (verdict.Kick)
-            {
-                Kick(sender.SmallId, "Kicked for making too many constraints too quickly");
-            }
-
+            EnforceSpamVerdict(sender, verdict, "Kicked for making too many constraints too quickly");
             return;
         }
 

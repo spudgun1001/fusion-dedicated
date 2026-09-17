@@ -294,6 +294,14 @@ props, constraint ends and anything a plugin spawned never count and are never p
 Creating a constraint is held to the same per-second spawn rate cap and spawn guard,
 so constraint spam earns the same strikes, purge and kick.
 
+`AllowedSpawnSources` holds a spawn request to the sources the game itself uses, 1
+Scene and 2 Player. A duplication mod copies a holstered item by asking for the same
+barcode again with 0, EntitySource None, which no client sends on its own, so a
+request carrying a source outside the list is refused and strikes the spawn guard like
+a flood does: the player's own spawns are purged and a repeat offender is kicked. It
+applies at every rank, `AntiSpamExemptLevel` and Owner included, since an ordinary
+client never sends one of these. Empty the list to take any source.
+
 `MaxEntitiesPerPlayer` also caps the level props a player's own game reports by pose,
 the props nobody spawned but that a client still tracks. Past the cap the server stops
 tracking new ones for that player and logs it once per level.
@@ -445,6 +453,7 @@ gitignored.
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
+| `AllowedSpawnSources` | spawn sources a request may carry, checked at every rank (`[1, 2]`, Scene and Player, by default; empty takes any) |
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |

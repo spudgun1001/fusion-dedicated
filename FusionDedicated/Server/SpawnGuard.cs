@@ -113,6 +113,25 @@ public sealed class SpawnGuard
         }
     }
 
+    /// <summary>
+    /// Strikes a player for something that is not a flood, like a spawn request
+    /// carrying a source no client sends. Counted at every rank, because the
+    /// exemption is for building quickly rather than for a forged request.
+    /// </summary>
+    public Verdict StrikeFor(ConnectedPlayer player, string what)
+    {
+        lock (_lock)
+        {
+            if (!_byPlayer.TryGetValue(player.SmallId, out var tracker))
+            {
+                tracker = new Tracker();
+                _byPlayer[player.SmallId] = tracker;
+            }
+
+            return Strike(tracker, DateTime.UtcNow, what);
+        }
+    }
+
     private Verdict Strike(Tracker tracker, DateTime now, string what)
     {
         // At most one strike per window. While a burst is still inside the window
