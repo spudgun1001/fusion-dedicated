@@ -20,8 +20,10 @@ public static class AvatarStatsCheck
     /// <summary>Fusion scales the Calibration avatar by height over this, and ignores localScale for it.</summary>
     public const float CalibrationHeight = 1.76f;
 
-    private const float ImpossibleSize = 100000f;
-    private const float Backstop = 1000f;
+    /// <summary>Real avatars keep masses and scale well under this. Everything else is only caught as garbage.</summary>
+    private const float ImpossibleMass = 100000f;
+
+    private const float ImpossibleSize = 1000000000f;
     private const float MassFloor = 1f;
 
     private static readonly int PartsStart = FieldNames.Count - 6;
@@ -99,9 +101,11 @@ public static class AvatarStatsCheck
             return "subnormal";
         }
 
-        if (Math.Abs(value) > ImpossibleSize)
+        float most = i < 3 || i >= PartsStart ? ImpossibleMass : ImpossibleSize;
+
+        if (Math.Abs(value) > most)
         {
-            return $"over {Show(ImpossibleSize)}";
+            return $"over {Show(most)}";
         }
 
         if (i >= PartsStart && value < 0f)
@@ -133,8 +137,8 @@ public static class AvatarStatsCheck
             return (0f, limits.MaxAvatarPartMass > 0f ? limits.MaxAvatarPartMass : float.PositiveInfinity);
         }
 
-        float min = NotNegative[i] ? 0f : -Backstop;
-        float max = Backstop;
+        float min = NotNegative[i] ? 0f : float.NegativeInfinity;
+        float max = float.PositiveInfinity;
 
         if (i == Height)
         {

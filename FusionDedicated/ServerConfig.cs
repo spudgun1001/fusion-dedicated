@@ -315,15 +315,15 @@ public sealed class ServerConfig
     /// Heaviest avatar a client may send, in total. Other players' games give the model
     /// this mass, and a huge one flings whoever it touches. Zero or less means no limit.
     /// </summary>
-    public float MaxAvatarMass { get; set; } = 1000f;
+    public float MaxAvatarMass { get; set; } = 5000f;
 
     /// <summary>Heaviest arm, chest, head, leg or pelvis an avatar may have. Zero or less means no limit.</summary>
-    public float MaxAvatarPartMass { get; set; } = 500f;
+    public float MaxAvatarPartMass { get; set; } = 2500f;
 
     /// <summary>Avatar scale limits, which also bound height. Zero or less leaves that side open.</summary>
-    public float MinAvatarScale { get; set; } = 0.05f;
+    public float MinAvatarScale { get; set; } = 0.005f;
 
-    public float MaxAvatarScale { get; set; } = 10f;
+    public float MaxAvatarScale { get; set; } = 50f;
 
     /// <summary>Avatars with impossible stats inside the window that get a player kicked. Zero never kicks.</summary>
     public int AvatarStrikesBeforeKick { get; set; } = 3;

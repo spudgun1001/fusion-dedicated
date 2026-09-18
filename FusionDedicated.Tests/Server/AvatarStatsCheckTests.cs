@@ -20,14 +20,14 @@ public class AvatarStatsCheckTests
     }
 
     [Fact]
-    public void The_defaults_are_a_1000_avatar_500_a_part_scale_from_005_to_10_and_3_strikes_a_minute()
+    public void The_defaults_are_a_5000_avatar_2500_a_part_scale_from_0005_to_50_and_3_strikes_a_minute()
     {
         var config = new ServerConfig();
 
-        Assert.Equal(1000f, config.MaxAvatarMass);
-        Assert.Equal(500f, config.MaxAvatarPartMass);
-        Assert.Equal(0.05f, config.MinAvatarScale);
-        Assert.Equal(10f, config.MaxAvatarScale);
+        Assert.Equal(5000f, config.MaxAvatarMass);
+        Assert.Equal(2500f, config.MaxAvatarPartMass);
+        Assert.Equal(0.005f, config.MinAvatarScale);
+        Assert.Equal(50f, config.MaxAvatarScale);
         Assert.Equal(3, config.AvatarStrikesBeforeKick);
         Assert.Equal(60, config.AvatarStrikeWindowSeconds);
     }
@@ -93,8 +93,8 @@ public class AvatarStatsCheckTests
         => Assert.StartsWith("massTotal ", AvatarStatsCheck.Problem(With("massTotal", total), Limits));
 
     [Theory]
-    [InlineData("localScale.x", 0.01f)]
-    [InlineData("localScale.y", 11f)]
+    [InlineData("localScale.x", 0.001f)]
+    [InlineData("localScale.y", 60f)]
     [InlineData("localScale.z", -1f)]
     public void A_scale_out_of_range_fails(string field, float value)
         => Assert.StartsWith($"{field} ", AvatarStatsCheck.Problem(With(field, value), Limits));
@@ -103,11 +103,11 @@ public class AvatarStatsCheckTests
     public void Values_on_the_limits_pass()
     {
         var stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "massArm", 500f);
+        ClientMessages.SetAvatarStat(stats, "massArm", 2500f);
         ClientMessages.SetAvatarStat(stats, "massPelvis", 0f);
-        ClientMessages.SetAvatarStat(stats, "massTotal", 1000f);
-        ClientMessages.SetAvatarStat(stats, "localScale.x", 0.05f);
-        ClientMessages.SetAvatarStat(stats, "localScale.y", 10f);
+        ClientMessages.SetAvatarStat(stats, "massTotal", 5000f);
+        ClientMessages.SetAvatarStat(stats, "localScale.x", 0.005f);
+        ClientMessages.SetAvatarStat(stats, "localScale.y", 50f);
 
         Assert.Null(AvatarStatsCheck.Problem(stats, Limits));
     }
@@ -119,9 +119,9 @@ public class AvatarStatsCheckTests
     [Fact]
     public void The_limits_come_from_the_settings()
     {
-        var config = new ServerConfig { MaxAvatarPartMass = 2000f, MaxAvatarMass = 5000f };
+        var config = new ServerConfig { MaxAvatarPartMass = 6000f, MaxAvatarMass = 9000f };
 
-        Assert.Null(AvatarStatsCheck.Problem(With("massChest", 1500f), config));
+        Assert.Null(AvatarStatsCheck.Problem(With("massChest", 5500f), config));
     }
 
     [Theory]
@@ -130,8 +130,9 @@ public class AvatarStatsCheckTests
     [InlineData("massHead", -1f)]
     [InlineData("massTotal", 0f)]
     [InlineData("massTotal", -80f)]
-    [InlineData("speed", 200000f)]
-    [InlineData("headTop", -200000f)]
+    [InlineData("localScale.z", 200000f)]
+    [InlineData("speed", 2000000000f)]
+    [InlineData("headTop", -2000000000f)]
     [InlineData("chinY", float.Epsilon)]
     [InlineData("massTotal", float.Epsilon)]
     [InlineData("height", float.NaN)]
@@ -144,15 +145,13 @@ public class AvatarStatsCheckTests
     }
 
     [Theory]
-    [InlineData("massTotal", 2000f)]
+    [InlineData("massTotal", 6000f)]
     [InlineData("massTotal", 0.5f)]
-    [InlineData("massLeg", 600f)]
-    [InlineData("localScale.x", 11f)]
-    [InlineData("localScale.y", 0.01f)]
-    [InlineData("height", 20f)]
-    [InlineData("height", 0.05f)]
-    [InlineData("speed", 1500f)]
-    [InlineData("headTop", -1500f)]
+    [InlineData("massLeg", 3000f)]
+    [InlineData("localScale.x", 60f)]
+    [InlineData("localScale.y", 0.001f)]
+    [InlineData("height", 100f)]
+    [InlineData("height", 0.005f)]
     [InlineData("armLength", -0.5f)]
     [InlineData("headEllipseX", -0.1f)]
     [InlineData("kneeEllipse.XRadius", -0.1f)]
@@ -165,13 +164,24 @@ public class AvatarStatsCheckTests
     }
 
     [Theory]
-    [InlineData("height", 0.088f)]
-    [InlineData("height", 17.6f)]
+    [InlineData("height", 0.0088f)]
+    [InlineData("height", 88f)]
     [InlineData("kneeEllipse.XBias", -0.5f)]
-    [InlineData("speed", 1000f)]
-    [InlineData("headTop", -1000f)]
+    [InlineData("speed", 500000f)]
+    [InlineData("headTop", -500000f)]
     [InlineData("massTotal", 1f)]
     public void Values_inside_the_limits_pass(string field, float value)
+        => Assert.Null(AvatarStatsCheck.Problem(With(field, value), Limits));
+
+    /// <summary>Values real players were dropped or refused for on 2026-09-18, before the limits were widened.</summary>
+    [Theory]
+    [InlineData("localScale.x", 0.01f)]
+    [InlineData("localScale.x", 0.022f)]
+    [InlineData("localScale.x", 40f)]
+    [InlineData("massTotal", 1649.314f)]
+    [InlineData("strengthUpper", 363583.9f)]
+    [InlineData("vitality", 100000.1f)]
+    public void Avatars_real_players_wear_pass(string field, float value)
         => Assert.Null(AvatarStatsCheck.Problem(With(field, value), Limits));
 
     [Fact]
@@ -191,10 +201,10 @@ public class AvatarStatsCheckTests
 
         Assert.Null(AvatarStatsCheck.Problem(With("massTotal", 5000f), config));
         Assert.Null(AvatarStatsCheck.Problem(With("massChest", 5000f), config));
-        Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", 0.001f), config));
-        Assert.Null(AvatarStatsCheck.Problem(With("localScale.y", 50f), config));
-        Assert.Null(AvatarStatsCheck.Problem(With("height", 0.001f), config));
-        Assert.Null(AvatarStatsCheck.Problem(With("height", 50f), config));
+        Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", 0.0001f), config));
+        Assert.Null(AvatarStatsCheck.Problem(With("localScale.y", 90f), config));
+        Assert.Null(AvatarStatsCheck.Problem(With("height", 0.0001f), config));
+        Assert.Null(AvatarStatsCheck.Problem(With("height", 200f), config));
         Assert.True(AvatarStatsCheck.Check(With("massTotal", 100000000f), config).Impossible);
     }
 
@@ -210,21 +220,21 @@ public class AvatarStatsCheckTests
     public void Clamping_brings_every_limit_back_inside()
     {
         var stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "localScale.y", 11f);
-        ClientMessages.SetAvatarStat(stats, "height", 20f);
+        ClientMessages.SetAvatarStat(stats, "localScale.y", 60f);
+        ClientMessages.SetAvatarStat(stats, "height", 100f);
         ClientMessages.SetAvatarStat(stats, "armLength", -1f);
-        ClientMessages.SetAvatarStat(stats, "speed", 1500f);
-        ClientMessages.SetAvatarStat(stats, "massLeg", 600f);
+        ClientMessages.SetAvatarStat(stats, "speed", 500000f);
+        ClientMessages.SetAvatarStat(stats, "massLeg", 3000f);
         ClientMessages.SetAvatarStat(stats, "massTotal", 0.5f);
 
         byte[] clamped = AvatarStatsCheck.Clamp(stats, Limits);
 
         Assert.Null(AvatarStatsCheck.Problem(clamped, Limits));
-        Assert.Equal(10f, Stat(clamped, "localScale.y"));
-        Assert.Equal(17.6f, Stat(clamped, "height"), 3);
+        Assert.Equal(50f, Stat(clamped, "localScale.y"));
+        Assert.Equal(88f, Stat(clamped, "height"), 3);
         Assert.Equal(0f, Stat(clamped, "armLength"));
-        Assert.Equal(1000f, Stat(clamped, "speed"));
-        Assert.Equal(500f, Stat(clamped, "massLeg"));
+        Assert.Equal(500000f, Stat(clamped, "speed"));
+        Assert.Equal(2500f, Stat(clamped, "massLeg"));
         Assert.Equal(1f, Stat(clamped, "massTotal"));
         Assert.Equal(1f, Stat(clamped, "localScale.x"));
     }

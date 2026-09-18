@@ -265,7 +265,7 @@ public class AvatarStatsGateTests
     private static byte[] OverTheLimit()
     {
         var stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "massTotal", 2000f);
+        ClientMessages.SetAvatarStat(stats, "massTotal", 6000f);
 
         return stats;
     }
@@ -289,7 +289,7 @@ public class AvatarStatsGateTests
         Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
         Assert.False(Kicked(world, JoelId));
         Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN" && e.Message.StartsWith("Joel sent an avatar with massTotal 2000", StringComparison.Ordinal)
+            e => e.Level == "WARN" && e.Message.StartsWith("Joel sent an avatar with massTotal 6000", StringComparison.Ordinal)
                  && e.Message.EndsWith(", dropped", StringComparison.Ordinal));
     }
 
@@ -303,10 +303,10 @@ public class AvatarStatsGateTests
 
         var kanza = world.Server.Players.GetByPlatformId(KanzaId);
         Assert.NotNull(kanza);
-        Assert.Equal(1000f, StatOf(kanza.AvatarStats, "massTotal"));
+        Assert.Equal(5000f, StatOf(kanza.AvatarStats, "massTotal"));
         Assert.Null(global::FusionDedicated.Server.Safety.AvatarStatsCheck.Problem(kanza.AvatarStats, world.Server.Config));
         Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN" && e.Message == "Kanza joined with an avatar with massTotal 2000, over 1000, clamped to the limits");
+            e => e.Level == "WARN" && e.Message == "Kanza joined with an avatar with massTotal 6000, over 5000, clamped to the limits");
 
         var told = world.Transport.SentTo(joel.Connection)
             .Select(sent => Envelope.Read(sent.Message))

@@ -53,10 +53,10 @@
   "RpcMessagesPerSecond": 250,
   "CatchupMessagesPerSecond": 100,
 
-  "MaxAvatarMass": 1000,
-  "MaxAvatarPartMass": 500,
-  "MinAvatarScale": 0.05,
-  "MaxAvatarScale": 10,
+  "MaxAvatarMass": 5000,
+  "MaxAvatarPartMass": 2500,
+  "MinAvatarScale": 0.005,
+  "MaxAvatarScale": 50,
   "AvatarStrikesBeforeKick": 3,
   "AvatarStrikeWindowSeconds": 60,
 
