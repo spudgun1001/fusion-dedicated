@@ -5547,7 +5547,8 @@ public sealed class FusionServer : IDisposable
 
         if (Config.CongestedPendingBytes <= 0)
         {
-            _congested.Clear();
+            // Replaced rather than emptied, because a send on another thread reads it.
+            _congested = new HashSet<uint>();
             return;
         }
 

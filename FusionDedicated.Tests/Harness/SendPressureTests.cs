@@ -442,7 +442,7 @@ public class SendPressureTests
     [Fact]
     public void A_join_during_a_long_refusal_loses_no_catch_up()
     {
-        var config = Config();
+        var config = Config(retryQueue: 8);
         config.CatchupMessagesPerSecond = 100;
 
         using var world = new World(config);
@@ -454,8 +454,8 @@ public class SendPressureTests
             world.Spawn(dennis, id, "Test.Crate", id, 0, 0);
         }
 
-        // Steam takes nothing for four seconds, which is longer than the retry queue could hold
-        // the 100 a second the catch-up wants to send.
+        // Steam takes nothing for four seconds, and the joiner is owed far more catch-up than
+        // the queue of 8 could hold, so it only arrives if catch-up waits its turn instead.
         world.Transport.FailSendsWith = "k_EResultLimitExceeded";
 
         var joiner = world.Join(76561198000000002, "Joel");
