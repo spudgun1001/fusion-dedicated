@@ -452,7 +452,9 @@ thrown away, and goes out as soon as that player's buffer drains; anything relia
 to them in the meantime waits behind it, so ownership answers, spawns, despawns and
 catch-up still arrive in order. `SendRetryQueue` (256) is how many messages one player may
 have waiting, and the oldest are dropped when it is full, which the log file notes once.
-Set it to 0 to drop a refused send where it stands. A player joining a backed-up server
+Set it to 0 to drop a refused send where it stands. Lowering it while a queue is already
+over the new number stops it growing rather than cutting it back, and the queue shrinks as
+it drains. A player joining a backed-up server
 keeps their catch-up in the catch-up queue instead, which has no cap, because nothing asks
 for a catch-up message twice.
 
