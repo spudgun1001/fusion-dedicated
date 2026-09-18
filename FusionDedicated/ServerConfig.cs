@@ -441,7 +441,7 @@ public sealed class ServerConfig
     public int AvatarSwapsPerSecond { get; set; } = 2;
 
     /// <summary>RPC variable and event messages one player may send a second. Zero means no limit.</summary>
-    public int RpcMessagesPerSecond { get; set; } = 60;
+    public int RpcMessagesPerSecond { get; set; } = 250;
 
     /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
     public int CatchupMessagesPerSecond { get; set; } = 100;

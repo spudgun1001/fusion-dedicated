@@ -357,7 +357,7 @@ tracking new ones for that player and logs it once per level.
 
 Metadata changes, avatar swaps and RPC messages have allowances of their own, per
 player per second: `MetadataPerSecond` (10), `AvatarSwapsPerSecond` (2) and
-`RpcMessagesPerSecond` (60). A message over its allowance is dropped before anybody
+`RpcMessagesPerSecond` (250). A message over its allowance is dropped before anybody
 else receives it, and the log totals each player's drops once a minute per player and
 per kind of message. A dropped message is gone rather than delivered later, so if an
 SDK map's levers, doors or other synced parts fall out of step, raise
@@ -521,7 +521,7 @@ gitignored.
 | `HolsterDuplicateWindowSeconds` | how long a barcode stays suspect, so every spawn of it inside that time is refused (10 by default, 0 never refuses) |
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
-| `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (60 by default, 0 for no limit) |
+| `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (250 by default, 0 for no limit) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (1000 and 500 by default, 0 for no limit) |
 | `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.05 and 10 by default, 0 for no limit on that side) |

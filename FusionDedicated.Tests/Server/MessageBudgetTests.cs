@@ -22,7 +22,7 @@ public class MessageBudgetTests
 
         Assert.Equal(10, config.MetadataPerSecond);
         Assert.Equal(2, config.AvatarSwapsPerSecond);
-        Assert.Equal(60, config.RpcMessagesPerSecond);
+        Assert.Equal(250, config.RpcMessagesPerSecond);
     }
 
     [Fact]

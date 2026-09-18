@@ -50,7 +50,7 @@
   "HolsterDuplicateWindowSeconds": 10,
   "MetadataPerSecond": 10,
   "AvatarSwapsPerSecond": 2,
-  "RpcMessagesPerSecond": 60,
+  "RpcMessagesPerSecond": 250,
   "CatchupMessagesPerSecond": 100,
 
   "MaxAvatarMass": 1000,
