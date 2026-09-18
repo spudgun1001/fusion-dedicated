@@ -83,6 +83,9 @@ public sealed class FusionServer : IDisposable
         _confirmations = new OwnershipConfirmations(() => Clock());
         Entities.Removed += id => _confirmations.ForgetEntity(id);
 
+        _ownershipHold = new OwnershipHold(() => Clock(), () => Config.OwnershipHoldMilliseconds);
+        Entities.Removed += id => _ownershipHold.ForgetEntity(id);
+
         _recentRemovals = new RecentRemovals(() => Clock());
         Entities.Removed += id => _recentRemovals.Note(id);
 
@@ -356,6 +359,7 @@ public sealed class FusionServer : IDisposable
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
         _seatRefusalLog.Remove(player.SmallId);
+        _holdRefusalLog.Remove(player.SmallId);
         _confirmations.ForgetPlayer(player.SmallId);
         _catchup.Forget(player.SmallId);
         SeatForgetRider(player.SmallId);
@@ -2239,7 +2243,11 @@ public sealed class FusionServer : IDisposable
         foreach (var (smallId, kind, dropped) in _budget.DueSummaries(Clock()))
         {
             string name = Players.Get(smallId)?.DisplayName ?? $"player {smallId}";
-            Log("WARN", $"Dropped {dropped} {MessageBudget.Word(kind)} messages from {name} in the last minute");
+
+            // Ownership requests stay in the detailed log. Every impact sends one, so a busy
+            // evening summarises a player most minutes and the console would fill with it.
+            Log("WARN", $"Dropped {dropped} {MessageBudget.Word(kind)} messages from {name} in the last minute",
+                console: kind != MessageKind.Ownership);
         }
 
         foreach (var (attacker, target, dropped, whileHolding) in _hits.DueSummaries(Clock()))
@@ -4439,8 +4447,14 @@ public sealed class FusionServer : IDisposable
     /// <summary>Keeps the line for a request refused because somebody sits in the vehicle to one per player.</summary>
     private readonly Dictionary<byte, DateTime> _seatRefusalLog = new();
 
+    /// <summary>Keeps the line for a request refused because the entity has just changed hands to one per player.</summary>
+    private readonly Dictionary<byte, DateTime> _holdRefusalLog = new();
+
     /// <summary>When an owner asking again for what it owns was last answered.</summary>
     private readonly OwnershipConfirmations _confirmations;
+
+    /// <summary>When each entity last changed hands, so it is not flipped again straight away.</summary>
+    private readonly OwnershipHold _ownershipHold;
 
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {
@@ -4452,6 +4466,13 @@ public sealed class FusionServer : IDisposable
             // while the person holding it sees it in their hand: they asked to
             // own it, nothing answered, so they never start simulating it.
             Log("WARN", $"EntityOwnershipRequest from {sender.DisplayName} did not parse");
+            return;
+        }
+
+        // A client asks again on every physics contact, and one van nine of them fought over
+        // came to about 58 requests a second. What is over the allowance is dropped and summed up.
+        if (!WithinBudget(sender, MessageKind.Ownership))
+        {
             return;
         }
 
@@ -4520,6 +4541,28 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Every change snaps the entity to the new owner's copy, so one that has just changed
+        // hands keeps them for a moment. The asker is told who owns it, the way a repeat is.
+        if (_ownershipHold.Holding(entityId) && !MayTakeHeldEntity(sender, entityId))
+        {
+            if (entity?.OwnerSmallId is { } owner && _confirmations.ShouldConfirm(sender.SmallId, entityId))
+            {
+                SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(owner, entityId), reliable: true);
+            }
+
+            DateTime refusedAt = Clock();
+            var lastHoldRefusal = _holdRefusalLog.TryGetValue(sender.SmallId, out var last) ? last : (DateTime?)null;
+
+            if (PoseLogThrottle.ShouldLog(lastHoldRefusal, refusedAt))
+            {
+                _holdRefusalLog[sender.SmallId] = refusedAt;
+                Log("INFO", $"Refused {sender.DisplayName} ownership of entity {entityId}, which changed hands " +
+                            "a moment ago", console: false);
+            }
+
+            return;
+        }
+
         ulong ownerPlatformId = entity?.OwnerSmallId is { } ownerSmall
             ? Players.Get(ownerSmall)?.PlatformId ?? 0UL
             : 0UL;
@@ -4536,6 +4579,7 @@ public sealed class FusionServer : IDisposable
         }
 
         Entities.SetOwner(entityId, requestedOwner);
+        _ownershipHold.Note(entityId);
 
         // The host's only job here is to confirm; it never claims anything itself.
         AnnounceOwner(entityId, requestedOwner);
@@ -4543,6 +4587,14 @@ public sealed class FusionServer : IDisposable
         Log("INFO", $"Ownership of entity {entityId} given to player {requestedOwner}, " +
                     $"asked for by {sender.DisplayName}", console: false);
     }
+
+    /// <summary>
+    /// Who may take an entity that has just changed hands: whoever sits in it and whoever
+    /// holds it. Waiting out the hold would leave a rider's own vehicle simulated elsewhere.
+    /// </summary>
+    private bool MayTakeHeldEntity(ConnectedPlayer sender, ushort entityId)
+        => _seats.SeatOf(sender.SmallId)?.EntityId == entityId
+        || _grabs.HoldersOf(entityId).Contains(sender.SmallId);
 
     /// <summary>
     /// Tells everybody who owns an entity now.

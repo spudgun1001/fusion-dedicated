@@ -23,7 +23,9 @@ public class RepeatOwnershipTests
 
     private static (World World, FakePlayer Joel, FakePlayer Kanza) CrateOwnedByJoel()
     {
-        var world = new World();
+        // These are about how a repeat is answered rather than how many fit in a second,
+        // so the request allowance is off and twenty impacts all reach the handler.
+        var world = new World(new ServerConfig { CullOrphanedEntities = false, OwnershipRequestsPerSecond = 0 });
         var joel = world.Join(76561198000000001, "Joel");
         var kanza = world.Join(76561198000000002, "Kanza");
         joel.FinishLoading();
@@ -144,6 +146,8 @@ public class RepeatOwnershipTests
         kanza.Send(FusionProtocol.BuildOwnershipRequest(kanza.SmallId, Crate));
         int before = world.Transport.SentTo(kanza.Connection).Count;
 
+        // Past the hold, so the crate may change hands again.
+        world.Advance(TimeSpan.FromMilliseconds(500));
         joel.Send(FusionProtocol.BuildOwnershipRequest(joel.SmallId, Crate));
 
         Assert.Equal(joel.SmallId, world.Server.Entities.Get(Crate)!.OwnerSmallId);

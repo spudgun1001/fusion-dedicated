@@ -368,6 +368,16 @@ kicked for going over. Like the spawn guard, the allowances apply only while
 `AntiSpamEnabled` is on and only to players below `AntiSpamExemptLevel`. Set one to 0
 to lift that limit.
 
+Ownership requests are held to `OwnershipRequestsPerSecond` (10) per player the same way,
+and an entity that has just changed hands keeps its new owner for
+`OwnershipHoldMilliseconds` (500) before it may change again. A client asks on every
+physics contact, and one SWAT van that nine players all believed they owned took 2,384
+owner changes in a single minute, each of them snapping it to a different player's copy,
+which is what a vehicle flinging about looks like. Somebody refused inside the window is
+still told who owns it, so their view heals, and the owner, whoever sits in it and whoever
+holds it are never held back. Both go to the log file only and are totalled rather than
+written out one by one. Set either to 0 to lift that half.
+
 Hits from one player on another are held to `HitsPerSecond` (20), counted for each
 pair of players, because a client can send a hit on every physics tick. A player's
 hits on someone they are holding are always dropped, since those were knocking held
@@ -525,6 +535,8 @@ gitignored.
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (250 by default, 0 for no limit) |
+| `OwnershipRequestsPerSecond` | ownership requests each player may send per second (10 by default, 0 for no limit) |
+| `OwnershipHoldMilliseconds` | how long an entity stays with its new owner before it may change hands again (500 by default, 0 lets every change through) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (5000 and 2500 by default, 0 for no limit) |
 | `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.005 and 50 by default, 0 for no limit on that side) |

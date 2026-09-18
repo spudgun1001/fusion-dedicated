@@ -6,6 +6,7 @@ public enum MessageKind
     Metadata,
     Avatar,
     Rpc,
+    Ownership,
 }
 
 /// <summary>
@@ -39,6 +40,7 @@ public sealed class MessageBudget
     {
         MessageKind.Metadata => _config.MetadataPerSecond,
         MessageKind.Avatar => _config.AvatarSwapsPerSecond,
+        MessageKind.Ownership => _config.OwnershipRequestsPerSecond,
         _ => _config.RpcMessagesPerSecond,
     };
 
@@ -46,6 +48,7 @@ public sealed class MessageBudget
     {
         MessageKind.Metadata => "metadata",
         MessageKind.Avatar => "avatar",
+        MessageKind.Ownership => "ownership",
         _ => "RPC",
     };
 

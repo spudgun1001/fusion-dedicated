@@ -51,6 +51,8 @@
   "MetadataPerSecond": 10,
   "AvatarSwapsPerSecond": 2,
   "RpcMessagesPerSecond": 250,
+  "OwnershipRequestsPerSecond": 10,
+  "OwnershipHoldMilliseconds": 500,
   "CatchupMessagesPerSecond": 100,
 
   "MaxAvatarMass": 5000,

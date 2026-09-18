@@ -443,6 +443,16 @@ public sealed class ServerConfig
     /// <summary>RPC variable and event messages one player may send a second. Zero means no limit.</summary>
     public int RpcMessagesPerSecond { get; set; } = 250;
 
+    /// <summary>Ownership requests one player may send a second. Zero means no limit.</summary>
+    public int OwnershipRequestsPerSecond { get; set; } = 10;
+
+    /// <summary>
+    /// How long an entity stays with its new owner before it may change hands again. Its
+    /// owner, whoever sits in it and whoever holds it are never held back. Zero or less
+    /// lets every change through.
+    /// </summary>
+    public int OwnershipHoldMilliseconds { get; set; } = 500;
+
     /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
     public int CatchupMessagesPerSecond { get; set; } = 100;
 
