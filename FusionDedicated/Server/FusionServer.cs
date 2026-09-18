@@ -88,6 +88,9 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += id => _seats.ForgetEntity(id);
         Entities.Removed += ForgetAttachments;
 
+        _seatRefusals = new SeatRefusals(() => Clock(), () => Config.SeatRefusalCooldownSeconds);
+        Entities.Removed += id => _seatRefusals.ForgetEntity(id);
+
         // A removed id can be handed out again, so its throttle history must not linger.
         Entities.Removed += id => _poseLog.Forget(id);
         Entities.Removed += id => _thinning.ForgetEntity(id);
@@ -398,6 +401,7 @@ public sealed class FusionServer : IDisposable
         _holdAnswers.ForgetPlayer(player.SmallId);
         _catchup.Forget(player.SmallId);
         SeatForgetRider(player.SmallId);
+        _seatRefusals.ForgetRider(player.SmallId);
 
         // Small ids are reused, so the next holder of this one is a different
         // person with a different set of mods and has never been asked anything.
@@ -3221,6 +3225,9 @@ public sealed class FusionServer : IDisposable
         _confirmations.Clear();
         _holdAnswers.Clear();
 
+        // Seats an entity the server never knew was refused for are not covered by Forget.
+        _seatRefusals.Clear();
+
         // Before the new SceneLoad, so nothing meant for the old level is sent after it.
         _catchup.Clear();
 
@@ -5050,6 +5057,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Around each seat change and its occupancy sync, since Kick can run Depart off the message loop.</summary>
     private readonly object _seatLock = new();
 
+    /// <summary>Who a plugin has just refused a seat, so their game asking again is dropped quietly.</summary>
+    private readonly SeatRefusals _seatRefusals;
+
     /// <summary>Who is sitting in a vehicle, by small id, first to sit first.</summary>
     public IReadOnlyList<byte> RidersOf(ushort entityId)
         => _seats.RidersOf(entityId).Select(s => s.Rider).ToList();
@@ -5102,12 +5112,22 @@ public sealed class FusionServer : IDisposable
             if (WorldCatchup.IsLiveSeat(seat.RelayType)
                 && (seat.Ingress || _seats.SeatOf(sender.SmallId) != null))
             {
+                // Fusion registers the seat again while the rider stands in its trigger, so a
+                // refusal and the egress answering it ran about three times a second. They are
+                // stood up once and then left alone, seated in their own game until they move.
+                if (seat.Ingress && _seatRefusals.Cooling(sender.SmallId, seat.SeatId, seat.Index))
+                {
+                    return;
+                }
+
                 var seatVerdict = Plugins?.Seat.Raise(new Plugins.SeatEvent(
                     sender.PlatformId, sender.SmallId, sender.DisplayName, sender.Permission,
                     seat.SeatId, vehicle?.Barcode ?? "", seat.Index, seat.Ingress));
 
                 if (seat.Ingress && seatVerdict is { Allowed: false })
                 {
+                    int suppressed = _seatRefusals.Note(sender.SmallId, seat.SeatId, seat.Index);
+
                     // Sitting down means leaving any seat on record, so the others are told of that too.
                     if (_seats.SeatOf(sender.SmallId) is { } left && SeatEgress(sender.SmallId))
                     {
@@ -5118,7 +5138,9 @@ public sealed class FusionServer : IDisposable
                     StandUp(sender, seat.SeatId, seat.Index);
 
                     Log("INFO", $"A plugin refused {sender.DisplayName} seat {seat.Index} of entity " +
-                                $"{seat.SeatId}: {seatVerdict.Reason}", console: false);
+                                $"{seat.SeatId}: {seatVerdict.Reason}" +
+                                (suppressed > 0 ? $" ({suppressed} more attempts suppressed before this)" : ""),
+                        console: false);
                     return;
                 }
             }

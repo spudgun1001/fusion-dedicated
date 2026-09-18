@@ -453,6 +453,13 @@ public sealed class ServerConfig
     /// </summary>
     public int OwnershipHoldMilliseconds { get; set; } = 500;
 
+    /// <summary>
+    /// How long a rider a plugin refused a seat is left alone before that seat is put to plugins
+    /// again. Fusion asks again while they stand in the seat's trigger, and each refusal stood
+    /// them up. Zero or less refuses every attempt.
+    /// </summary>
+    public double SeatRefusalCooldownSeconds { get; set; } = 2;
+
     /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
     public int CatchupMessagesPerSecond { get; set; } = 100;
 

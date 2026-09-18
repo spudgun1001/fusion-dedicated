@@ -383,6 +383,19 @@ while a refusal by the hold writes one line per player every ten seconds and car
 count, so it tells you a player was refused rather than how often. Set either to 0 to lift
 that half.
 
+A rider a plugin refuses a seat is then left alone for `SeatRefusalCooldownSeconds` (2)
+before that seat is put to plugins again. Fusion registers the seat again while the rider
+stands in its trigger, so one police SUV refused five players 342 times in four minutes, and
+the egress answering each refusal put their rig into and out of the seat about three times a
+second, which is what players mean by spassing out. The first attempt still stands them up
+and tells everybody. An attempt inside the window is dropped where it arrives: no plugin is
+asked, nothing is sent and nothing is relayed, so their own game may go on showing them
+seated until they step out of the trigger. Nobody else sees them in the seat, the server
+never records them in it and it never changes hands to them, so a driver a plugin refuses
+still cannot drive. The attempt after the window is refused properly again. Refusals go to
+the log file only, one line each, carrying a count of what was dropped since the last one.
+Set it to 0 to refuse every attempt.
+
 Hits from one player on another are held to `HitsPerSecond` (20), counted for each
 pair of players, because a client can send a hit on every physics tick. A player's
 hits on someone they are holding are always dropped, since those were knocking held
@@ -561,6 +574,7 @@ gitignored.
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (250 by default, 0 for no limit) |
 | `OwnershipRequestsPerSecond` | ownership requests each player may send per second (10 by default, 0 for no limit) |
 | `OwnershipHoldMilliseconds` | how long an entity stays with its new owner before it may change hands again (500 by default, 0 lets every change through) |
+| `SeatRefusalCooldownSeconds` | how long a rider a plugin refused a seat is left alone before that seat is put to plugins again (2 by default, 0 refuses every attempt) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (5000 and 2500 by default, 0 for no limit) |
 | `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.005 and 50 by default, 0 for no limit on that side) |
