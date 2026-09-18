@@ -36,6 +36,15 @@ public sealed class FusionServer : IDisposable
     /// <summary>Sends Steam refused, which count toward neither PacketsOut nor BytesOut.</summary>
     public long SendsRefused { get; private set; }
 
+    /// <summary>Refused reliable messages that went out on a later try.</summary>
+    public long SendsRetried { get; private set; }
+
+    /// <summary>Refused reliable messages dropped because a player's retry queue was full.</summary>
+    public long RetriesDropped { get; private set; }
+
+    /// <summary>Poses not sent to a player whose send buffer was over the limit.</summary>
+    public long PosesShed { get; private set; }
+
     private readonly ISocketTransport _transport;
 
     private readonly List<ServerLogEntry> _log = new();
@@ -278,7 +287,7 @@ public sealed class FusionServer : IDisposable
         if (Players.IsFull)
         {
             Log("WARN", $"Refused a connection: server is full ({Players.Count}/{Players.MaxPlayers})");
-            _transport.Close(connection, "Server full");
+            CloseConnection(connection, "Server full");
             return;
         }
 
@@ -310,7 +319,7 @@ public sealed class FusionServer : IDisposable
             }
 
             _awaitingRequest.Remove(handle);
-            _transport.Close(connection, "Never asked to join");
+            CloseConnection(connection, "Never asked to join");
             Log("WARN", $"Closed a connection that never asked to join (conn {handle})");
         });
     }
@@ -361,6 +370,7 @@ public sealed class FusionServer : IDisposable
         _flight.Forget(player.SmallId);
         _avatarStrikes.Forget(player.SmallId);
         _thinning.ForgetPlayer(player.SmallId);
+        _retry.Forget(player.Connection.m_HSteamNetConnection);
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
@@ -945,7 +955,7 @@ public sealed class FusionServer : IDisposable
         if (request == null)
         {
             Log("WARN", "ConnectionRequest did not parse, rejecting");
-            _transport.Close(connection, "Bad request");
+            CloseConnection(connection, "Bad request");
             return;
         }
 
@@ -987,14 +997,14 @@ public sealed class FusionServer : IDisposable
         if (Members is { Enabled: true } members && !members.MayJoin(platformId))
         {
             Log("WARN", $"Refused {platformId}: not on the whitelist");
-            _transport.Close(connection, "Not on this server's whitelist");
+            CloseConnection(connection, "Not on this server's whitelist");
             return;
         }
 
         if (BanList?.Find(platformId) is { } fileBan)
         {
             Log("WARN", $"Refused {platformId}: banned ({fileBan.Reason})");
-            _transport.Close(connection, fileBan.Reason);
+            CloseConnection(connection, fileBan.Reason);
             return;
         }
 
@@ -3872,6 +3882,9 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     public void PumpDeferred()
     {
+        MeasureSendPressure();
+        RetrySends();
+
         _catchup.Pump();
 
         List<Action> due;
@@ -5363,26 +5376,147 @@ public sealed class FusionServer : IDisposable
 
     public bool SendTo(HSteamNetConnection connection, byte[] message, bool reliable)
     {
+        uint handle = connection.m_HSteamNetConnection;
+
+        // Poses are most of the outbound and they heal themselves, so a player whose send buffer
+        // is filling up gets none of them until it drains and the reliable traffic gets through.
+        if (!reliable && IsPose(message) && _congested.Contains(handle))
+        {
+            PosesShed++;
+            _shedSinceSummary++;
+            return false;
+        }
+
+        // Behind whatever is already held for them, so reliable messages keep their order.
+        if (reliable && Config.SendRetryQueue > 0 && _retry.Waiting(handle) > 0)
+        {
+            HoldForRetry(connection, message);
+            return false;
+        }
+
         bool sent = _transport.Send(connection, message, reliable);
 
         if (sent)
         {
             PacketsOut++;
             BytesOut += message.Length;
-        }
-        else
-        {
-            SendsRefused++;
-            _refusedSinceSummary++;
-            _lastRefusal = _transport.LastSendFailure ?? "unknown";
-            _lastRefusedTo = Players.GetByConnection(connection)?.DisplayName
-                             ?? $"conn {connection.m_HSteamNetConnection}";
+            return true;
         }
 
-        return sent;
+        NoteRefusal(connection);
+
+        if (reliable && Config.SendRetryQueue > 0)
+        {
+            HoldForRetry(connection, message);
+        }
+
+        return false;
+    }
+
+    private static bool IsPose(byte[] message)
+        => message.Length > 0
+           && message[0] is FusionProtocol.TagPlayerPoseUpdate or FusionProtocol.TagEntityPoseUpdate;
+
+    private readonly SendRetry _retry = new();
+
+    /// <summary>Closes a connection and forgets whatever is still held for it.</summary>
+    private void CloseConnection(HSteamNetConnection connection, string reason)
+    {
+        _retry.Forget(connection.m_HSteamNetConnection);
+        _transport.Close(connection, reason);
+    }
+
+    private void HoldForRetry(HSteamNetConnection connection, byte[] message)
+    {
+        var (dropped, firstOverflow) = _retry.Queue(connection.m_HSteamNetConnection, message, Config.SendRetryQueue);
+
+        RetriesDropped += dropped;
+        _droppedSinceSummary += dropped;
+
+        if (!firstOverflow)
+        {
+            return;
+        }
+
+        string name = Players.GetByConnection(connection)?.DisplayName
+                      ?? $"conn {connection.m_HSteamNetConnection}";
+
+        Log("WARN", $"{name} is {Config.SendRetryQueue} messages behind on the send queue, " +
+                    "so the oldest are being dropped", console: false);
+    }
+
+    /// <summary>Sends again what each connection was holding, as far as its buffer now allows.</summary>
+    private void RetrySends()
+    {
+        _retry.Drain((handle, message) =>
+        {
+            var connection = new HSteamNetConnection(handle);
+
+            if (!_transport.Send(connection, message, reliable: true))
+            {
+                NoteRefusal(connection);
+                return false;
+            }
+
+            PacketsOut++;
+            BytesOut += message.Length;
+            SendsRetried++;
+            _retriedSinceSummary++;
+
+            if (Players.GetByConnection(connection) is { } player)
+            {
+                player.BytesOut += message.Length;
+            }
+
+            return true;
+        });
+    }
+
+    private HashSet<uint> _congested = new();
+
+    /// <summary>
+    /// Reads each player's send buffer now and then, so sending a message only has a set to check.
+    /// Replaced rather than emptied, because a send on another thread reads it.
+    /// </summary>
+    private void MeasureSendPressure()
+    {
+        if (Config.CongestedPendingBytes <= 0)
+        {
+            if (_congested.Count > 0)
+            {
+                _congested = new HashSet<uint>();
+            }
+
+            return;
+        }
+
+        var congested = new HashSet<uint>();
+
+        foreach (var player in Players.Players)
+        {
+            if (_transport.Health(player.Connection) is { } health
+                && health.PendingBytes >= Config.CongestedPendingBytes)
+            {
+                congested.Add(player.Connection.m_HSteamNetConnection);
+            }
+        }
+
+        _congested = congested;
+    }
+
+    private void NoteRefusal(HSteamNetConnection connection)
+    {
+        SendsRefused++;
+        _refusedSinceSummary++;
+        _lastRefusal = _transport.LastSendFailure ?? "unknown";
+        _lastRefusedTo = Players.GetByConnection(connection)?.DisplayName
+                         ?? $"conn {connection.m_HSteamNetConnection}";
     }
 
     private int _refusedSinceSummary;
+    private int _retriedSinceSummary;
+    private int _droppedSinceSummary;
+    private int _shedSinceSummary;
     private string _lastRefusal = "";
     private string _lastRefusedTo = "";
     private DateTime _lastRefusalSummary = DateTime.MinValue;
@@ -5392,15 +5526,34 @@ public sealed class FusionServer : IDisposable
     {
         var now = Clock();
 
-        if (_refusedSinceSummary == 0 || now - _lastRefusalSummary < TimeSpan.FromMinutes(1))
+        if (now - _lastRefusalSummary < TimeSpan.FromMinutes(1))
         {
             return;
         }
 
-        Log("WARN", $"{_refusedSinceSummary} sends refused by Steam in the last minute, " +
-                    $"last: {_lastRefusal} to {_lastRefusedTo}");
+        if (_refusedSinceSummary == 0 && _retriedSinceSummary == 0 && _droppedSinceSummary == 0
+            && _shedSinceSummary == 0)
+        {
+            return;
+        }
+
+        if (_refusedSinceSummary > 0)
+        {
+            Log("WARN", $"{_refusedSinceSummary} sends refused by Steam in the last minute, " +
+                        $"last: {_lastRefusal} to {_lastRefusedTo}");
+        }
+
+        if (_retriedSinceSummary > 0 || _droppedSinceSummary > 0 || _shedSinceSummary > 0)
+        {
+            Log("INFO", $"Send pressure in the last minute: {_retriedSinceSummary} reliable message(s) " +
+                        $"sent again, {_droppedSinceSummary} dropped from full queues, " +
+                        $"{_shedSinceSummary} pose(s) held back", console: false);
+        }
 
         _refusedSinceSummary = 0;
+        _retriedSinceSummary = 0;
+        _droppedSinceSummary = 0;
+        _shedSinceSummary = 0;
         _lastRefusalSummary = now;
     }
 
@@ -5480,7 +5633,7 @@ public sealed class FusionServer : IDisposable
             // left behind here silently refuses whoever lands on it next.
             try
             {
-                _transport.Close(connection, reason);
+                CloseConnection(connection, reason);
             }
             finally
             {

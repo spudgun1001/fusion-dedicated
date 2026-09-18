@@ -456,6 +456,20 @@ public sealed class ServerConfig
     /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
     public int CatchupMessagesPerSecond { get; set; } = 100;
 
+    /// <summary>
+    /// Reliable messages held for one player when Steam refuses a send, so an ownership answer or a
+    /// despawn goes out once their connection drains. The oldest are dropped when the queue is full,
+    /// and zero or less throws a refused send away where it stands.
+    /// </summary>
+    public int SendRetryQueue { get; set; } = 256;
+
+    /// <summary>
+    /// Bytes waiting on a player's connection past which they are sent no more poses until it drains.
+    /// Steam's send buffer holds 512 KB and refuses everything once it is full. Zero or less sends
+    /// poses whatever is waiting.
+    /// </summary>
+    public int CongestedPendingBytes { get; set; } = 131072;
+
     // ---- panel ----
 
     /// <summary>

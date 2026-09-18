@@ -433,6 +433,20 @@ Once a minute the log gets a line per player with what Steam measures of their
 connection: ping, quality, send rate, bytes waiting and queue time. A ping over 250 ms,
 quality under 90% or a queue over half a second makes it a warning on the console.
 
+Steam refuses a send outright once a player's send buffer is full, and one evening of 19
+players it refused 8,895 of them. A refused reliable message is now held rather than
+thrown away, and goes out as soon as that player's buffer drains; anything reliable sent
+to them in the meantime waits behind it, so ownership answers, spawns, despawns and
+catch-up still arrive in order. `SendRetryQueue` (256) is how many messages one player may
+have waiting, and the oldest are dropped when it is full, which the log file notes once.
+Set it to 0 to drop a refused send where it stands.
+
+A player with more than `CongestedPendingBytes` (128 KB) waiting is sent no poses until
+that comes down, which leaves the line to the reliable traffic. Poses are most of the
+outbound and the next one replaces the one that was skipped, so props and players catch
+themselves up. Set it to 0 to send poses whatever is waiting. The retries, the drops and
+the held back poses are summed up in the log file once a minute.
+
 `CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
 the holsters and magazines after that, and the level's variables once they finish
@@ -555,6 +569,8 @@ gitignored.
 | `FlightStrikeWindowSeconds` | how long a flight counts against a player (60 by default) |
 | `FlightExemptLevel` | rank never checked for flying (`Operator` by default) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
+| `SendRetryQueue` | reliable messages held for one player when Steam refuses a send (256 by default, 0 drops a refused send) |
+| `CongestedPendingBytes` | bytes waiting on a player's connection past which they are sent no poses (131072 by default, 0 sends poses whatever is waiting) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 

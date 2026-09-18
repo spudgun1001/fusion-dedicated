@@ -45,7 +45,9 @@ public class SendFailureTests
     [Fact]
     public void Refused_sends_are_summed_up_at_most_once_a_minute()
     {
-        using var world = new World();
+        // No retry queue, so each send here reaches Steam and is refused rather than
+        // waiting behind the one before it.
+        using var world = new World(new ServerConfig { CullOrphanedEntities = false, SendRetryQueue = 0 });
         var joel = world.Join(JoelId, "Joel");
 
         world.Transport.FailSendsWith = "k_EResultNoConnection";

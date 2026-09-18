@@ -54,6 +54,8 @@
   "OwnershipRequestsPerSecond": 10,
   "OwnershipHoldMilliseconds": 500,
   "CatchupMessagesPerSecond": 100,
+  "SendRetryQueue": 256,
+  "CongestedPendingBytes": 131072,
 
   "MaxAvatarMass": 5000,
   "MaxAvatarPartMass": 2500,
