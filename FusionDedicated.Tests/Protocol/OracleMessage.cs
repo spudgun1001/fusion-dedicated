@@ -40,8 +40,8 @@ public readonly record struct OracleMessage(byte Tag, byte RelayType, byte Chann
 
     /// <summary>
     /// Why a message is not in the one shape Fusion's own writer produces, or null. That shape
-    /// is what NetMessage.Create writes: bools as 0 or 1, a sender on every relayed route, and
-    /// a payload length that runs to the end.
+    /// is what NetMessage.Create writes: bools as 0 or 1 and a payload length that runs to the end.
+    /// A relayed message may carry a null sender, which is what module traffic from mods does.
     /// </summary>
     public static string? NotCanonical(byte[] message)
     {
@@ -97,12 +97,15 @@ public readonly record struct OracleMessage(byte Tag, byte RelayType, byte Chann
             {
                 byte hasSender = reader.ReadByte();
 
-                if (hasSender != 1)
+                if (hasSender > 1)
                 {
                     return $"sender HasValue {hasSender}";
                 }
 
-                reader.ReadByte();
+                if (hasSender == 1)
+                {
+                    reader.ReadByte();
+                }
             }
 
             int length = reader.ReadInt32();

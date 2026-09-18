@@ -35,11 +35,12 @@ public class WirePrefixTests
         { "ToTarget with no target", Message(new byte[] { 4, 0, 0, 1, 3 }) },
         { "ToTargets", Message(new byte[] { 5, 0, 0, 0, 0, 2, 4, 6, 1, 3 }) },
         { "ToTargets with none", Message(new byte[] { 5, 0, 0, 0, 0, 0, 1, 3 }) },
+        { "null sender", Message(new byte[] { 3, 0, 0 }) },
+        { "null sender to a target", Message(new byte[] { 4, 0, 1, 2, 0 }) },
     };
 
     public static TheoryData<string, byte[]> Malformed => new()
     {
-        { "null sender", Message(new byte[] { 3, 0, 0 }) },
         { "sender HasValue 2", Message(new byte[] { 3, 0, 2, 3 }) },
         { "target HasValue 2", Message(new byte[] { 4, 0, 2, 2, 1, 3 }) },
         { "relay type 6", Message(new byte[] { 6, 0, 1, 3 }) },

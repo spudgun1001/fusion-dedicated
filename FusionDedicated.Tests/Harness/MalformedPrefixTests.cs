@@ -222,4 +222,39 @@ public class MalformedPrefixTests
             Assert.Null(AvatarStatsCheck.Problem(read.Payload.AsSpan(0, 420), world.Server.Config));
         }
     }
+
+    /// <summary>A module message as a mod sends it: the route carries no sender at all.</summary>
+    private static byte[] ModuleWithNoSender(byte[] body)
+    {
+        var message = new FusionNetWriter(body.Length + 32);
+        message.Write(ModuleProtocol.TagModule);
+        message.Write((byte)3);     // ToOtherClients
+        message.Write((byte)0);     // Reliable
+        message.Write(false);       // Sender.HasValue
+        message.WriteBlock(body);
+
+        return message.ToArray();
+    }
+
+    [Fact]
+    public void A_module_message_with_no_sender_reaches_the_other_players()
+    {
+        using var world = new World(Config());
+        var (joel, kanza, _) = Loaded(world);
+        byte[] body = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+        int before = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.Send(ModuleWithNoSender(body));
+
+        var relayed = world.Transport.SentTo(kanza.Connection).Skip(before)
+            .Select(sent => OracleMessage.Read(sent.Message))
+            .OfType<OracleMessage>()
+            .Where(read => read.Tag == ModuleProtocol.TagModule)
+            .ToList();
+
+        var read = Assert.Single(relayed);
+        Assert.Equal(joel.SmallId, read.Sender);
+        Assert.Equal(body, read.Payload);
+        Assert.DoesNotContain(world.Server.RecentLog(2000), e => e.Message.StartsWith("Dropped a malformed message"));
+    }
 }

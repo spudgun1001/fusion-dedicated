@@ -60,15 +60,15 @@ public static class WirePrefix
             position += count;
         }
 
-        // MessagePrefix: MessageRelay always writes the local small id on a relayed route.
+        // MessagePrefix: a relayed route carries a nullable sender, and mods do send a null one.
         if (relayType != 0)
         {
-            if (position + 2 > message.Length || message[position] != 1)
+            if (position >= message.Length || message[position] > 1)
             {
                 return position >= message.Length ? "too short for a sender" : $"sender HasValue {message[position]}";
             }
 
-            position += 2;
+            position += message[position] == 1 ? 2 : 1;
         }
 
         if (position + 4 > message.Length)
