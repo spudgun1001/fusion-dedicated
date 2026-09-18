@@ -117,7 +117,7 @@ public sealed class SteamSocketTransport : ISocketTransport
 
         return new ConnectionHealth(status.m_nPing, status.m_flConnectionQualityLocal, status.m_flConnectionQualityRemote,
             status.m_flOutBytesPerSec, status.m_cbPendingUnreliable + status.m_cbPendingReliable + status.m_cbSentUnackedReliable,
-            (long)status.m_usecQueueTime);
+            (long)status.m_usecQueueTime, status.m_cbPendingUnreliable + status.m_cbPendingReliable);
     }
 
     public int Receive(int max, Action<HSteamNetConnection, byte[]> handle)

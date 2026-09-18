@@ -15,9 +15,17 @@ public class SendPressureTests
     private const ushort Van = 1214;
 
     private static readonly ConnectionHealth Calm = new(PingMs: 60, QualityLocal: 1f, QualityRemote: 1f,
-        OutBytesPerSecond: 40_000f, PendingBytes: 1_000, QueueMicroseconds: 3_000);
+        OutBytesPerSecond: 40_000f, WaitingBytes: 1_000, QueueMicroseconds: 3_000, PendingBytes: 800);
 
-    private static readonly ConnectionHealth Full = Calm with { PendingBytes = 524_000, QueueMicroseconds = 1_995_000 };
+    private static readonly ConnectionHealth Full = Calm with
+    {
+        WaitingBytes = 524_000,
+        PendingBytes = 512_000,
+        QueueMicroseconds = 1_995_000,
+    };
+
+    /// <summary>Long enough that the server measures every connection's send buffer again.</summary>
+    private static readonly TimeSpan Pass = TimeSpan.FromMilliseconds(120);
 
     private static ServerConfig Config(int retryQueue = 256, int congestedBytes = 131_072) => new()
     {
@@ -54,7 +62,7 @@ public class SendPressureTests
         Assert.Equal(before, AnswersTo(world, joel));
 
         world.Transport.FailSendsWith = null;
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         Assert.Equal(before + 1, AnswersTo(world, joel));
     }
@@ -70,7 +78,7 @@ public class SendPressureTests
         world.Server.SendTo(joel.Connection, MovingPose(joel), reliable: false);
 
         world.Transport.FailSendsWith = null;
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         Assert.Equal(before, PosesTo(world, joel));
     }
@@ -88,7 +96,7 @@ public class SendPressureTests
 
         // Sent after the refusal, so it has to wait behind it rather than overtake it.
         world.Server.SendTo(joel.Connection, Answer(2), reliable: true);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         var owners = world.Transport.SentTo(joel.Connection).Skip(before)
             .Select(sent => FusionProtocol.TryReadOwnershipResponse(sent.Message))
@@ -116,9 +124,123 @@ public class SendPressureTests
         Assert.Single(world.Server.RecentLog(2000), e => e.Message.Contains("behind on the send queue"));
 
         world.Transport.FailSendsWith = null;
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         Assert.Equal(before + 2, AnswersTo(world, joel));
+    }
+
+    [Fact]
+    public void A_full_retry_queue_keeps_the_newest_messages()
+    {
+        using var world = new World(Config(retryQueue: 2));
+        var joel = world.Join(76561198000000001, "Joel");
+        int before = world.Transport.SentTo(joel.Connection).Count;
+
+        world.Transport.FailSendsWith = "k_EResultLimitExceeded";
+
+        for (byte owner = 1; owner <= 5; owner++)
+        {
+            world.Server.SendTo(joel.Connection, Answer(owner), reliable: true);
+        }
+
+        world.Transport.FailSendsWith = null;
+        world.Advance(Pass);
+
+        var owners = world.Transport.SentTo(joel.Connection).Skip(before)
+            .Select(sent => FusionProtocol.TryReadOwnershipResponse(sent.Message))
+            .Where(read => read is { EntityId: Crate })
+            .Select(read => read!.Value.PlayerId)
+            .ToList();
+
+        Assert.Equal(new byte[] { 4, 5 }, owners);
+    }
+
+    [Fact]
+    public void Turning_the_queue_off_lets_nothing_overtake_what_is_already_held()
+    {
+        using var world = new World(Config(retryQueue: 4));
+        var joel = world.Join(76561198000000001, "Joel");
+        int before = world.Transport.SentTo(joel.Connection).Count;
+
+        world.Transport.FailSendsWith = "k_EResultLimitExceeded";
+
+        for (byte owner = 1; owner <= 3; owner++)
+        {
+            world.Server.SendTo(joel.Connection, Answer(owner), reliable: true);
+        }
+
+        world.Transport.FailSendsWith = null;
+
+        // The panel can do this mid-storm, and the messages already held still go out in order.
+        world.Server.Config.SendRetryQueue = 0;
+        world.Server.SendTo(joel.Connection, Answer(4), reliable: true);
+        world.Advance(Pass);
+
+        var owners = world.Transport.SentTo(joel.Connection).Skip(before)
+            .Select(sent => FusionProtocol.TryReadOwnershipResponse(sent.Message))
+            .Where(read => read is { EntityId: Crate })
+            .Select(read => read!.Value.PlayerId)
+            .ToList();
+
+        Assert.Equal(new byte[] { 2, 3, 4 }, owners);
+    }
+
+    [Fact]
+    public void A_kick_tells_the_player_why_even_with_a_backlog_waiting()
+    {
+        using var world = new World(Config());
+        var joel = world.Join(76561198000000001, "Joel");
+
+        world.Transport.FailSendsWith = "k_EResultLimitExceeded";
+        world.Server.SendTo(joel.Connection, Answer(1), reliable: true);
+        world.Transport.FailSendsWith = null;
+
+        int before = world.Transport.SentTo(joel.Connection).Count;
+        world.Server.Kick(joel.SmallId, "Flooding refused requests");
+
+        var reason = System.Text.Encoding.UTF8.GetBytes("Flooding refused requests");
+
+        Assert.Contains(world.Transport.SentTo(joel.Connection).Skip(before),
+            sent => sent.Message[0] == FusionProtocol.TagDisconnect
+                    && Contains(sent.Message, reason));
+    }
+
+    private static bool Contains(byte[] message, byte[] part)
+    {
+        for (var start = 0; start + part.Length <= message.Length; start++)
+        {
+            if (message.Skip(start).Take(part.Length).SequenceEqual(part))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    [Fact]
+    public void A_connection_that_keeps_refusing_does_not_inflate_the_refused_count()
+    {
+        using var world = new World(Config());
+        var joel = world.Join(76561198000000001, "Joel");
+
+        world.Transport.FailSendsWith = "k_EResultLimitExceeded";
+        world.Server.SendTo(joel.Connection, Answer(1), reliable: true);
+
+        long refused = world.Server.SendsRefused;
+
+        for (var pass = 0; pass < 60; pass++)
+        {
+            world.Advance(TimeSpan.FromMilliseconds(16));
+        }
+
+        Assert.Equal(refused, world.Server.SendsRefused);
+        Assert.Equal(60L, world.Server.RetriesRefused);
+
+        world.Transport.FailSendsWith = null;
+        world.Advance(TimeSpan.FromMilliseconds(16));
+
+        Assert.Equal(1L, world.Server.SendsRetried);
     }
 
     [Fact]
@@ -132,7 +254,7 @@ public class SendPressureTests
         world.Server.SendTo(joel.Connection, Answer(joel.SmallId), reliable: true);
         world.Transport.FailSendsWith = null;
 
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         Assert.Equal(before, AnswersTo(world, joel));
     }
@@ -160,7 +282,7 @@ public class SendPressureTests
         using var _ = world;
 
         world.Transport.SetHealth(other.Connection, Full);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         int held = PosesTo(world, other);
         owner.Send(MovingPose(owner));
@@ -168,10 +290,27 @@ public class SendPressureTests
         Assert.Equal(held, PosesTo(world, other));
 
         world.Transport.SetHealth(other.Connection, Calm);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
         owner.Send(MovingPose(owner));
 
         Assert.Equal(held + 1, PosesTo(world, other));
+    }
+
+    [Fact]
+    public void The_player_whose_poses_are_held_back_is_named_once_a_minute()
+    {
+        var (world, _, other) = CrateAndTwoPlayers(Config());
+        using var _2 = world;
+
+        world.Transport.SetHealth(other.Connection, Full);
+        world.Advance(Pass);
+        world.Advance(Pass);
+
+        var line = Assert.Single(world.Server.RecentLog(2000),
+            e => e.Message.Contains("so their poses are held back"));
+
+        Assert.Equal("Joel has 512.0 KB unsent, so their poses are held back until it drains", line.Message);
+        Assert.Equal("INFO", line.Level);
     }
 
     [Fact]
@@ -181,7 +320,7 @@ public class SendPressureTests
         using var _2 = world;
 
         world.Transport.SetHealth(other.Connection, Full);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         int before = AnswersTo(world, other);
         Assert.True(world.Server.SendTo(other.Connection, Answer(other.SmallId), reliable: true));
@@ -196,7 +335,7 @@ public class SendPressureTests
         using var _ = world;
 
         world.Transport.SetHealth(other.Connection, Full);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         int before = PosesTo(world, other);
         owner.Send(MovingPose(owner));
@@ -211,7 +350,7 @@ public class SendPressureTests
         using var _ = world;
 
         world.Transport.SetHealth(other.Connection, Full);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         int before = PosesTo(world, other);
         owner.Send(MovingPose(owner));
@@ -226,7 +365,7 @@ public class SendPressureTests
         using var _ = world;
 
         world.Transport.SetHealth(other.Connection, Full);
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         for (var i = 0; i < 20; i++)
         {
@@ -244,7 +383,8 @@ public class SendPressureTests
             e => e.Message.StartsWith("Send pressure in the last minute:"));
 
         Assert.Equal("Send pressure in the last minute: 1 reliable message(s) sent again, " +
-                     "0 dropped from full queues, 20 pose(s) held back", line.Message);
+                     "0 retry(ies) refused, 0 dropped from full queues, 20 pose(s) held back (0.8 KB)",
+            line.Message);
         Assert.Equal("INFO", line.Level);
     }
 
@@ -279,7 +419,7 @@ public class SendPressureTests
             world.Transport.SetHealth(player.Connection, Full);
         }
 
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
         world.Transport.FailSendsWith = "k_EResultLimitExceeded";
 
         sad.Send(ClientMessages.Despawn(sad.SmallId, Van));
@@ -292,10 +432,48 @@ public class SendPressureTests
             world.Transport.SetHealth(player.Connection, Calm);
         }
 
-        world.Advance(TimeSpan.Zero);
+        world.Advance(Pass);
 
         Assert.All(players, player => Assert.DoesNotContain(Van, player.View.Entities.Keys));
-        Assert.True(world.AgreeOnOwner(Crate), string.Join(", ", world.OwnersOf(Crate)));
+        Assert.All(world.OwnersOf(Crate).Values, owner => Assert.Equal(players[1].SmallId, owner));
         Assert.Equal(players[1].SmallId, world.Server.Entities.Get(Crate)!.OwnerSmallId);
+    }
+
+    [Fact]
+    public void A_join_during_a_long_refusal_loses_no_catch_up()
+    {
+        var config = Config();
+        config.CatchupMessagesPerSecond = 100;
+
+        using var world = new World(config);
+        var dennis = world.Join(76561198000000001, "Dennis");
+        dennis.FinishLoading();
+
+        for (ushort id = 400; id < 500; id++)
+        {
+            world.Spawn(dennis, id, "Test.Crate", id, 0, 0);
+        }
+
+        // Steam takes nothing for four seconds, which is longer than the retry queue could hold
+        // the 100 a second the catch-up wants to send.
+        world.Transport.FailSendsWith = "k_EResultLimitExceeded";
+
+        var joiner = world.Join(76561198000000002, "Joel");
+
+        for (var pass = 0; pass < 250; pass++)
+        {
+            world.Advance(TimeSpan.FromMilliseconds(16));
+        }
+
+        world.Transport.FailSendsWith = null;
+        joiner.FinishLoading();
+
+        for (var pass = 0; pass < 250; pass++)
+        {
+            world.Advance(TimeSpan.FromMilliseconds(16));
+        }
+
+        Assert.Equal(100, joiner.View.Entities.Count);
+        Assert.Equal(0, world.Server.RetriesDropped);
     }
 }

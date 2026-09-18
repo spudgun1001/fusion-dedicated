@@ -19,7 +19,11 @@ public class CatchupOutboxTests
         _perSecond = perSecond;
 
         return new CatchupOutbox(() => _perSecond, () => _now,
-            (player, message, reliable) => _sent.Add((player.SmallId, message[0], reliable)),
+            (player, message, reliable) =>
+            {
+                _sent.Add((player.SmallId, message[0], reliable));
+                return true;
+            },
             warn: _warnings.Add);
     }
 

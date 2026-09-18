@@ -464,9 +464,9 @@ public sealed class ServerConfig
     public int SendRetryQueue { get; set; } = 256;
 
     /// <summary>
-    /// Bytes waiting on a player's connection past which they are sent no more poses until it drains.
-    /// Steam's send buffer holds 512 KB and refuses everything once it is full. Zero or less sends
-    /// poses whatever is waiting.
+    /// Bytes Steam has taken for a player and not yet put on the wire, at or above which they are
+    /// sent no more poses until it drains. Steam's send buffer holds 512 KB and refuses everything
+    /// once it is full. Zero or less sends poses whatever is waiting.
     /// </summary>
     public int CongestedPendingBytes { get; set; } = 131072;
 

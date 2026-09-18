@@ -17,9 +17,20 @@ public sealed class CatchupOutbox
         public bool Reported;
     }
 
+    /// <summary>What became of one message the outbox tried to send.</summary>
+    private enum Outcome
+    {
+        /// <summary>The builder had nothing, so nothing is owed.</summary>
+        Nothing,
+        Sent,
+
+        /// <summary>The player's connection is backed up, so it waits here rather than behind that.</summary>
+        Held,
+    }
+
     private readonly Func<int> _perSecond;
     private readonly Func<DateTime> _clock;
-    private readonly Action<ConnectedPlayer, byte[], bool> _send;
+    private readonly Func<ConnectedPlayer, byte[], bool, bool> _send;
     private readonly Action<string>? _warn;
     private readonly Dictionary<byte, Lane> _lanes = new();
 
@@ -27,8 +38,9 @@ public sealed class CatchupOutbox
     private readonly object _lock = new();
 
     /// <param name="perSecond">Read on every call, so a changed setting applies at once. Zero or less means no pacing.</param>
+    /// <param name="send">Returns false when the player cannot take it yet, which keeps it queued here.</param>
     /// <param name="warn">Told about a builder that threw, instead of the throw reaching the caller.</param>
-    public CatchupOutbox(Func<int> perSecond, Func<DateTime> clock, Action<ConnectedPlayer, byte[], bool> send,
+    public CatchupOutbox(Func<int> perSecond, Func<DateTime> clock, Func<ConnectedPlayer, byte[], bool, bool> send,
         Action<string>? warn = null)
     {
         _perSecond = perSecond;
@@ -51,12 +63,15 @@ public sealed class CatchupOutbox
             if (rate <= 0)
             {
                 // Anything already queued goes first, so order still holds once pacing is off.
-                if (_lanes.TryGetValue(player.SmallId, out var paced))
+                var unpaced = LaneFor(player.SmallId, rate);
+                Drain(unpaced);
+
+                if (unpaced.Waiting.Count == 0 && Send(player, build, reliable) != Outcome.Held)
                 {
-                    Drain(paced);
+                    return;
                 }
 
-                Send(player, build, reliable);
+                unpaced.Waiting.Enqueue((player, build, reliable));
                 return;
             }
 
@@ -65,12 +80,17 @@ public sealed class CatchupOutbox
 
             if (lane.Waiting.Count == 0 && lane.Tokens >= 1)
             {
-                if (Send(player, build, reliable))
+                var outcome = Send(player, build, reliable);
+
+                if (outcome == Outcome.Sent)
                 {
                     lane.Tokens -= 1;
                 }
 
-                return;
+                if (outcome != Outcome.Held)
+                {
+                    return;
+                }
             }
 
             lane.Waiting.Enqueue((player, build, reliable));
@@ -102,12 +122,21 @@ public sealed class CatchupOutbox
                 Refill(lane, rate);
 
                 // A null build is skipped for free, so it never costs the token a real message
-                // behind it needs.
+                // behind it needs. Peeked rather than taken, so a message the player cannot
+                // take yet stays here instead of being handed over and lost.
                 while (lane.Waiting.Count > 0 && lane.Tokens >= 1)
                 {
-                    var next = lane.Waiting.Dequeue();
+                    var next = lane.Waiting.Peek();
+                    var outcome = Send(next.Player, next.Build, next.Reliable);
 
-                    if (Send(next.Player, next.Build, next.Reliable))
+                    if (outcome == Outcome.Held)
+                    {
+                        break;
+                    }
+
+                    lane.Waiting.Dequeue();
+
+                    if (outcome == Outcome.Sent)
                     {
                         lane.Tokens -= 1;
                     }
@@ -179,15 +208,19 @@ public sealed class CatchupOutbox
 
     private void Drain(Lane lane)
     {
-        while (lane.Waiting.TryDequeue(out var next))
+        while (lane.Waiting.TryPeek(out var next))
         {
-            Send(next.Player, next.Build, next.Reliable);
+            if (Send(next.Player, next.Build, next.Reliable) == Outcome.Held)
+            {
+                return;
+            }
+
+            lane.Waiting.Dequeue();
         }
     }
 
     /// <summary>Builds and sends, both under the lock, so nothing else observes half a state change.</summary>
-    /// <returns>Whether the build produced anything to send. A build that throws counts as nothing to send.</returns>
-    private bool Send(ConnectedPlayer player, Func<byte[]?> build, bool reliable)
+    private Outcome Send(ConnectedPlayer player, Func<byte[]?> build, bool reliable)
     {
         byte[]? message;
 
@@ -198,15 +231,14 @@ public sealed class CatchupOutbox
         catch (Exception ex)
         {
             _warn?.Invoke($"Catch-up builder for player {player.SmallId} threw: {ex.Message}");
-            return false;
+            return Outcome.Nothing;
         }
 
         if (message == null)
         {
-            return false;
+            return Outcome.Nothing;
         }
 
-        _send(player, message, reliable);
-        return true;
+        return _send(player, message, reliable) ? Outcome.Sent : Outcome.Held;
     }
 }

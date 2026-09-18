@@ -12,7 +12,7 @@ public class NetworkHealthTests
     private const ulong KanzaId = 76561198000000002;
 
     private static readonly ConnectionHealth Good = new(PingMs: 85, QualityLocal: 0.99f, QualityRemote: 0.97f,
-        OutBytesPerSecond: 42_000f, PendingBytes: 1_100, QueueMicroseconds: 3_000);
+        OutBytesPerSecond: 42_000f, WaitingBytes: 1_100, QueueMicroseconds: 3_000, PendingBytes: 900);
 
     private static List<ServerLogEntry> NetLines(World world)
         => world.Server.RecentLog(2000).Where(e => e.Message.StartsWith("Net ")).ToList();

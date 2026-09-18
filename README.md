@@ -439,13 +439,18 @@ thrown away, and goes out as soon as that player's buffer drains; anything relia
 to them in the meantime waits behind it, so ownership answers, spawns, despawns and
 catch-up still arrive in order. `SendRetryQueue` (256) is how many messages one player may
 have waiting, and the oldest are dropped when it is full, which the log file notes once.
-Set it to 0 to drop a refused send where it stands.
+Set it to 0 to drop a refused send where it stands. A player joining a backed-up server
+keeps their catch-up in the catch-up queue instead, which has no cap, because nothing asks
+for a catch-up message twice.
 
-A player with more than `CongestedPendingBytes` (128 KB) waiting is sent no poses until
-that comes down, which leaves the line to the reliable traffic. Poses are most of the
-outbound and the next one replaces the one that was skipped, so props and players catch
-themselves up. Set it to 0 to send poses whatever is waiting. The retries, the drops and
-the held back poses are summed up in the log file once a minute.
+A player with `CongestedPendingBytes` (128 KB) or more still buffered on their connection
+is sent no poses until that comes down, which leaves the line to the reliable traffic. The
+measure is what Steam has taken and not yet put on the wire, which is what its 512 KB send
+buffer counts, rather than everything in flight. Poses are a large share of the outbound
+and the next one replaces the one that was skipped, so props and players catch themselves
+up. Set it to 0 to send poses whatever is waiting. The log file names each player this
+happens to, at most once a minute each, and sums up the retries, the drops and the held
+back poses with what they weighed.
 
 `CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
@@ -570,7 +575,7 @@ gitignored.
 | `FlightExemptLevel` | rank never checked for flying (`Operator` by default) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
 | `SendRetryQueue` | reliable messages held for one player when Steam refuses a send (256 by default, 0 drops a refused send) |
-| `CongestedPendingBytes` | bytes waiting on a player's connection past which they are sent no poses (131072 by default, 0 sends poses whatever is waiting) |
+| `CongestedPendingBytes` | bytes Steam still has unsent for a player, at or above which they are sent no poses (131072 by default, 0 sends poses whatever is waiting) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 
