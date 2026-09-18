@@ -1,4 +1,5 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Harness;
 
@@ -12,7 +13,9 @@ public class SeatedVehicleOwnershipTests
 
     private static (World World, FakePlayer Driver, FakePlayer Passenger, FakePlayer Bystander) CarOwnedByDriver()
     {
-        var world = new World();
+        // These are about who a seated vehicle stays with rather than how many asks fit in
+        // a second, so the allowance is off and all twenty bumps reach the rule.
+        var world = new World(new ServerConfig { CullOrphanedEntities = false, OwnershipRequestsPerSecond = 0 });
         var driver = world.Join(76561198000000001, "s1mple");
         var passenger = world.Join(76561198000000002, "PokeMrowa");
         var bystander = world.Join(76561198000000003, "FOLZY");

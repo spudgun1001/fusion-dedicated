@@ -11,6 +11,7 @@ namespace FusionDedicated.Tests.Harness;
 public class OwnershipThrashTests
 {
     private const ushort Van = 1820;
+    private const ushort Crate = 300;
 
     private static World NewWorld(int hold = 500, int perSecond = 10)
         => new(new ServerConfig
@@ -45,6 +46,9 @@ public class OwnershipThrashTests
 
     private static int Changes(World world)
         => world.Server.RecentLog(4000).Count(e => e.Message.StartsWith($"Ownership of entity {Van} given"));
+
+    private static int SeatedOwnerLines(World world)
+        => world.Server.RecentLog(4000).Count(e => e.Message.StartsWith($"Entity {Van} now owned by"));
 
     private static IReadOnlyList<byte> OwnersToldTo(World world, FakePlayer player, int from)
         => world.Transport.SentTo(player.Connection)
@@ -200,9 +204,9 @@ public class OwnershipThrashTests
     }
 
     [Fact]
-    public void Refusals_are_summed_up_rather_than_logged_one_by_one()
+    public void Many_refusals_from_one_player_are_logged_once()
     {
-        var (world, _, jay, kanza) = VanOwnedByEnzo();
+        var (world, _, jay, kanza) = VanOwnedByEnzo(perSecond: 0);
         using var _2 = world;
 
         Ask(jay);
@@ -214,5 +218,100 @@ public class OwnershipThrashTests
 
         Assert.Equal(1, world.Server.RecentLog(4000)
             .Count(e => e.Message.StartsWith($"Refused Kanzaaa ownership of entity {Van}, which changed hands")));
+    }
+
+    [Fact]
+    public void Bumping_what_you_already_own_does_not_use_up_the_allowance()
+    {
+        var (world, enzo, _, kanza) = VanOwnedByEnzo();
+        using var _2 = world;
+        world.Spawn(kanza, Crate, "Pack.Spawnable.Crate", 5, 0, 5);
+
+        for (var bump = 0; bump < 20; bump++)
+        {
+            Ask(enzo);
+        }
+
+        enzo.Send(FusionProtocol.BuildOwnershipRequest(enzo.SmallId, Crate));
+
+        Assert.Equal(enzo.SmallId, world.Server.Entities.Get(Crate)!.OwnerSmallId);
+    }
+
+    [Fact]
+    public void An_entity_nobody_owns_is_not_held_back()
+    {
+        var (world, _, jay, kanza) = VanOwnedByEnzo();
+        using var _2 = world;
+
+        Ask(jay);
+
+        // What keeping a prop does when its owner leaves it behind.
+        world.Server.Entities.SetOwner(Van, null);
+        Ask(kanza);
+
+        Assert.Equal(kanza.SmallId, Owner(world));
+    }
+
+    [Fact]
+    public void An_owner_who_has_just_lost_it_is_still_told_who_owns_it_now()
+    {
+        var (world, enzo, jay, _2) = VanOwnedByEnzo();
+        using var _3 = world;
+
+        Ask(enzo);
+        world.Advance(TimeSpan.FromMilliseconds(100));
+        Ask(jay);
+        int before = world.Transport.SentTo(enzo.Connection).Count;
+
+        world.Advance(TimeSpan.FromMilliseconds(100));
+        Ask(enzo);
+
+        Assert.Equal(new[] { jay.SmallId }, OwnersToldTo(world, enzo, before));
+    }
+
+    [Fact]
+    public void The_hold_and_the_allowance_both_bite_in_the_same_second()
+    {
+        var (world, _, jay, kanza) = VanOwnedByEnzo(perSecond: 3);
+        using var _2 = world;
+
+        Ask(jay);
+
+        for (var bump = 0; bump < 3; bump++)
+        {
+            Ask(kanza);
+        }
+
+        // Past the hold, still inside the second kanza has spent.
+        world.Advance(TimeSpan.FromMilliseconds(600));
+        Ask(kanza);
+
+        Assert.Equal(jay.SmallId, Owner(world));
+
+        world.Advance(TimeSpan.FromMilliseconds(500));
+        Ask(kanza);
+
+        Assert.Equal(kanza.SmallId, Owner(world));
+    }
+
+    [Fact]
+    public void Two_seated_players_cannot_flip_the_van_with_their_poses()
+    {
+        var (world, _, jay, kanza) = VanOwnedByEnzo();
+        using var _2 = world;
+        jay.Send(FusionProtocol.BuildSeat(jay.SmallId, Van, 0, true));
+        kanza.Send(FusionProtocol.BuildSeat(kanza.SmallId, Van, 2, true));
+
+        for (var tick = 0; tick < 60; tick++)
+        {
+            var poser = tick % 2 == 0 ? jay : kanza;
+
+            poser.Send(FusionProtocol.BuildEntityPoseUpdate(poser.SmallId, Van,
+                new Vec3(tick, 0, 0), default, default, default));
+
+            world.Advance(TimeSpan.FromMilliseconds(33));
+        }
+
+        Assert.InRange(SeatedOwnerLines(world), 1, 6);
     }
 }

@@ -14,13 +14,8 @@ public class OwnershipHoldTests
     private OwnershipHold Hold() => new(() => _now, () => _window);
 
     [Fact]
-    public void The_defaults_are_half_a_second_and_ten_requests_a_second()
-    {
-        var config = new ServerConfig();
-
-        Assert.Equal(500, config.OwnershipHoldMilliseconds);
-        Assert.Equal(10, config.OwnershipRequestsPerSecond);
-    }
+    public void The_default_hold_is_half_a_second()
+        => Assert.Equal(500, new ServerConfig().OwnershipHoldMilliseconds);
 
     [Fact]
     public void An_entity_nobody_has_taken_is_not_held()

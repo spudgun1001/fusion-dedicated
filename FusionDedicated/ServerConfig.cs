@@ -447,9 +447,9 @@ public sealed class ServerConfig
     public int OwnershipRequestsPerSecond { get; set; } = 10;
 
     /// <summary>
-    /// How long an entity stays with its new owner before it may change hands again. Its
-    /// owner, whoever sits in it and whoever holds it are never held back. Zero or less
-    /// lets every change through.
+    /// How long an entity stays with its new owner before it may change hands again, with its
+    /// owner, whoever sits in it and whoever holds it never held back. Zero or less lets every
+    /// change through.
     /// </summary>
     public int OwnershipHoldMilliseconds { get; set; } = 500;
 

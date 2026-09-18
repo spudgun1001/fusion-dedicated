@@ -368,15 +368,20 @@ kicked for going over. Like the spawn guard, the allowances apply only while
 `AntiSpamEnabled` is on and only to players below `AntiSpamExemptLevel`. Set one to 0
 to lift that limit.
 
-Ownership requests are held to `OwnershipRequestsPerSecond` (10) per player the same way,
-and an entity that has just changed hands keeps its new owner for
-`OwnershipHoldMilliseconds` (500) before it may change again. A client asks on every
-physics contact, and one SWAT van that nine players all believed they owned took 2,384
-owner changes in a single minute, each of them snapping it to a different player's copy,
-which is what a vehicle flinging about looks like. Somebody refused inside the window is
-still told who owns it, so their view heals, and the owner, whoever sits in it and whoever
-holds it are never held back. Both go to the log file only and are totalled rather than
-written out one by one. Set either to 0 to lift that half.
+Ownership requests are held to `OwnershipRequestsPerSecond` (10) per player, which follows
+`AntiSpamEnabled` and `AntiSpamExemptLevel` like the allowances above. An entity that has
+just changed hands then keeps its new owner for `OwnershipHoldMilliseconds` (500) before it
+may change again, at every rank and whether or not anti-spam is on. A client asks on every
+physics contact, and one SWAT van that nine players all believed they owned took 2,384 owner
+changes in a single minute, each of them snapping it to a different player's copy, which is
+what a vehicle flinging about looks like. Somebody refused inside the window is still told
+who owns it, so their view heals, and its owner, whoever sits in it and whoever holds it are
+never held back. A rider whose game sends the vehicle's poses is held the same way against
+another rider's, so two people in one van cannot trade it at the network tick. Both stay out
+of the console: requests dropped over the allowance are totalled once a minute per player,
+while a refusal by the hold writes one line per player every ten seconds and carries no
+count, so it tells you a player was refused rather than how often. Set either to 0 to lift
+that half.
 
 Hits from one player on another are held to `HitsPerSecond` (20), counted for each
 pair of players, because a client can send a hit on every physics tick. A player's

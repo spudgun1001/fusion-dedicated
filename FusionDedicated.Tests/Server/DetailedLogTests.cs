@@ -49,4 +49,13 @@ public class DetailedLogTests
     [Fact]
     public void An_ownership_approval_is_logged()
         => LogsQuietly("private void HandleOwnershipRequest(", "asked for by");
+
+    [Fact]
+    public void A_request_refused_by_the_hold_is_logged()
+        => LogsQuietly("private void HandleOwnershipRequest(", "which changed hands");
+
+    [Fact]
+    public void Ownership_requests_dropped_over_the_allowance_are_summed_up_off_the_console()
+        => Assert.Contains("console: kind != MessageKind.Ownership",
+            FusionServerSource.Method("private void LogDroppedMessages("));
 }

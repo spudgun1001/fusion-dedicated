@@ -23,6 +23,18 @@ public class MessageBudgetTests
         Assert.Equal(10, config.MetadataPerSecond);
         Assert.Equal(2, config.AvatarSwapsPerSecond);
         Assert.Equal(250, config.RpcMessagesPerSecond);
+        Assert.Equal(10, config.OwnershipRequestsPerSecond);
+    }
+
+    [Fact]
+    public void Ownership_requests_have_an_allowance_and_a_word_of_their_own()
+    {
+        var budget = new MessageBudget(new ServerConfig { OwnershipRequestsPerSecond = 1 });
+
+        Assert.Equal(1, budget.LimitFor(MessageKind.Ownership));
+        Assert.Equal("ownership", MessageBudget.Word(MessageKind.Ownership));
+        Assert.True(budget.Allow(1, MessageKind.Ownership, _t0));
+        Assert.False(budget.Allow(1, MessageKind.Ownership, _t0));
     }
 
     [Fact]

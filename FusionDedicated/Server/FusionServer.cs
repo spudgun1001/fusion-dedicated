@@ -86,6 +86,12 @@ public sealed class FusionServer : IDisposable
         _ownershipHold = new OwnershipHold(() => Clock(), () => Config.OwnershipHoldMilliseconds);
         Entities.Removed += id => _ownershipHold.ForgetEntity(id);
 
+        _holdAnswers = new OwnershipConfirmations(() => Clock());
+        Entities.Removed += id => _holdAnswers.ForgetEntity(id);
+
+        _seatedPoseHold = new OwnershipHold(() => Clock(), () => Config.OwnershipHoldMilliseconds);
+        Entities.Removed += id => _seatedPoseHold.ForgetEntity(id);
+
         _recentRemovals = new RecentRemovals(() => Clock());
         Entities.Removed += id => _recentRemovals.Note(id);
 
@@ -361,6 +367,7 @@ public sealed class FusionServer : IDisposable
         _seatRefusalLog.Remove(player.SmallId);
         _holdRefusalLog.Remove(player.SmallId);
         _confirmations.ForgetPlayer(player.SmallId);
+        _holdAnswers.ForgetPlayer(player.SmallId);
         _catchup.Forget(player.SmallId);
         SeatForgetRider(player.SmallId);
 
@@ -3184,6 +3191,7 @@ public sealed class FusionServer : IDisposable
         // registry never knew is not cleared when the entities go.
         _grabs.Clear();
         _confirmations.Clear();
+        _holdAnswers.Clear();
 
         // Before the new SceneLoad, so nothing meant for the old level is sent after it.
         _catchup.Clear();
@@ -4456,6 +4464,15 @@ public sealed class FusionServer : IDisposable
     /// <summary>When each entity last changed hands, so it is not flipped again straight away.</summary>
     private readonly OwnershipHold _ownershipHold;
 
+    /// <summary>When a player refused by the hold was last told who owns it.</summary>
+    private readonly OwnershipConfirmations _holdAnswers;
+
+    /// <summary>
+    /// When a rider's pose last took a vehicle. Two riders whose games both claim one would
+    /// otherwise trade it at the network tick, which no request of theirs ever reaches.
+    /// </summary>
+    private readonly OwnershipHold _seatedPoseHold;
+
     private void HandleOwnershipRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = TryReadOwnership(message);
@@ -4466,13 +4483,6 @@ public sealed class FusionServer : IDisposable
             // while the person holding it sees it in their hand: they asked to
             // own it, nothing answered, so they never start simulating it.
             Log("WARN", $"EntityOwnershipRequest from {sender.DisplayName} did not parse");
-            return;
-        }
-
-        // A client asks again on every physics contact, and one van nine of them fought over
-        // came to about 58 requests a second. What is over the allowance is dropped and summed up.
-        if (!WithinBudget(sender, MessageKind.Ownership))
-        {
             return;
         }
 
@@ -4541,13 +4551,26 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
-        // Every change snaps the entity to the new owner's copy, so one that has just changed
-        // hands keeps them for a moment. The asker is told who owns it, the way a repeat is.
-        if (_ownershipHold.Holding(entityId) && !MayTakeHeldEntity(sender, entityId))
+        // A client asks again on every physics contact, and one van nine of them fought over
+        // came to about 58 requests a second. Only asks that could change an owner are counted,
+        // since the repeats above cost a send every half second at most.
+        if (!WithinBudget(sender, MessageKind.Ownership))
         {
-            if (entity?.OwnerSmallId is { } owner && _confirmations.ShouldConfirm(sender.SmallId, entityId))
+            return;
+        }
+
+        // Every change snaps the entity to the new owner's copy, so one that has just changed
+        // hands keeps them for a moment. One nobody owns is nobody's to keep, so it is let through.
+        if (entity?.OwnerSmallId is { } currentOwner
+            && _ownershipHold.Holding(entityId)
+            && !MayTakeHeldEntity(sender, entityId))
+        {
+            // Answered on a throttle of its own. Sharing the one above would leave a player who
+            // has just lost the entity with silence, which is the case that most needs the answer.
+            if (_holdAnswers.ShouldConfirm(sender.SmallId, entityId))
             {
-                SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(owner, entityId), reliable: true);
+                SendTo(sender.Connection, FusionProtocol.BuildOwnershipResponse(currentOwner, entityId),
+                    reliable: true);
             }
 
             DateTime refusedAt = Clock();
@@ -4765,9 +4788,12 @@ public sealed class FusionServer : IDisposable
         // rather than deciding it. This runs before the pose below is judged, so
         // a driver who has just sat down owns the vehicle before their own pose
         // is weighed against the registry.
+        // The hold here is against the last pose that took the vehicle rather than any change,
+        // so a driver sitting down still takes the wheel from whoever just asked for the car.
         if (_seats.SeatOf(sender.SmallId) is { } seat
             && Entities.Get(vehicleId) is { } vehicle
-            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId))
+            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId)
+            && !_seatedPoseHold.Holding(vehicleId))
         {
             // MayHold can remove the entity outright, so a refusal must stop
             // here rather than fall into the pose gate below and register the
@@ -4778,6 +4804,8 @@ public sealed class FusionServer : IDisposable
             }
 
             Entities.SetOwner(vehicleId, sender.SmallId);
+            _ownershipHold.Note(vehicleId);
+            _seatedPoseHold.Note(vehicleId);
             AnnounceOwner(vehicleId, sender.SmallId);
 
             Log("INFO", $"Entity {vehicleId} now owned by {sender.DisplayName} (player {sender.SmallId}), " +
