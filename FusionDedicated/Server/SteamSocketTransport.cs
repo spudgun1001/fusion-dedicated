@@ -115,9 +115,12 @@ public sealed class SteamSocketTransport : ISocketTransport
             return null;
         }
 
+        // Named, since WaitingBytes and PendingBytes are both ints and would swap silently.
         return new ConnectionHealth(status.m_nPing, status.m_flConnectionQualityLocal, status.m_flConnectionQualityRemote,
-            status.m_flOutBytesPerSec, status.m_cbPendingUnreliable + status.m_cbPendingReliable + status.m_cbSentUnackedReliable,
-            (long)status.m_usecQueueTime, status.m_cbPendingUnreliable + status.m_cbPendingReliable);
+            status.m_flOutBytesPerSec,
+            WaitingBytes: status.m_cbPendingUnreliable + status.m_cbPendingReliable + status.m_cbSentUnackedReliable,
+            QueueMicroseconds: (long)status.m_usecQueueTime,
+            PendingBytes: status.m_cbPendingUnreliable + status.m_cbPendingReliable);
     }
 
     public int Receive(int max, Action<HSteamNetConnection, byte[]> handle)

@@ -383,7 +383,7 @@ public class SendPressureTests
             e => e.Message.StartsWith("Send pressure in the last minute:"));
 
         Assert.Equal("Send pressure in the last minute: 1 reliable message(s) sent again, " +
-                     "0 retry(ies) refused, 0 dropped from full queues, 20 pose(s) held back (0.8 KB)",
+                     "0 retry attempt(s) refused, 0 dropped from full queues, 20 pose(s) held back (0.8 KB)",
             line.Message);
         Assert.Equal("INFO", line.Level);
     }

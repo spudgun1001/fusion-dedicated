@@ -5625,7 +5625,7 @@ public sealed class FusionServer : IDisposable
             || _shedSinceSummary > 0)
         {
             Log("INFO", $"Send pressure in the last minute: {_retriedSinceSummary} reliable message(s) " +
-                        $"sent again, {_retryRefusalsSinceSummary} retry(ies) refused, " +
+                        $"sent again, {_retryRefusalsSinceSummary} retry attempt(s) refused, " +
                         $"{_droppedSinceSummary} dropped from full queues, " +
                         $"{_shedSinceSummary} pose(s) held back ({_shedBytesSinceSummary / 1000f:0.0} KB)",
                 console: false);
