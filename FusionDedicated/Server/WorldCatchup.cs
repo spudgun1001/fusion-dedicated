@@ -133,6 +133,16 @@ public static class WorldCatchup
             .ToList();
 
     /// <summary>
+    /// The grabs to replay to a client that has just built an entity: every hand
+    /// still holding it but the client's own, as its holder sent it.
+    /// </summary>
+    public static IReadOnlyList<HeldItem> GrabsToReplay(IEnumerable<HeldItem> held, ushort entityId, byte requester,
+        Func<byte, bool> present)
+        => held
+            .Where(h => h.EntityId == entityId && h.Player != requester && h.Message != null && present(h.Player))
+            .ToList();
+
+    /// <summary>
     /// Whether a pose shows a vehicle has a new owner: the sender sits in any seat of it and
     /// the server still has somebody else down as the owner. Only the client simulating a
     /// vehicle sends its poses, which for an Atv is the driver.

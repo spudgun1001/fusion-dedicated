@@ -4980,8 +4980,11 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // The bytes the other clients are about to get, kept so a joiner can be sent the
+        // same grab rather than one built from a record that has no grip in it.
         ushort? letGo = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed
-            ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId)
+            ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId,
+                ServerProtocol.StampSender(message, sender.SmallId))
             : _grabs.Release(sender.SmallId, grab.Hand);
 
         if (letGo is { } released)
@@ -5062,6 +5065,7 @@ public sealed class FusionServer : IDisposable
 
         ReplayVariables(sender, request.EntityId);
         ReplaySeats(sender, request.EntityId);
+        ReplayGrabs(sender, request.EntityId);
     }
 
     // ---- vehicle seats ----
@@ -5273,6 +5277,40 @@ public sealed class FusionServer : IDisposable
         if (seats.Count > 0)
         {
             Log("INFO", $"Replayed {seats.Count} seat(s) in entity {entityId} to {requester.DisplayName}",
+                console: false);
+        }
+    }
+
+    /// <summary>
+    /// Tells a client what is being held in an entity it has just built.
+    ///
+    /// Fusion asks the holder for this and the answer does not always arrive, so the
+    /// item sat where it was and followed nobody. Queued rather than sent, so it lands
+    /// behind the spawn that put the entity in front of them.
+    /// </summary>
+    private void ReplayGrabs(ConnectedPlayer requester, ushort entityId)
+    {
+        if (Entities.Get(entityId) is not { } entity)
+        {
+            return;
+        }
+
+        var grabs = WorldCatchup.GrabsToReplay(_grabs.All(), entityId, requester.SmallId,
+            id => Players.Get(id) != null);
+
+        foreach (var grab in grabs)
+        {
+            _catchup.Enqueue(requester, () =>
+                ReferenceEquals(Entities.Get(entityId), entity)
+                && _grabs.Holds(grab.Player, grab.Hand, entityId)
+                && Players.Get(grab.Player) != null
+                    ? grab.Message
+                    : null, reliable: true);
+        }
+
+        if (grabs.Count > 0)
+        {
+            Log("INFO", $"Replayed {grabs.Count} grab(s) on entity {entityId} to {requester.DisplayName}",
                 console: false);
         }
     }

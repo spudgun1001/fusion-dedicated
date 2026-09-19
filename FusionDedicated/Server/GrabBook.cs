@@ -1,7 +1,7 @@
 namespace FusionDedicated.Server;
 
-/// <summary>An entity in one of a player's hands.</summary>
-public readonly record struct HeldItem(byte Player, byte Hand, ushort EntityId);
+/// <summary>An entity in one of a player's hands, with the grab that put it there.</summary>
+public readonly record struct HeldItem(byte Player, byte Hand, ushort EntityId, byte[]? Message = null);
 
 /// <summary>
 /// What each player is holding, followed from the grabs and releases passing
@@ -18,7 +18,8 @@ public sealed class GrabBook
 
     /// <summary>A new grab on a hand replaces whatever that hand held.</summary>
     /// <returns>What the hand let go of to make the grab, or null.</returns>
-    public ushort? Grab(byte player, byte hand, ushort entityId)
+    /// <param name="message">The grab as it was relayed, for replaying to a client that missed it.</param>
+    public ushort? Grab(byte player, byte hand, ushort entityId, byte[]? message = null)
     {
         if (hand is not (LeftHand or RightHand))
         {
@@ -30,7 +31,7 @@ public sealed class GrabBook
             ushort? before = HeldIn(player, hand);
 
             _held.RemoveAll(h => h.Player == player && h.Hand == hand);
-            _held.Add(new HeldItem(player, hand, entityId));
+            _held.Add(new HeldItem(player, hand, entityId, message));
 
             return before == entityId ? null : before;
         }
@@ -103,6 +104,15 @@ public sealed class GrabBook
                 .Select(h => h.Player)
                 .Distinct()
                 .ToList();
+        }
+    }
+
+    /// <summary>Whether that hand still holds that entity.</summary>
+    public bool Holds(byte player, byte hand, ushort entityId)
+    {
+        lock (_lock)
+        {
+            return _held.Any(h => h.Player == player && h.Hand == hand && h.EntityId == entityId);
         }
     }
 

@@ -45,6 +45,12 @@ public sealed class ClientView
 
     public Dictionary<(ushort Slot, byte Index), ushort> Slots { get; } = new();
 
+    /// <summary>What each hand of each player holds.</summary>
+    public Dictionary<(byte Player, byte Hand), ushort> Held { get; } = new();
+
+    /// <summary>Grabs naming an entity this game has not built, which a real client drops.</summary>
+    public int GrabsForUnknownEntities { get; private set; }
+
     /// <summary>Vehicles with an Atv driver seat at index 0. A modded car without one has no lock.</summary>
     public HashSet<ushort> DriverLockedVehicles { get; } = new();
 
@@ -120,6 +126,7 @@ public sealed class ClientView
             case FusionProtocol.TagEntityPoseUpdate:
             case FusionProtocol.TagEntityCullStatus:
             case FusionProtocol.TagPlayerRepSeat:
+            case FusionProtocol.TagPlayerRepGrab:
             case ModuleProtocol.TagModule:
                 if (!Loaded)
                 {
@@ -138,6 +145,10 @@ public sealed class ClientView
                 else if (envelope.Tag == FusionProtocol.TagPlayerRepSeat)
                 {
                     Seat(message, envelope);
+                }
+                else if (envelope.Tag == FusionProtocol.TagPlayerRepGrab)
+                {
+                    Grab(message, envelope);
                 }
                 else
                 {
@@ -303,6 +314,29 @@ public sealed class ClientView
             vehicle.Owner = rider;
             vehicle.LockedTo = rider;
         }
+    }
+
+    /// <summary>A grab names an entity, and a game that has not built that entity yet drops it.</summary>
+    private void Grab(byte[] message, Envelope envelope)
+    {
+        if (FusionProtocol.TryReadGrab(message) is not { } grab || envelope.Sender is not { } holder)
+        {
+            return;
+        }
+
+        if (grab.Group != FusionProtocol.GrabGroupEntity || !grab.IsGrabbed)
+        {
+            Held.Remove((holder, grab.Hand));
+            return;
+        }
+
+        if (!Entities.ContainsKey(grab.EntityId))
+        {
+            GrabsForUnknownEntities++;
+            return;
+        }
+
+        Held[(holder, grab.Hand)] = grab.EntityId;
     }
 
     private void Module(byte[] message)
