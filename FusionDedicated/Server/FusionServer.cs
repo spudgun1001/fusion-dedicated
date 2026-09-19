@@ -4983,6 +4983,8 @@ public sealed class FusionServer : IDisposable
         // The bytes the other clients are about to get, kept so a joiner can be sent the
         // same grab rather than one built from a record that has no grip in it.
         ushort? letGo = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed
+                        && WorldCatchup.KnownGrabTarget(grab.EntityId, id => Entities.Get(id) != null,
+                            id => Players.Get(id) != null)
             ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId,
                 ServerProtocol.StampSender(message, sender.SmallId))
             : _grabs.Release(sender.SmallId, grab.Hand);
@@ -5282,36 +5284,33 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
-    /// Tells a client what is being held in an entity it has just built.
+    /// Tells a client what is held in whatever it has just built: an entity, or a
+    /// player's rig, whose id is below the first entity id.
     ///
     /// Fusion asks the holder for this and the answer does not always arrive, so the
     /// item sat where it was and followed nobody. Queued rather than sent, so it lands
-    /// behind the spawn that put the entity in front of them.
+    /// behind whatever put the entity and the rig in front of them.
     /// </summary>
-    private void ReplayGrabs(ConnectedPlayer requester, ushort entityId)
+    private void ReplayGrabs(ConnectedPlayer requester, ushort id)
     {
-        if (Entities.Get(entityId) is not { } entity)
-        {
-            return;
-        }
+        bool Present(byte smallId) => Players.Get(smallId) != null;
 
-        var grabs = WorldCatchup.GrabsToReplay(_grabs.All(), entityId, requester.SmallId,
-            id => Players.Get(id) != null);
+        var grabs = id < EntityRegistry.FirstEntityId
+            ? WorldCatchup.HandsToReplay(_grabs.All(), (byte)id, requester.SmallId, Present)
+            : WorldCatchup.GrabsToReplay(_grabs.All(), id, requester.SmallId, Present);
 
         foreach (var grab in grabs)
         {
-            _catchup.Enqueue(requester, () =>
-                ReferenceEquals(Entities.Get(entityId), entity)
-                && _grabs.Holds(grab.Player, grab.Hand, entityId)
-                && Players.Get(grab.Player) != null
-                    ? grab.Message
-                    : null, reliable: true);
+            // Read at send time, not at queue time: the book is emptied by a release, a
+            // despawn and a departure, and a regrab replaces the bytes with the new grip.
+            _catchup.Enqueue(requester, () => _grabs.Message(grab.Player, grab.Hand, grab.EntityId), reliable: true);
         }
 
         if (grabs.Count > 0)
         {
-            Log("INFO", $"Replayed {grabs.Count} grab(s) on entity {entityId} to {requester.DisplayName}",
-                console: false);
+            string of = id < EntityRegistry.FirstEntityId ? "player" : "entity";
+
+            Log("INFO", $"Replayed {grabs.Count} grab(s) on {of} {id} to {requester.DisplayName}", console: false);
         }
     }
 

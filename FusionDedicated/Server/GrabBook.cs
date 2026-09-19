@@ -107,12 +107,13 @@ public sealed class GrabBook
         }
     }
 
-    /// <summary>Whether that hand still holds that entity.</summary>
-    public bool Holds(byte player, byte hand, ushort entityId)
+    /// <summary>The grab that hand made, while it still holds that entity.</summary>
+    /// <returns>Null when the hand has moved on, which is what a queued replay checks.</returns>
+    public byte[]? Message(byte player, byte hand, ushort entityId)
     {
         lock (_lock)
         {
-            return _held.Any(h => h.Player == player && h.Hand == hand && h.EntityId == entityId);
+            return _held.FirstOrDefault(h => h.Player == player && h.Hand == hand && h.EntityId == entityId).Message;
         }
     }
 

@@ -133,14 +133,33 @@ public static class WorldCatchup
             .ToList();
 
     /// <summary>
+    /// Whether a grab names something the server knows: a prop it has, or the rig of
+    /// somebody here. An id it has never heard of would sit in the book until that id
+    /// went to a real prop, and then show a joiner a hold nobody ever made.
+    /// </summary>
+    public static bool KnownGrabTarget(ushort id, Func<ushort, bool> known, Func<byte, bool> present)
+        => id < EntityRegistry.FirstEntityId ? present((byte)id) : known(id);
+
+    /// <summary>
     /// The grabs to replay to a client that has just built an entity: every hand
     /// still holding it but the client's own, as its holder sent it.
     /// </summary>
     public static IReadOnlyList<HeldItem> GrabsToReplay(IEnumerable<HeldItem> held, ushort entityId, byte requester,
         Func<byte, bool> present)
-        => held
-            .Where(h => h.EntityId == entityId && h.Player != requester && h.Message != null && present(h.Player))
-            .ToList();
+        => Replayable(held.Where(h => h.EntityId == entityId), requester, present);
+
+    /// <summary>
+    /// The grabs to replay to a client that has just built a player's rig: both that
+    /// player's hands. A client drops a grab naming a rig it has not built, so this is
+    /// the first moment one will stick.
+    /// </summary>
+    public static IReadOnlyList<HeldItem> HandsToReplay(IEnumerable<HeldItem> held, byte holder, byte requester,
+        Func<byte, bool> present)
+        => Replayable(held.Where(h => h.Player == holder), requester, present);
+
+    private static IReadOnlyList<HeldItem> Replayable(IEnumerable<HeldItem> held, byte requester,
+        Func<byte, bool> present)
+        => held.Where(h => h.Player != requester && h.Message != null && present(h.Player)).ToList();
 
     /// <summary>
     /// Whether a pose shows a vehicle has a new owner: the sender sits in any seat of it and
