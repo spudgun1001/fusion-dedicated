@@ -404,20 +404,24 @@ while `ExtendedProtection` is on, to every rank.
 
 An avatar swap carries the avatar's proportions and masses, and every other game gives
 the model those numbers, so a modded client sending a huge mass flings whoever it
-touches. A swap is dropped, and nobody receives it, when its scale is outside
-`MinAvatarScale` to `MaxAvatarScale` (0.005 to 50), its height is outside 1.76 times
-those, an arm, chest, head, leg or pelvis weighs more than `MaxAvatarPartMass` (2500),
-the whole avatar weighs under 1 or more than `MaxAvatarMass` (5000), or a length or
-radius is negative. The numbers come from what players here actually wear: tiny
-avatars, a 40 times scale and a 1,649 kg avatar were all being dropped at the first
-limits, so the limits moved rather than the players. Values no real avatar has are
-strikes as well: a number that is not a real number or is too small to hold, a mass or
-a scale over 100000 either way, any other stat over a billion either way, a negative
-mass, or a whole avatar with no mass. `AvatarStrikesBeforeKick` (3) strikes inside
-`AvatarStrikeWindowSeconds` (60) kick the player, so a big avatar that is only over the
-limits is dropped without a kick. Joins are checked too: one with a value no real
-avatar has is refused with "impossible avatar stats", and one only over the limits is
-let in with its numbers pulled back inside them. This applies while
+touches. A swap whose scale is outside `MinAvatarScale` to `MaxAvatarScale` (0.005 to
+50), whose height is outside 1.76 times those, whose arm, chest, head, leg or pelvis
+weighs more than `MaxAvatarPartMass` (2500), whose whole avatar weighs under 1 or more
+than `MaxAvatarMass` (5000), or whose length or radius is negative, is relayed with
+those numbers pulled back inside the limits rather than dropped, so everybody sees the
+avatar at the nearest size the server allows. The numbers come from what players here
+actually wear: tiny avatars, a 40 times scale and a 1,649 kg avatar were all being
+dropped at the first limits, so the limits moved rather than the players. Values no
+real avatar has are dropped and are strikes: a number that is not a real number or is
+too small to hold, a mass or a scale over 100000 either way, any other stat over a
+billion either way, a negative mass, or a whole avatar with no mass.
+`AvatarStrikesBeforeKick` (3) strikes inside `AvatarStrikeWindowSeconds` (60) kick the
+player, so a big avatar that is only over the limits costs nothing. Joins are checked
+the same way: one with a value no real avatar has is refused with "impossible avatar
+stats", and one only over the limits is let in with its numbers pulled back inside
+them. A limit set below its own minimum, such as a `MinAvatarScale` over
+`MaxAvatarScale`, is ignored rather than obeyed and named in the log at startup, since
+obeying it would refuse every avatar on the server. This applies while
 `ExtendedProtection` is on, to every rank. Whatever the settings, any message whose
 prefix Fusion would read differently from the server is dropped and noted in the log
 file only.
