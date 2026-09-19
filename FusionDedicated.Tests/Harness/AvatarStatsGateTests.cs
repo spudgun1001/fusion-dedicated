@@ -251,6 +251,26 @@ public class AvatarStatsGateTests
     }
 
     [Fact]
+    public void A_join_is_refused_while_the_scale_limits_are_the_wrong_way_round()
+    {
+        var config = Config();
+        config.MinAvatarScale = 2f;
+        config.MaxAvatarScale = 1f;
+        using var world = new World(config);
+        byte[] stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
+
+        var connection = AskWith(world, KanzaId, "Kanza", stats);
+
+        Assert.Null(world.Server.Players.GetByPlatformId(KanzaId));
+        Assert.Empty(world.Server.Players.Players);
+        Assert.Equal("avatar stats the limits could not clamp", ConnectionCloseTests.RefusalSentTo(world, connection));
+        Assert.Contains(world.Server.RecentLog(2000),
+            e => e.Level == "WARN"
+                 && e.Message == $"Rejected {KanzaId}: Kanza joined with an avatar with localScale.x 5, over 1, refused");
+    }
+
+    [Fact]
     public void A_join_with_impossible_stats_is_let_in_while_extended_protection_is_off()
     {
         var config = Config();
@@ -329,15 +349,16 @@ public class AvatarStatsGateTests
     [Fact]
     public void A_swap_is_dropped_while_the_scale_limits_are_the_wrong_way_round()
     {
-        var config = Config();
-        config.MinAvatarScale = 2f;
-        config.MaxAvatarScale = 1f;
-        using var world = new World(config);
+        using var world = new World(Config());
         var (joel, kanza, max) = Loaded(world);
         int toKanza = world.Transport.SentTo(kanza.Connection).Count;
         int toMax = world.Transport.SentTo(max.Connection).Count;
         byte[] stats = ClientMessages.AvatarStats();
         ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
+
+        // Crossed while they are already in, since no join gets past them.
+        world.Server.Config.MinAvatarScale = 2f;
+        world.Server.Config.MaxAvatarScale = 1f;
 
         joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
 

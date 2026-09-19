@@ -1052,20 +1052,25 @@ public sealed class FusionServer : IDisposable
         byte[] joinStats = request.AvatarStats;
         var joinVerdict = Config.ExtendedProtection ? AvatarStatsCheck.Check(joinStats, Config) : default;
 
-        if (joinVerdict.Problem != null)
+        if (joinVerdict.Problem is { } joinProblem)
         {
             string joiner = request.Metadata.GetValueOrDefault("Username", "") is { Length: > 0 } username
                 ? username
                 : platformId.ToString();
 
-            if (joinVerdict.Impossible)
+            byte[]? clamped = joinVerdict.Impossible ? null : AvatarStatsCheck.Clamp(joinStats, Config);
+
+            // Limits set the wrong way round leave a field alone, so the clamped
+            // block is checked rather than trusted. The swap gate reads the same way.
+            if (clamped == null || AvatarStatsCheck.Problem(clamped, Config) != null)
             {
-                Reject("impossible avatar stats", $"{joiner} joined with an avatar with {joinVerdict.Problem}, refused");
+                Reject(joinVerdict.Impossible ? "impossible avatar stats" : "avatar stats the limits could not clamp",
+                    $"{joiner} joined with an avatar with {joinProblem}, refused");
                 return;
             }
 
-            Log("WARN", $"{joiner} joined with an avatar with {joinVerdict.Problem}, clamped to the limits");
-            joinStats = AvatarStatsCheck.Clamp(joinStats, Config);
+            Log("WARN", $"{joiner} joined with an avatar with {joinProblem}, clamped to the limits");
+            joinStats = clamped;
         }
 
         // Before a slot is given, so a plugin refusing costs nothing.
