@@ -71,37 +71,18 @@ public static class AvatarStatsCheck
         {
             var (min, max) = Bounds(i, limits);
 
-            if (min > max)
-            {
-                continue;
-            }
-
             BinaryPrimitives.WriteSingleBigEndian(clamped.AsSpan(i * 4, 4), Math.Clamp(Read(clamped, i), min, max));
         }
 
         return clamped;
     }
 
-    /// <summary>
-    /// Turns off a scale pair set the wrong way round, and says which. Obeying it would
-    /// shut every player out of the server over a typo.
-    /// </summary>
-    public static string? IgnoreCrossedLimits(ServerConfig limits)
-    {
-        if (limits.MinAvatarScale <= 0f || limits.MaxAvatarScale <= 0f
-            || limits.MinAvatarScale <= limits.MaxAvatarScale)
-        {
-            return null;
-        }
-
-        string said = $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
-                      $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed";
-
-        limits.MinAvatarScale = 0f;
-        limits.MaxAvatarScale = 0f;
-
-        return said;
-    }
+    /// <summary>Names a scale pair set the wrong way round, which <see cref="Bounds"/> ignores.</summary>
+    public static string? CrossedLimitsWarning(ServerConfig limits)
+        => limits.MinAvatarScale > 0f && limits.MaxAvatarScale > 0f && limits.MinAvatarScale > limits.MaxAvatarScale
+            ? $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
+              $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed"
+            : null;
 
     private static string? Impossible(int i, float value)
     {
@@ -132,6 +113,14 @@ public static class AvatarStatsCheck
 
     /// <summary>The range one field must sit in. A limit setting of 0 or less leaves that side open.</summary>
     private static (float Min, float Max) Bounds(int i, ServerConfig limits)
+    {
+        var (min, max) = Configured(i, limits);
+
+        // A minimum over its maximum is a typo, and obeying it would refuse every avatar.
+        return min > max ? (float.NegativeInfinity, float.PositiveInfinity) : (min, max);
+    }
+
+    private static (float Min, float Max) Configured(int i, ServerConfig limits)
     {
         float lowScale = limits.MinAvatarScale > 0f ? limits.MinAvatarScale : float.NegativeInfinity;
         float highScale = limits.MaxAvatarScale > 0f ? limits.MaxAvatarScale : float.PositiveInfinity;

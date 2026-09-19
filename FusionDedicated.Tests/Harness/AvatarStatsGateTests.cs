@@ -251,27 +251,6 @@ public class AvatarStatsGateTests
     }
 
     [Fact]
-    public void A_join_is_refused_when_the_limits_are_crossed_while_running()
-    {
-        using var world = new World(Config());
-        byte[] stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
-
-        // The start check turns a crossed pair off, so only an edit since then leaves one.
-        world.Server.Config.MinAvatarScale = 2f;
-        world.Server.Config.MaxAvatarScale = 1f;
-
-        var connection = AskWith(world, KanzaId, "Kanza", stats);
-
-        Assert.Null(world.Server.Players.GetByPlatformId(KanzaId));
-        Assert.Empty(world.Server.Players.Players);
-        Assert.Equal("avatar stats the limits could not clamp", ConnectionCloseTests.RefusalSentTo(world, connection));
-        Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN"
-                 && e.Message == $"Rejected {KanzaId}: Kanza joined with an avatar with localScale.x 5, over 1, refused");
-    }
-
-    [Fact]
     public void A_join_with_impossible_stats_is_let_in_while_extended_protection_is_off()
     {
         var config = Config();
@@ -348,29 +327,6 @@ public class AvatarStatsGateTests
             .LastOrDefault();
 
     [Fact]
-    public void A_swap_is_dropped_while_the_scale_limits_are_the_wrong_way_round()
-    {
-        using var world = new World(Config());
-        var (joel, kanza, max) = Loaded(world);
-        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
-        int toMax = world.Transport.SentTo(max.Connection).Count;
-        byte[] stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
-
-        // Crossed while they are already in, since no join gets past them.
-        world.Server.Config.MinAvatarScale = 2f;
-        world.Server.Config.MaxAvatarScale = 1f;
-
-        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
-
-        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
-        Assert.Equal(0, AvatarsTo(world, max, toMax));
-        Assert.False(Kicked(world, JoelId));
-        Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN" && e.Message == "Joel sent an avatar with localScale.x 5, over 1, dropped");
-    }
-
-    [Fact]
     public void Crossed_scale_limits_are_ignored_rather_than_obeyed()
     {
         var config = Config();
@@ -393,6 +349,51 @@ public class AvatarStatsGateTests
         Assert.Contains(world.Server.RecentLog(2000),
             e => e.Level == "WARN"
                  && e.Message == "MinAvatarScale 2 is over MaxAvatarScale 1, so both are ignored until they are fixed");
+    }
+
+    [Fact]
+    public void Limits_crossed_after_the_start_check_are_ignored_too()
+    {
+        using var world = new World(Config());
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+        byte[] stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
+
+        // What a staff member typing a bad number on the panel leaves behind.
+        world.Server.Config.MinAvatarScale = 2f;
+        world.Server.Config.MaxAvatarScale = 1f;
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(5f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
+        Assert.NotNull(world.Server.Players.GetByPlatformId(MaxId));
+
+        AskWith(world, 76561198000000006, "Newcomer", ClientMessages.AvatarStats());
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
+
+        Assert.NotNull(world.Server.Players.GetByPlatformId(76561198000000006));
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+    }
+
+    [Fact]
+    public void A_maximum_mass_under_the_floor_is_ignored_too()
+    {
+        var config = Config();
+        config.MaxAvatarMass = 0.5f;
+        using var world = new World(config);
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, ClientMessages.AvatarStats()));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(80f, StatOf(StatsTo(world, kanza, toKanza)!, "massTotal"));
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
     }
 
     [Fact]

@@ -209,18 +209,17 @@ public class AvatarStatsCheckTests
     }
 
     [Fact]
-    public void A_minimum_scale_over_the_maximum_turns_the_pair_off()
+    public void A_minimum_over_the_maximum_is_no_limit_at_all()
     {
-        Assert.Null(AvatarStatsCheck.IgnoreCrossedLimits(new ServerConfig()));
-        Assert.Null(AvatarStatsCheck.IgnoreCrossedLimits(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
+        Assert.Null(AvatarStatsCheck.CrossedLimitsWarning(new ServerConfig()));
+        Assert.Null(AvatarStatsCheck.CrossedLimitsWarning(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
 
         var crossed = new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f };
 
         Assert.Equal("MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed",
-            AvatarStatsCheck.IgnoreCrossedLimits(crossed));
-        Assert.Equal(0f, crossed.MinAvatarScale);
-        Assert.Equal(0f, crossed.MaxAvatarScale);
+            AvatarStatsCheck.CrossedLimitsWarning(crossed));
         Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", 5f), crossed));
+        Assert.Null(AvatarStatsCheck.Problem(With("massTotal", 80f), new ServerConfig { MaxAvatarMass = 0.5f }));
     }
 
     [Fact]
@@ -248,7 +247,7 @@ public class AvatarStatsCheckTests
 
     [Fact]
     public void The_scale_warning_is_given_when_the_server_starts()
-        => Assert.Contains("AvatarStatsCheck.IgnoreCrossedLimits(Config)", FusionServerSource.Method("public void Start("));
+        => Assert.Contains("AvatarStatsCheck.CrossedLimitsWarning(Config)", FusionServerSource.Method("public void Start("));
 
     private static float Stat(byte[] stats, string field)
         => BinaryPrimitives.ReadSingleBigEndian(stats.AsSpan(AvatarStatsCheck.FieldNames.ToList().IndexOf(field) * 4, 4));
