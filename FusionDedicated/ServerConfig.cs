@@ -710,6 +710,16 @@ public sealed class ServerConfig
             return new ServerConfig();
         }
 
+        // A number too big for a float loads as infinity, and a limit of infinity
+        // is obeyed rather than questioned by everything downstream.
+        if (typeof(ServerConfig).GetProperties()
+                .Where(p => p.PropertyType == typeof(float))
+                .FirstOrDefault(p => !float.IsFinite((float)p.GetValue(config)!)) is { } overflowed)
+        {
+            error = $"{overflowed.Name} is not a finite number";
+            return new ServerConfig();
+        }
+
         foreach (ulong legacy in config.BannedPlatformIds)
         {
             if (!config.IsBanned(legacy))

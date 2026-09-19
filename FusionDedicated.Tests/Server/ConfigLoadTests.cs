@@ -61,6 +61,18 @@ public class ConfigLoadTests : IDisposable
     }
 
     [Fact]
+    public void A_limit_too_big_for_a_number_is_reported()
+    {
+        // 3.5e38 is over what a float holds, and it used to load as infinity in silence.
+        var config = ServerConfig.Load(
+            Write("""{"ServerName":"Kept","MaxAvatarScale":3.5e38}"""), out string? error);
+
+        Assert.NotNull(error);
+        Assert.Contains("MaxAvatarScale", error);
+        Assert.Equal(new ServerConfig().MaxAvatarScale, config.MaxAvatarScale);
+    }
+
+    [Fact]
     public void A_good_file_reports_no_error()
     {
         var config = ServerConfig.Load(
