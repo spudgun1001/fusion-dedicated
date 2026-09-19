@@ -251,14 +251,15 @@ public class AvatarStatsGateTests
     }
 
     [Fact]
-    public void A_join_is_refused_while_the_scale_limits_are_the_wrong_way_round()
+    public void A_join_is_refused_when_the_limits_are_crossed_while_running()
     {
-        var config = Config();
-        config.MinAvatarScale = 2f;
-        config.MaxAvatarScale = 1f;
-        using var world = new World(config);
+        using var world = new World(Config());
         byte[] stats = ClientMessages.AvatarStats();
         ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
+
+        // The start check turns a crossed pair off, so only an edit since then leaves one.
+        world.Server.Config.MinAvatarScale = 2f;
+        world.Server.Config.MaxAvatarScale = 1f;
 
         var connection = AskWith(world, KanzaId, "Kanza", stats);
 
@@ -367,6 +368,31 @@ public class AvatarStatsGateTests
         Assert.False(Kicked(world, JoelId));
         Assert.Contains(world.Server.RecentLog(2000),
             e => e.Level == "WARN" && e.Message == "Joel sent an avatar with localScale.x 5, over 1, dropped");
+    }
+
+    [Fact]
+    public void Crossed_scale_limits_are_ignored_rather_than_obeyed()
+    {
+        var config = Config();
+        config.MinAvatarScale = 2f;
+        config.MaxAvatarScale = 1f;
+        using var world = new World(config);
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+        byte[] stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(5f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+        Assert.Contains(world.Server.RecentLog(2000),
+            e => e.Level == "WARN"
+                 && e.Message == "MinAvatarScale 2 is over MaxAvatarScale 1, so both are ignored until they are fixed");
     }
 
     [Fact]

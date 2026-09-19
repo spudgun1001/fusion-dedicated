@@ -82,12 +82,26 @@ public static class AvatarStatsCheck
         return clamped;
     }
 
-    /// <summary>A setting that would refuse every avatar, or null.</summary>
-    public static string? SettingsProblem(ServerConfig limits)
-        => limits.MinAvatarScale > 0f && limits.MaxAvatarScale > 0f && limits.MinAvatarScale > limits.MaxAvatarScale
-            ? $"MinAvatarScale {Show(limits.MinAvatarScale)} is over MaxAvatarScale {Show(limits.MaxAvatarScale)}, " +
-              "so every avatar swap is dropped"
-            : null;
+    /// <summary>
+    /// Turns off a scale pair set the wrong way round, and says which. Obeying it would
+    /// shut every player out of the server over a typo.
+    /// </summary>
+    public static string? IgnoreCrossedLimits(ServerConfig limits)
+    {
+        if (limits.MinAvatarScale <= 0f || limits.MaxAvatarScale <= 0f
+            || limits.MinAvatarScale <= limits.MaxAvatarScale)
+        {
+            return null;
+        }
+
+        string said = $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
+                      $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed";
+
+        limits.MinAvatarScale = 0f;
+        limits.MaxAvatarScale = 0f;
+
+        return said;
+    }
 
     private static string? Impossible(int i, float value)
     {

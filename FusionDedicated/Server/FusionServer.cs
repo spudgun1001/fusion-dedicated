@@ -135,7 +135,7 @@ public sealed class FusionServer : IDisposable
 
         RebuildBlocklist();
 
-        if (AvatarStatsCheck.SettingsProblem(Config) is { } avatarSettings)
+        if (AvatarStatsCheck.IgnoreCrossedLimits(Config) is { } avatarSettings)
         {
             Log("WARN", avatarSettings);
         }
