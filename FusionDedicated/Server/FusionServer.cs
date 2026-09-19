@@ -135,9 +135,9 @@ public sealed class FusionServer : IDisposable
 
         RebuildBlocklist();
 
-        if (AvatarStatsCheck.CrossedLimitsWarning(Config) is { } avatarSettings)
+        foreach (string avatarSetting in AvatarStatsCheck.SettingWarnings(Config))
         {
-            Log("WARN", avatarSettings);
+            Log("WARN", avatarSetting);
         }
 
         Log("INFO", $"Relay socket listening as SteamID {_transport.LocalSteamId}");
@@ -1060,8 +1060,8 @@ public sealed class FusionServer : IDisposable
 
             byte[]? clamped = joinVerdict.Impossible ? null : AvatarStatsCheck.Clamp(joinStats, Config);
 
-            // Limits set the wrong way round leave a field alone, so the clamped
-            // block is checked rather than trusted. The swap gate reads the same way.
+            // A bound of infinity or a subnormal one makes the clamp land on a value no
+            // avatar can have, so the clamped block is checked. The swap gate reads the same way.
             if (clamped == null || AvatarStatsCheck.Problem(clamped, Config) != null)
             {
                 Reject(joinVerdict.Impossible ? "impossible avatar stats" : "avatar stats the limits could not clamp",
@@ -2132,8 +2132,8 @@ public sealed class FusionServer : IDisposable
                     // the limits and relayed rather than taken off the player.
                     byte[]? clamped = statsVerdict.Impossible ? null : AvatarStatsCheck.Clamp(stats, Config);
 
-                    // Limits set the wrong way round leave a field alone, so the clamped
-                    // block is checked rather than trusted.
+                    // A bound of infinity or a subnormal one makes the clamp land on a value
+                    // no avatar can have, so the clamped block is checked rather than trusted.
                     if (clamped == null
                         || AvatarStatsCheck.Problem(clamped, Config) != null
                         || !GateProtocol.TryWriteAvatarStats(message, clamped))

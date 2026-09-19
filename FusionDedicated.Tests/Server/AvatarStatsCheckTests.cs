@@ -211,15 +211,26 @@ public class AvatarStatsCheckTests
     [Fact]
     public void A_minimum_over_the_maximum_is_no_limit_at_all()
     {
-        Assert.Null(AvatarStatsCheck.CrossedLimitsWarning(new ServerConfig()));
-        Assert.Null(AvatarStatsCheck.CrossedLimitsWarning(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
-
         var crossed = new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f };
 
-        Assert.Equal("MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed",
-            AvatarStatsCheck.CrossedLimitsWarning(crossed));
         Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", 5f), crossed));
         Assert.Null(AvatarStatsCheck.Problem(With("massTotal", 80f), new ServerConfig { MaxAvatarMass = 0.5f }));
+    }
+
+    [Fact]
+    public void Every_limit_the_bounds_ignore_is_named_at_the_start()
+    {
+        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig()));
+        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
+
+        Assert.Equal(new[] { "MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed" },
+            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f }));
+
+        Assert.Equal(new[] { "MaxAvatarMass 0.5 is under the 1 every avatar weighs, so it is ignored until it is fixed" },
+            AvatarStatsCheck.SettingWarnings(new ServerConfig { MaxAvatarMass = 0.5f }));
+
+        Assert.Equal(new[] { "MaxAvatarScale Infinity is not a finite number, so fix it before trusting the avatar limits" },
+            AvatarStatsCheck.SettingWarnings(new ServerConfig { MaxAvatarScale = float.PositiveInfinity }));
     }
 
     [Fact]
@@ -247,7 +258,7 @@ public class AvatarStatsCheckTests
 
     [Fact]
     public void The_scale_warning_is_given_when_the_server_starts()
-        => Assert.Contains("AvatarStatsCheck.CrossedLimitsWarning(Config)", FusionServerSource.Method("public void Start("));
+        => Assert.Contains("AvatarStatsCheck.SettingWarnings(Config)", FusionServerSource.Method("public void Start("));
 
     private static float Stat(byte[] stats, string field)
         => BinaryPrimitives.ReadSingleBigEndian(stats.AsSpan(AvatarStatsCheck.FieldNames.ToList().IndexOf(field) * 4, 4));

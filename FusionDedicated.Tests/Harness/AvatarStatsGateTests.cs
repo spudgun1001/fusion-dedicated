@@ -360,7 +360,7 @@ public class AvatarStatsGateTests
         byte[] stats = ClientMessages.AvatarStats();
         ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
 
-        // What a staff member typing a bad number on the panel leaves behind.
+        // Written after the start check, which is the only way one reaches the bounds.
         world.Server.Config.MinAvatarScale = 2f;
         world.Server.Config.MaxAvatarScale = 1f;
 
@@ -394,6 +394,37 @@ public class AvatarStatsGateTests
         joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
 
         Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+    }
+
+    [Fact]
+    public void A_swap_a_limit_of_infinity_would_clamp_to_infinity_is_dropped()
+    {
+        using var world = new World(Config());
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+
+        // Set after the joins, since no avatar can sit inside this pair.
+        world.Server.Config.MinAvatarScale = float.PositiveInfinity;
+        world.Server.Config.MaxAvatarScale = float.PositiveInfinity;
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, ClientMessages.AvatarStats()));
+
+        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
+        Assert.False(Kicked(world, JoelId));
+    }
+
+    [Fact]
+    public void A_join_a_subnormal_limit_would_clamp_to_a_subnormal_is_refused()
+    {
+        var config = Config();
+        config.MinAvatarScale = 0f;
+        config.MaxAvatarScale = 1e-42f;
+        using var world = new World(config);
+
+        var connection = AskWith(world, KanzaId, "Kanza", ClientMessages.AvatarStats());
+
+        Assert.Null(world.Server.Players.GetByPlatformId(KanzaId));
+        Assert.Equal("avatar stats the limits could not clamp", ConnectionCloseTests.RefusalSentTo(world, connection));
     }
 
     [Fact]

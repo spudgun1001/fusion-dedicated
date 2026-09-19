@@ -77,12 +77,37 @@ public static class AvatarStatsCheck
         return clamped;
     }
 
-    /// <summary>Names a scale pair set the wrong way round, which <see cref="Bounds"/> ignores.</summary>
-    public static string? CrossedLimitsWarning(ServerConfig limits)
-        => limits.MinAvatarScale > 0f && limits.MaxAvatarScale > 0f && limits.MinAvatarScale > limits.MaxAvatarScale
-            ? $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
-              $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed"
-            : null;
+    /// <summary>Names a limit <see cref="Bounds"/> ignores, so a setting doing nothing is not silent.</summary>
+    public static IEnumerable<string> SettingWarnings(ServerConfig limits)
+    {
+        foreach (var (name, value) in Settings(limits))
+        {
+            if (!float.IsFinite(value))
+            {
+                yield return $"{name} {Show(value)} is not a finite number, so fix it before trusting the avatar limits";
+            }
+        }
+
+        if (limits.MinAvatarScale > 0f && limits.MaxAvatarScale > 0f && limits.MinAvatarScale > limits.MaxAvatarScale)
+        {
+            yield return $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
+                         $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed";
+        }
+
+        if (limits.MaxAvatarMass > 0f && limits.MaxAvatarMass < MassFloor)
+        {
+            yield return $"MaxAvatarMass {Show(limits.MaxAvatarMass)} is under the {Show(MassFloor)} every avatar " +
+                         "weighs, so it is ignored until it is fixed";
+        }
+    }
+
+    private static IEnumerable<(string Name, float Value)> Settings(ServerConfig limits)
+    {
+        yield return (nameof(limits.MinAvatarScale), limits.MinAvatarScale);
+        yield return (nameof(limits.MaxAvatarScale), limits.MaxAvatarScale);
+        yield return (nameof(limits.MaxAvatarMass), limits.MaxAvatarMass);
+        yield return (nameof(limits.MaxAvatarPartMass), limits.MaxAvatarPartMass);
+    }
 
     private static string? Impossible(int i, float value)
     {
