@@ -2125,8 +2125,13 @@ public sealed class FusionServer : IDisposable
                 {
                     // A small avatar is an ordinary thing to wear, so it is pulled into
                     // the limits and relayed rather than taken off the player.
-                    if (statsVerdict.Impossible
-                        || !GateProtocol.TryWriteAvatarStats(message, AvatarStatsCheck.Clamp(stats, Config)))
+                    byte[]? clamped = statsVerdict.Impossible ? null : AvatarStatsCheck.Clamp(stats, Config);
+
+                    // Limits set the wrong way round leave a field alone, so the clamped
+                    // block is checked rather than trusted.
+                    if (clamped == null
+                        || AvatarStatsCheck.Problem(clamped, Config) != null
+                        || !GateProtocol.TryWriteAvatarStats(message, clamped))
                     {
                         Log("WARN", $"{sender.DisplayName} sent an avatar with {statsProblem}, dropped");
 

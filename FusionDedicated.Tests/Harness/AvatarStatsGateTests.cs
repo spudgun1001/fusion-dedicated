@@ -327,6 +327,53 @@ public class AvatarStatsGateTests
             .LastOrDefault();
 
     [Fact]
+    public void A_swap_is_dropped_while_the_scale_limits_are_the_wrong_way_round()
+    {
+        var config = Config();
+        config.MinAvatarScale = 2f;
+        config.MaxAvatarScale = 1f;
+        using var world = new World(config);
+        var (joel, kanza, max) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+        int toMax = world.Transport.SentTo(max.Connection).Count;
+        byte[] stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
+
+        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(0, AvatarsTo(world, max, toMax));
+        Assert.False(Kicked(world, JoelId));
+        Assert.Contains(world.Server.RecentLog(2000),
+            e => e.Level == "WARN" && e.Message == "Joel sent an avatar with localScale.x 5, over 1, dropped");
+    }
+
+    [Fact]
+    public void A_late_joiner_is_told_the_clamped_stats()
+    {
+        var config = Config();
+        config.MinAvatarScale = 0.05f;
+        using var world = new World(config);
+        var (joel, _, _) = Loaded(world);
+        byte[] tiny = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(tiny, "localScale.x", 0.01f);
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, tiny));
+
+        var latecomer = AskWith(world, 76561198000000005, "Late", ClientMessages.AvatarStats());
+        byte[] clamped = world.Server.Players.GetByPlatformId(JoelId)!.AvatarStats;
+        var told = world.Transport.SentTo(latecomer)
+            .Select(sent => Envelope.Read(sent.Message))
+            .OfType<Envelope>()
+            .Last(envelope => envelope.Tag == FusionProtocol.TagConnectionResponse
+                              && System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(envelope.Payload) == JoelId);
+
+        Assert.Equal(0.05f, StatOf(clamped, "localScale.x"));
+        Assert.True(told.Payload.AsSpan().IndexOf(clamped) > 0);
+        Assert.True(told.Payload.AsSpan().IndexOf(tiny) < 0);
+    }
+
+    [Fact]
     public void A_join_merely_over_the_limits_is_let_in_with_its_stats_clamped()
     {
         using var world = new World(Config());
