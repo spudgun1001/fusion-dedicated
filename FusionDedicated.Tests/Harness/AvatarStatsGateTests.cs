@@ -275,7 +275,7 @@ public class AvatarStatsGateTests
             stats.AsSpan(global::FusionDedicated.Server.Safety.AvatarStatsCheck.FieldNames.ToList().IndexOf(field) * 4, 4));
 
     [Fact]
-    public void A_swap_merely_over_the_limits_is_dropped_without_a_strike()
+    public void A_swap_merely_over_the_limits_is_clamped_without_a_strike()
     {
         using var world = new World(Config());
         var (joel, kanza, max) = Loaded(world);
@@ -286,12 +286,45 @@ public class AvatarStatsGateTests
             joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, OverTheLimit()));
         }
 
-        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(5, AvatarsTo(world, kanza, toKanza));
         Assert.False(Kicked(world, JoelId));
+        Assert.Equal(5000f, StatOf(StatsTo(world, kanza, toKanza)!, "massTotal"));
+        Assert.Equal(5000f, StatOf(world.Server.Players.GetByPlatformId(JoelId)!.AvatarStats, "massTotal"));
         Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN" && e.Message.StartsWith("Joel sent an avatar with massTotal 6000", StringComparison.Ordinal)
-                 && e.Message.EndsWith(", dropped", StringComparison.Ordinal));
+            e => e.Level == "WARN" && e.Message == "Joel sent an avatar with massTotal 6000, over 5000, clamped to the limits");
     }
+
+    [Fact]
+    public void A_tiny_avatar_reaches_everyone_with_its_scale_clamped()
+    {
+        var config = Config();
+        config.MinAvatarScale = 0.05f;
+        using var world = new World(config);
+        var (joel, kanza, max) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+        int toMax = world.Transport.SentTo(max.Connection).Count;
+        byte[] tiny = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(tiny, "localScale.x", 0.01f);
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, tiny));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(1, AvatarsTo(world, max, toMax));
+        Assert.Equal(0.05f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
+        Assert.Equal(0.05f, StatOf(StatsTo(world, max, toMax)!, "localScale.x"));
+        Assert.Equal(Barcode, world.Server.Players.GetByPlatformId(JoelId)!.AvatarBarcode);
+        Assert.Equal(0.05f, StatOf(world.Server.Players.GetByPlatformId(JoelId)!.AvatarStats, "localScale.x"));
+        Assert.Contains(world.Server.RecentLog(2000),
+            e => e.Level == "WARN" && e.Message == "Joel sent an avatar with localScale.x 0.01, under 0.05, clamped to the limits");
+    }
+
+    /// <summary>The proportions block inside the last avatar message this player received.</summary>
+    private static byte[]? StatsTo(World world, FakePlayer player, int before)
+        => world.Transport.SentTo(player.Connection)
+            .Skip(before)
+            .Where(sent => sent.Message[0] == GateProtocol.TagPlayerRepAvatar)
+            .Select(sent => GateProtocol.TryReadAvatarStats(sent.Message))
+            .LastOrDefault();
 
     [Fact]
     public void A_join_merely_over_the_limits_is_let_in_with_its_stats_clamped()

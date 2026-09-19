@@ -2121,17 +2121,25 @@ public sealed class FusionServer : IDisposable
 
                 var statsVerdict = AvatarStatsCheck.Check(stats, Config);
 
-                if (statsVerdict.Problem != null)
+                if (statsVerdict.Problem is { } statsProblem)
                 {
-                    Log("WARN", $"{sender.DisplayName} sent an avatar with {statsVerdict.Problem}, dropped");
-
-                    // Only values no real avatar has count, so a big modded avatar is never kicked for its size.
-                    if (statsVerdict.Impossible && _avatarStrikes.Strike(sender.SmallId, Clock()))
+                    // A small avatar is an ordinary thing to wear, so it is pulled into
+                    // the limits and relayed rather than taken off the player.
+                    if (statsVerdict.Impossible
+                        || !GateProtocol.TryWriteAvatarStats(message, AvatarStatsCheck.Clamp(stats, Config)))
                     {
-                        Kick(sender.SmallId, "Kicked for sending impossible avatar stats");
+                        Log("WARN", $"{sender.DisplayName} sent an avatar with {statsProblem}, dropped");
+
+                        // Only values no real avatar has count, so a big modded avatar is never kicked for its size.
+                        if (statsVerdict.Impossible && _avatarStrikes.Strike(sender.SmallId, Clock()))
+                        {
+                            Kick(sender.SmallId, "Kicked for sending impossible avatar stats");
+                        }
+
+                        return false;
                     }
 
-                    return false;
+                    Log("WARN", $"{sender.DisplayName} sent an avatar with {statsProblem}, clamped to the limits");
                 }
 
                 var verdict = _blocklist.Check(barcode, sender.Permission);

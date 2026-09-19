@@ -228,13 +228,31 @@ public static class GateProtocol
     }
 
     public static byte[]? TryReadAvatarStats(ReadOnlySpan<byte> message)
+        => StatsOffset(message) is { } at ? message.Slice(at, AvatarStatsSize).ToArray() : null;
+
+    /// <summary>Puts clamped proportions back where they were read from, leaving the rest of the message alone.</summary>
+    public static bool TryWriteAvatarStats(byte[] message, ReadOnlySpan<byte> stats)
+    {
+        if (stats.Length != AvatarStatsSize || StatsOffset(message) is not { } at)
+        {
+            return false;
+        }
+
+        stats.CopyTo(message.AsSpan(at, AvatarStatsSize));
+
+        return true;
+    }
+
+    /// <summary>Where the proportions block starts, or null when the message cannot hold one.</summary>
+    private static int? StatsOffset(ReadOnlySpan<byte> message)
     {
         try
         {
             var reader = new FusionNetReader(message);
 
             return TrySkipPrefix(ref reader, message, TagPlayerRepAvatar)
-                ? reader.ReadRaw(AvatarStatsSize).ToArray()
+                   && reader.Position + AvatarStatsSize <= message.Length
+                ? reader.Position
                 : null;
         }
         catch
