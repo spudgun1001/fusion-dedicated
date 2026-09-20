@@ -54,6 +54,7 @@
   "OwnershipRequestsPerSecond": 10,
   "OwnershipHoldMilliseconds": 500,
   "SeatRefusalCooldownSeconds": 2,
+  "DriverSeatIndex": 0,
   "CatchupMessagesPerSecond": 100,
   "SendRetryQueue": 256,
   "CongestedPendingBytes": 131072,

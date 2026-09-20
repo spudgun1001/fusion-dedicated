@@ -163,13 +163,13 @@ public static class WorldCatchup
         => held.Where(h => h.Player != requester && h.Message != null && present(h.Player)).ToList();
 
     /// <summary>
-    /// Whether a pose shows a vehicle has a new owner: the sender sits in any seat of it and
-    /// the server still has somebody else down as the owner. Only the client simulating a
-    /// vehicle sends its poses, which for an Atv is the driver.
+    /// Whether a pose shows a vehicle has a new owner: the sender is in its driver seat and
+    /// the server still has somebody else down as the owner. A passenger's game sends poses
+    /// too, and letting those take the vehicle had every occupant of a van trading it.
     /// </summary>
     public static bool OwnerFromSeatedPose(byte sender, byte? registryOwner, ushort? senderSeatEntity,
-        ushort poseEntity)
-        => senderSeatEntity == poseEntity && registryOwner != sender;
+        ushort poseEntity, byte senderSeatIndex, byte driverSeatIndex)
+        => senderSeatEntity == poseEntity && senderSeatIndex == driverSeatIndex && registryOwner != sender;
 
     /// <summary>
     /// Who takes over an entity when its owner leaves: somebody sitting in it,

@@ -383,6 +383,17 @@ while a refusal by the hold writes one line per player every ten seconds and car
 count, so it tells you a player was refused rather than how often. Set either to 0 to lift
 that half.
 
+A vehicle follows whoever sits in seat `DriverSeatIndex` (0), and only that seat's poses
+take it. A passenger's game sends the vehicle's poses too, and while any seat could take it
+a full SWAT transport traded the van on every network tick: each passenger's pose took it
+off the driver, the driver's next pose took it back, and in between everybody else's poses
+were thrown away as a non-owner's, which is the jitter riders saw and why a player stepping
+out landed somewhere nobody else had them. A vehicle its owner left behind goes to its
+driver first and only then to the other riders. A driver who stands up keeps the vehicle
+until somebody asks for it, so it carries on moving rather than freezing, and a rider who
+wants it is answered as soon as the driver is out of the seat. Set `DriverSeatIndex` to the
+seat that drives a vehicle whose driver is not seat 0.
+
 A rider a plugin refuses a seat is then left alone for `SeatRefusalCooldownSeconds` (2)
 before that seat is put to plugins again. Fusion registers the seat again while the rider
 stands in its trigger, so one police SUV refused five players 342 times in four minutes, and
@@ -581,6 +592,7 @@ gitignored.
 | `OwnershipRequestsPerSecond` | ownership requests each player may send per second (10 by default, 0 for no limit) |
 | `OwnershipHoldMilliseconds` | how long an entity stays with its new owner before it may change hands again (500 by default, 0 lets every change through) |
 | `SeatRefusalCooldownSeconds` | how long a rider a plugin refused a seat is left alone before that seat is put to plugins again (2 by default, 0 refuses every attempt) |
+| `DriverSeatIndex` | the seat that drives a vehicle, whose poses take it and who inherits it (0 by default) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (5000 and 2500 by default, 0 for no limit) |
 | `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.005 and 50 by default, 0 for no limit on that side) |

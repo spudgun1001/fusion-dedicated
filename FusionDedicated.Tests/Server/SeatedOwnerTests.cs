@@ -3,7 +3,7 @@ using FusionDedicated.Server;
 namespace FusionDedicated.Tests.Server;
 
 /// <summary>
-/// A vehicle's owner follows whoever sits in it and sends its poses.
+/// A vehicle's owner follows whoever sits in its driver seat and sends its poses.
 ///
 /// Sitting in a driver seat makes the driver the owner on every client that saw
 /// the seat, and nothing is sent. The server and anybody who missed the seat kept
@@ -12,25 +12,38 @@ namespace FusionDedicated.Tests.Server;
 public class SeatedOwnerTests
 {
     [Fact]
-    public void A_seated_pose_sender_becomes_the_owner()
+    public void A_drivers_pose_makes_them_the_owner()
         => Assert.True(WorldCatchup.OwnerFromSeatedPose(sender: 3, registryOwner: 1,
-            senderSeatEntity: 300, poseEntity: 300));
+            senderSeatEntity: 300, poseEntity: 300, senderSeatIndex: 0, driverSeatIndex: 0));
 
     [Fact]
-    public void A_seated_pose_sender_takes_a_vehicle_nobody_owns()
-        => Assert.True(WorldCatchup.OwnerFromSeatedPose(3, null, 300, 300));
+    public void A_drivers_pose_takes_a_vehicle_nobody_owns()
+        => Assert.True(WorldCatchup.OwnerFromSeatedPose(3, null, 300, 300, 0, 0));
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void A_passengers_pose_changes_nothing(byte seat)
+        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 1, 300, 300, seat, 0));
+
+    [Fact]
+    public void The_driver_seat_a_vehicle_uses_is_a_setting()
+        => Assert.True(WorldCatchup.OwnerFromSeatedPose(3, 1, 300, 300, senderSeatIndex: 2, driverSeatIndex: 2));
 
     [Fact]
     public void A_bystanders_pose_changes_nothing()
-        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 1, senderSeatEntity: null, poseEntity: 300));
+        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 1, senderSeatEntity: null, poseEntity: 300,
+            senderSeatIndex: 0, driverSeatIndex: 0));
 
     [Fact]
     public void The_owners_own_pose_changes_nothing()
-        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 3, 300, 300));
+        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 3, 300, 300, 0, 0));
 
     [Fact]
     public void A_rider_of_a_different_vehicle_changes_nothing()
-        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 1, senderSeatEntity: 400, poseEntity: 300));
+        => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 1, senderSeatEntity: 400, poseEntity: 300,
+            senderSeatIndex: 0, driverSeatIndex: 0));
 
     [Fact]
     public void The_owner_is_announced_once_and_not_on_every_pose()
@@ -44,7 +57,7 @@ public class SeatedOwnerTests
 
         for (int pose = 0; pose < 5; pose++)
         {
-            if (WorldCatchup.OwnerFromSeatedPose(3, registry.Get(300)!.OwnerSmallId, 300, 300))
+            if (WorldCatchup.OwnerFromSeatedPose(3, registry.Get(300)!.OwnerSmallId, 300, 300, 0, 0))
             {
                 registry.SetOwner(300, 3);
                 announced++;

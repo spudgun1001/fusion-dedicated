@@ -455,7 +455,7 @@ public sealed class FusionServer : IDisposable
         // loaded or not.
         byte? fallback = Players.SteadiestPlayer()?.SmallId;
         var affected = Entities.OrphanWith(player.SmallId, entity =>
-            WorldCatchup.HeirFor(RidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
+            WorldCatchup.HeirFor(DriverFirstRidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
 
         // Before the heirs, because a client that locked a vehicle to the driver who
         // left ignores any new owner until it has cleaned that driver up.
@@ -4839,16 +4839,16 @@ public sealed class FusionServer : IDisposable
     {
         ushort vehicleId = pose.EntityId;
 
-        // Only a client that believes it owns a vehicle sends its poses, and
-        // Fusion's AtvExtender makes that the driver. So this follows who drives
-        // rather than deciding it. This runs before the pose below is judged, so
-        // a driver who has just sat down owns the vehicle before their own pose
-        // is weighed against the registry.
+        // A vehicle follows whoever is in its driver seat, which is the client
+        // Fusion's AtvExtender has simulating it. This runs before the pose below
+        // is judged, so a driver who has just sat down owns the vehicle before
+        // their own pose is weighed against the registry.
         // The hold here is against the last pose that took the vehicle rather than any change,
         // so a driver sitting down still takes the wheel from whoever just asked for the car.
         if (_seats.SeatOf(sender.SmallId) is { } seat
             && Entities.Get(vehicleId) is { } vehicle
-            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId)
+            && WorldCatchup.OwnerFromSeatedPose(sender.SmallId, vehicle.OwnerSmallId, seat.EntityId, vehicleId,
+                seat.Index, Config.DriverSeatIndex)
             && !_seatedPoseHold.Holding(vehicleId))
         {
             // MayHold can remove the entity outright, so a refusal must stop
@@ -5092,6 +5092,13 @@ public sealed class FusionServer : IDisposable
     /// <summary>Who is sitting in a vehicle, by small id, first to sit first.</summary>
     public IReadOnlyList<byte> RidersOf(ushort entityId)
         => _seats.RidersOf(entityId).Select(s => s.Rider).ToList();
+
+    /// <summary>The same riders with the driver first, so a vehicle its owner left goes to whoever can drive it.</summary>
+    private IReadOnlyList<byte> DriverFirstRidersOf(ushort entityId)
+        => _seats.RidersOf(entityId)
+            .OrderBy(s => s.Index == Config.DriverSeatIndex ? 0 : 1)
+            .Select(s => s.Rider)
+            .ToList();
 
     /// <summary>Stands a seated player up for everybody, for a plugin. False when they are not here or not seated.</summary>
     public bool UnseatForPlugin(ulong platformId)
