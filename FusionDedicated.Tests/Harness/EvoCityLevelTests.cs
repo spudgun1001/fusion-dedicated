@@ -444,3 +444,471 @@ public class EvoCityLevelTests
         Assert.Equal(1, rig.LinesSaying("Dennis has no key"));
     }
 }
+
+/// <summary>
+/// Phones built into the level actually working: calling, the display, hanging up
+/// and staying silent when nothing is going on.
+///
+/// The same rig as EvoCityLevelTests, a real server with the real phones plugin
+/// off disk. Everything asserted here is read off the wire.
+/// </summary>
+public class EvoCityPhoneCallTests
+{
+    private const ushort KindVariable = 2;
+    private const ushort MyNumberVariable = 1;
+    private const ushort DigitVariable = 0;
+    private const ushort DisplayVariable = 3;
+    private const ushort ChannelVariable = 4;
+    private const ushort InCallVariable = 5;
+    private const ushort RingMutedVariable = 6;
+    private const ushort ToneMutedVariable = 7;
+    private const ushort RingbackMutedVariable = 8;
+
+    private const ushort HangUpEvent = 1;
+    private const ushort ClearEvent = 2;
+    private const ushort CallEvent = 3;
+    private const ushort LiftEvent = 4;
+
+    private const int LevelKind = 0;
+
+    /// <summary>What a payphone shows with nothing dialled.</summary>
+    private const string Waiting = "---";
+
+    private const ulong Joel = 76561198000000001;
+    private const ulong Dennis = 76561198000000002;
+
+    private static string PhoneAt(int i) => LevelRpc.Hash((uint)(0x2000 + i));
+
+    private static LevelRig Rig()
+    {
+        Assert.True(PluginSource.Repository != null,
+            "The fusion-server-mods checkout was not found. Set FUSION_SERVER_MODS to it.");
+
+        Assert.True(PluginSource.Has("phones"),
+            $"Build the plugins first: no phones in '{PluginSource.Directory}'.");
+
+        var rig = new LevelRig(
+            new ServerConfig { CullOrphanedEntities = false, RpcMessagesPerSecond = 250 },
+            new[] { "phones" });
+
+        Assert.Equal(1, rig.Started);
+
+        return rig;
+    }
+
+    private static FakePlayer Arrive(LevelRig rig, ulong platformId, string name)
+    {
+        var player = rig.World.Join(platformId, name);
+        player.FinishLoading();
+        player.Send(FusionProtocol.BuildPlayerPoseUpdate(player.SmallId,
+            new FusionRigPose { PelvisPosition = new Vec3(4f, 0f, 9f) }));
+
+        return player;
+    }
+
+    /// <summary>What a phone last heard on one of its components.</summary>
+    private static string LastString(LevelRig rig, FakePlayer player, string phone, ushort index)
+    {
+        var heard = LevelRpc.Heard(rig.World, player, phone, index, RpcKind.String);
+        return heard.Count == 0 ? "" : heard[^1].Text;
+    }
+
+    private static bool? LastBool(LevelRig rig, FakePlayer player, string phone, ushort index)
+    {
+        var heard = LevelRpc.Heard(rig.World, player, phone, index, RpcKind.Bool);
+        return heard.Count == 0 ? null : heard[^1].Bool;
+    }
+
+    /// <summary>A phone built into the level saying what it is, which is what puts it on the exchange.</summary>
+    private static string Adopt(LevelRig rig, FakePlayer player, int which)
+    {
+        string phone = PhoneAt(which);
+        player.Send(LevelRpc.Int(player.SmallId, phone, KindVariable, LevelKind));
+
+        Assert.NotEqual("", LastString(rig, player, phone, MyNumberVariable));
+
+        return phone;
+    }
+
+    private static string NumberOf(LevelRig rig, FakePlayer player, string phone)
+        => LastString(rig, player, phone, MyNumberVariable);
+
+    /// <summary>Taps a number into a phone's keypad and presses call.</summary>
+    private static void DialFrom(FakePlayer player, string phone, string number)
+    {
+        foreach (char digit in number)
+        {
+            player.Send(LevelRpc.Int(player.SmallId, phone, DigitVariable, digit - '0'));
+        }
+
+        player.Send(LevelRpc.Event(player.SmallId, phone, CallEvent));
+    }
+
+    // ---- the digits show as they are dialled ----
+
+    [Fact]
+    public void Each_keypress_lands_on_the_display()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string phone = Adopt(rig, joel, 0);
+
+        Assert.Equal(Waiting, LastString(rig, joel, phone, DisplayVariable));
+
+        joel.Send(LevelRpc.Int(joel.SmallId, phone, DigitVariable, 4));
+        Assert.Equal("4", LastString(rig, joel, phone, DisplayVariable));
+
+        joel.Send(LevelRpc.Int(joel.SmallId, phone, DigitVariable, 1));
+        Assert.Equal("41", LastString(rig, joel, phone, DisplayVariable));
+
+        joel.Send(LevelRpc.Int(joel.SmallId, phone, DigitVariable, 7));
+        Assert.Equal("417", LastString(rig, joel, phone, DisplayVariable));
+    }
+
+    [Fact]
+    public void The_clear_key_puts_the_display_back_to_waiting()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string phone = Adopt(rig, joel, 0);
+
+        joel.Send(LevelRpc.Int(joel.SmallId, phone, DigitVariable, 4));
+        joel.Send(LevelRpc.Event(joel.SmallId, phone, ClearEvent));
+
+        Assert.Equal(Waiting, LastString(rig, joel, phone, DisplayVariable));
+    }
+
+    [Fact]
+    public void The_dialled_digits_are_cleared_once_the_call_is_placed()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+
+        // The display moved on to the call, and nothing of the dialled number is left behind.
+        joel.Send(LevelRpc.Event(joel.SmallId, a, ClearEvent));
+
+        Assert.Equal(Waiting, LastString(rig, joel, a, DisplayVariable));
+    }
+
+    // ---- a call connects ----
+
+    [Fact]
+    public void Dialling_a_phone_rings_it_and_gives_the_caller_ringback()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        string numberA = NumberOf(rig, joel, a);
+        string numberB = NumberOf(rig, joel, b);
+
+        DialFrom(joel, a, numberB);
+
+        // The mute flag is the value, so false is the sound playing.
+        Assert.False(LastBool(rig, joel, b, RingMutedVariable));
+        Assert.False(LastBool(rig, joel, a, RingbackMutedVariable));
+
+        Assert.Equal($"{numberA} calling", LastString(rig, joel, b, DisplayVariable));
+        Assert.Equal($"Ringing {numberB}", LastString(rig, joel, a, DisplayVariable));
+    }
+
+    [Fact]
+    public void Lifting_the_handset_joins_the_two_phones_on_one_channel()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        string numberA = NumberOf(rig, joel, a);
+        string numberB = NumberOf(rig, joel, b);
+
+        DialFrom(joel, a, numberB);
+        joel.Send(LevelRpc.Event(joel.SmallId, b, LiftEvent));
+
+        Assert.True(LastBool(rig, joel, a, InCallVariable));
+        Assert.True(LastBool(rig, joel, b, InCallVariable));
+
+        string channelA = LastString(rig, joel, a, ChannelVariable);
+        string channelB = LastString(rig, joel, b, ChannelVariable);
+
+        Assert.Equal(channelA, channelB);
+        Assert.StartsWith("c", channelA);
+        Assert.NotEqual(numberA, channelA);
+
+        Assert.Equal($"On to {numberB}", LastString(rig, joel, a, DisplayVariable));
+        Assert.Equal($"On to {numberA}", LastString(rig, joel, b, DisplayVariable));
+    }
+
+    [Fact]
+    public void Both_bells_stop_once_the_call_is_answered()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+        joel.Send(LevelRpc.Event(joel.SmallId, b, LiftEvent));
+
+        Assert.True(LastBool(rig, joel, b, RingMutedVariable));
+        Assert.True(LastBool(rig, joel, a, RingbackMutedVariable));
+    }
+
+    // ---- hanging up ----
+
+    [Fact]
+    public void Hanging_up_ends_the_call_on_both_phones()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        string numberA = NumberOf(rig, joel, a);
+        string numberB = NumberOf(rig, joel, b);
+
+        DialFrom(joel, a, numberB);
+        joel.Send(LevelRpc.Event(joel.SmallId, b, LiftEvent));
+        joel.Send(LevelRpc.Event(joel.SmallId, a, HangUpEvent));
+
+        Assert.False(LastBool(rig, joel, a, InCallVariable));
+        Assert.False(LastBool(rig, joel, b, InCallVariable));
+
+        Assert.Equal(numberA, LastString(rig, joel, a, ChannelVariable));
+        Assert.Equal(numberB, LastString(rig, joel, b, ChannelVariable));
+    }
+
+    [Fact]
+    public void Hanging_up_while_it_is_still_ringing_stops_the_ring()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+
+        Assert.False(LastBool(rig, joel, b, RingMutedVariable));
+
+        joel.Send(LevelRpc.Event(joel.SmallId, a, HangUpEvent));
+
+        Assert.True(LastBool(rig, joel, b, RingMutedVariable));
+        Assert.True(LastBool(rig, joel, a, RingbackMutedVariable));
+    }
+
+    // ---- a number that is not there ----
+
+    [Fact]
+    public void Calling_a_number_nobody_answers_on_says_so_and_rings_nothing()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, "999");
+
+        Assert.Equal("ERR", LastString(rig, joel, a, DisplayVariable));
+        Assert.True(LastBool(rig, joel, a, RingbackMutedVariable));
+        Assert.True(LastBool(rig, joel, b, RingMutedVariable));
+    }
+
+    [Fact]
+    public void A_phone_cannot_call_itself()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+
+        DialFrom(joel, a, NumberOf(rig, joel, a));
+
+        Assert.Equal("ERR", LastString(rig, joel, a, DisplayVariable));
+        Assert.True(LastBool(rig, joel, a, RingbackMutedVariable));
+    }
+
+    // ---- the idle state is silent ----
+
+    [Fact]
+    public void A_freshly_adopted_phone_has_every_loop_muted()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string phone = Adopt(rig, joel, 0);
+
+        Assert.True(LastBool(rig, joel, phone, RingMutedVariable));
+        Assert.True(LastBool(rig, joel, phone, ToneMutedVariable));
+        Assert.True(LastBool(rig, joel, phone, RingbackMutedVariable));
+    }
+
+    [Fact]
+    public void Every_phone_in_the_level_is_silent_once_the_level_has_loaded()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+
+        var announces = new List<byte[]>();
+
+        for (var i = 0; i < 59; i++)
+        {
+            announces.Add(LevelRpc.Int(joel.SmallId, PhoneAt(i), KindVariable, LevelKind));
+        }
+
+        joel.SendMany(announces);
+
+        for (var i = 0; i < 59; i++)
+        {
+            string phone = PhoneAt(i);
+
+            Assert.True(LastBool(rig, joel, phone, RingMutedVariable), $"phone {i} ring");
+            Assert.True(LastBool(rig, joel, phone, ToneMutedVariable), $"phone {i} tone");
+            Assert.True(LastBool(rig, joel, phone, RingbackMutedVariable), $"phone {i} ringback");
+        }
+    }
+
+    [Fact]
+    public void Both_phones_go_back_to_silent_once_a_call_is_over()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+        joel.Send(LevelRpc.Event(joel.SmallId, b, LiftEvent));
+        joel.Send(LevelRpc.Event(joel.SmallId, a, HangUpEvent));
+
+        foreach (string phone in new[] { a, b })
+        {
+            Assert.True(LastBool(rig, joel, phone, RingMutedVariable));
+            Assert.True(LastBool(rig, joel, phone, ToneMutedVariable));
+            Assert.True(LastBool(rig, joel, phone, RingbackMutedVariable));
+        }
+    }
+
+    [Fact]
+    public void A_clients_own_copy_of_a_mute_flag_never_reaches_anybody_else()
+    {
+        // The value is the mute flag, so a stray false unmutes a clip that has been
+        // looping since the scene loaded. This is what "the phones ring constantly" was.
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        string phone = Adopt(rig, joel, 0);
+
+        dennis.Send(LevelRpc.Bool(dennis.SmallId, phone, RingMutedVariable, false));
+
+        Assert.True(LastBool(rig, joel, phone, RingMutedVariable));
+        Assert.True(LastBool(rig, dennis, phone, RingMutedVariable));
+    }
+
+    [Fact]
+    public void A_mute_flag_sent_before_the_phone_is_adopted_never_reaches_anybody_else()
+    {
+        // A joining client sends what its own copy holds, and a fresh copy holds
+        // "not muted". It can arrive before the phone has said what it is.
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        string phone = PhoneAt(0);
+
+        dennis.Send(LevelRpc.Bool(dennis.SmallId, phone, RingMutedVariable, false));
+
+        Assert.DoesNotContain(LevelRpc.Heard(rig.World, joel, phone, RingMutedVariable, RpcKind.Bool),
+            v => !v.Bool);
+    }
+
+    // ---- two phones stay in step ----
+
+    [Fact]
+    public void Only_the_phone_that_was_dialled_rings()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+        string c = Adopt(rig, joel, 2);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+
+        Assert.False(LastBool(rig, joel, b, RingMutedVariable));
+        Assert.True(LastBool(rig, joel, a, RingMutedVariable));
+        Assert.True(LastBool(rig, joel, c, RingMutedVariable));
+        Assert.True(LastBool(rig, joel, b, RingbackMutedVariable));
+    }
+
+    [Fact]
+    public void A_phone_already_on_a_call_cannot_be_rung_again()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+        string c = Adopt(rig, joel, 2);
+
+        string numberB = NumberOf(rig, joel, b);
+
+        DialFrom(joel, a, numberB);
+        joel.Send(LevelRpc.Event(joel.SmallId, b, LiftEvent));
+
+        string channel = LastString(rig, joel, b, ChannelVariable);
+
+        DialFrom(joel, c, numberB);
+
+        Assert.Equal("ERR", LastString(rig, joel, c, DisplayVariable));
+        Assert.Equal(channel, LastString(rig, joel, b, ChannelVariable));
+        Assert.True(LastBool(rig, joel, c, RingbackMutedVariable));
+    }
+
+    [Fact]
+    public void A_player_who_joins_during_a_call_sees_it_the_same_way()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+        joel.Send(LevelRpc.Event(joel.SmallId, b, LiftEvent));
+
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        foreach (string phone in new[] { a, b })
+        {
+            Assert.Equal(LastBool(rig, joel, phone, InCallVariable),
+                LastBool(rig, dennis, phone, InCallVariable));
+
+            Assert.Equal(LastString(rig, joel, phone, ChannelVariable),
+                LastString(rig, dennis, phone, ChannelVariable));
+
+            Assert.Equal(LastBool(rig, joel, phone, RingMutedVariable),
+                LastBool(rig, dennis, phone, RingMutedVariable));
+        }
+
+        Assert.True(LastBool(rig, dennis, a, InCallVariable));
+    }
+
+    [Fact]
+    public void A_player_who_joins_while_it_is_ringing_hears_the_same_phone_ring()
+    {
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        string a = Adopt(rig, joel, 0);
+        string b = Adopt(rig, joel, 1);
+
+        DialFrom(joel, a, NumberOf(rig, joel, b));
+
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        Assert.False(LastBool(rig, dennis, b, RingMutedVariable));
+        Assert.True(LastBool(rig, dennis, a, RingMutedVariable));
+        Assert.False(LastBool(rig, dennis, a, RingbackMutedVariable));
+    }
+}
