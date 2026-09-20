@@ -23,7 +23,9 @@ public static class ServerPlayer
             {
                 ["Username"] = serverName,
                 ["Nickname"] = "",
-                ["Loading"] = "True",
+                // Lowercase. Fusion parses this with System.Text.Json, which only
+                // takes JSON booleans, and a capitalised one kills its rig coroutine.
+                ["Loading"] = "true",
                 ["LevelBarcode"] = "",
                 ["PermissionLevel"] = PermissionLevel.Owner.ToFusionString(),
             },

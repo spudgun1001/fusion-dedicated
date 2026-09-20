@@ -1,4 +1,4 @@
-using BonelabServerBrowser.Fusion;
+﻿using BonelabServerBrowser.Fusion;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Harness;
@@ -39,7 +39,7 @@ public class SteadyOwnerTests
         joel.FinishLoading();
         Assert.True(player.Loaded);
 
-        joel.Send(ClientMessages.Metadata(joel.SmallId, "Loading", "True"));
+        joel.Send(ClientMessages.Metadata(joel.SmallId, "Loading", "true"));
         Assert.False(player.Loaded);
     }
 

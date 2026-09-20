@@ -1,4 +1,4 @@
-using FusionDedicated.Server;
+﻿using FusionDedicated.Server;
 using Steamworks;
 
 namespace FusionDedicated.Tests.Server;
@@ -62,10 +62,10 @@ public class MetadataCapTests
     public void Holding_a_value_is_an_exact_match()
     {
         var player = Player();
-        player.SetMetadata("Loading", "False");
+        player.SetMetadata("Loading", "false");
 
-        Assert.True(player.HoldsMetadata("Loading", "False"));
-        Assert.False(player.HoldsMetadata("Loading", "false"));
+        Assert.True(player.HoldsMetadata("Loading", "false"));
+        Assert.False(player.HoldsMetadata("Loading", "False"));
         Assert.False(player.HoldsMetadata("Nickname", ""));
     }
 }

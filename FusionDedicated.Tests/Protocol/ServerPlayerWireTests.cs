@@ -1,3 +1,4 @@
+﻿using System.Text.Json;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Server;
 
@@ -35,7 +36,7 @@ public class ServerPlayerWireTests
 
         Assert.Equal("Southside RP", metadata["Username"]);
         Assert.Equal("", metadata["Nickname"]);
-        Assert.Equal("True", metadata["Loading"]);
+        Assert.Equal("true", metadata["Loading"]);
         Assert.Equal("", metadata["LevelBarcode"]);
         Assert.Equal("OWNER", metadata["PermissionLevel"]);
 
@@ -49,5 +50,39 @@ public class ServerPlayerWireTests
 
         Assert.False(reader.ReadBoolean());
         Assert.Equal(message.Length, reader.Position);
+    }
+
+    /// <summary>
+    /// Fusion reads Loading with System.Text.Json, which only takes lowercase JSON
+    /// booleans. A capitalised value throws and kills the client's rig coroutine.
+    /// </summary>
+    [Fact]
+    public void Fusion_can_json_parse_player_0s_loading_value()
+    {
+        string loading = MetadataOf(ServerPlayer.ConnectionResponse(ServerSteamId, "Southside RP"))["Loading"]!;
+
+        Assert.True(JsonSerializer.Deserialize<bool>(loading));
+    }
+
+    private static Dictionary<string, string?> MetadataOf(byte[] message)
+    {
+        var reader = new OracleReader(message);
+
+        reader.ReadByte();   // tag
+        reader.ReadByte();   // route
+        reader.ReadByte();   // channel
+        reader.ReadInt32();  // length
+        reader.ReadUInt64(); // platform id
+        reader.ReadByte();   // small id
+
+        int count = reader.ReadInt32();
+        var metadata = new Dictionary<string, string?>();
+
+        for (var i = 0; i < count; i++)
+        {
+            metadata[reader.ReadString()!] = reader.ReadString();
+        }
+
+        return metadata;
     }
 }

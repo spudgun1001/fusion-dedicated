@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
@@ -41,7 +41,7 @@ public static class ClientMessages
         return Wrap(ServerProtocol.TagPermissionCommandRequest, ToServer, player, payload.ToArray());
     }
 
-    public static byte[] FinishedLoading(byte player) => Metadata(player, "Loading", "False");
+    public static byte[] FinishedLoading(byte player) => Metadata(player, "Loading", "false");
 
     public static byte[] Despawn(byte player, ushort entity)
     {

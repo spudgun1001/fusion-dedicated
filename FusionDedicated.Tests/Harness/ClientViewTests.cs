@@ -1,4 +1,4 @@
-using BonelabServerBrowser.Fusion;
+﻿using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 
 namespace FusionDedicated.Tests.Harness;
@@ -270,7 +270,7 @@ public class ClientViewTests
         var view = new ClientView(5);
 
         view.Receive(ServerProtocol.WriteConnectionResponse(76561198000000001, 3,
-            new Dictionary<string, string> { ["Username"] = "Joel", ["Loading"] = "False" },
+            new Dictionary<string, string> { ["Username"] = "Joel", ["Loading"] = "false" },
             new List<string>(), "SLZ.BONELAB.Content.Avatar.FordBW", Array.Empty<byte>(), true));
 
         Assert.Equal(76561198000000001UL, view.Players[3].PlatformId);

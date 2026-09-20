@@ -1,4 +1,4 @@
-using BonelabServerBrowser.Fusion;
+﻿using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 using FusionDedicated.Tests.Harness;
@@ -31,7 +31,7 @@ public class ServerPlayerTests
 
         Assert.Equal(ServerSteamId, host.PlatformId);
         Assert.Equal("Southside RP", host.Metadata["Username"]);
-        Assert.Equal("True", host.Metadata["Loading"]);
+        Assert.Equal("true", host.Metadata["Loading"]);
         Assert.Equal(ServerPlayer.BlankAvatar, host.AvatarBarcode);
         Assert.False(host.IsInitialJoin);
     }
@@ -94,11 +94,11 @@ public class ServerPlayerTests
         int before = Responses();
 
         // Loading false would build the server a body on every screen.
-        joel.Send(ClientMessages.MetadataFor(joel.SmallId, 0, "Loading", "False"));
+        joel.Send(ClientMessages.MetadataFor(joel.SmallId, 0, "Loading", "false"));
         joel.Send(ClientMessages.MetadataFor(joel.SmallId, 0, "Username", "Hijacked"));
 
         Assert.Equal(before, Responses());
-        Assert.Equal("True", joel.View.Players[0].Metadata["Loading"]);
+        Assert.Equal("true", joel.View.Players[0].Metadata["Loading"]);
         Assert.Equal("Southside RP", joel.View.Players[0].Metadata["Username"]);
     }
 

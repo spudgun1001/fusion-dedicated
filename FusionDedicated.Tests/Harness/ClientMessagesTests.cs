@@ -1,4 +1,4 @@
-using BonelabServerBrowser.Fusion;
+﻿using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 
@@ -9,7 +9,7 @@ public class ClientMessagesTests
 {
     [Fact]
     public void A_metadata_request_reads_back()
-        => Assert.Equal(new FusionProtocol.MetadataRequest(3, "Loading", "False"),
+        => Assert.Equal(new FusionProtocol.MetadataRequest(3, "Loading", "false"),
             FusionProtocol.TryReadMetadataRequest(ClientMessages.FinishedLoading(3)));
 
     [Fact]
