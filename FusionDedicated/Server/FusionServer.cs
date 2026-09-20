@@ -4982,11 +4982,16 @@ public sealed class FusionServer : IDisposable
 
         // The bytes the other clients are about to get, kept so a joiner can be sent the
         // same grab rather than one built from a record that has no grip in it.
-        ushort? letGo = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed
-                        && WorldCatchup.KnownGrabTarget(grab.EntityId, id => Entities.Get(id) != null,
-                            id => Players.Get(id) != null)
-            ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId,
-                ServerProtocol.StampSender(message, sender.SmallId))
+        byte[] stamped = ServerProtocol.StampSender(message, sender.SmallId);
+
+        // StampSender hands back the same array when there is nobody to address, and a
+        // grab with no sender in it reaches nobody live and is dropped by a joiner too.
+        bool addressed = !ReferenceEquals(stamped, message);
+
+        ushort? letGo = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed && addressed
+                        && WorldCatchup.KnownGrabTarget(grab.EntityId, sender.SmallId,
+                            id => Entities.Get(id) != null, id => Players.Get(id) != null)
+            ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId, stamped)
             : _grabs.Release(sender.SmallId, grab.Hand);
 
         if (letGo is { } released)

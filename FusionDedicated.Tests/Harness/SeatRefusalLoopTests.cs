@@ -38,6 +38,8 @@ public class SeatRefusalLoopTests
             player.View.DriverLockedVehicles.Add(Suv);
         }
 
+        // Long enough for every rig to be built and asked about, so nothing here counts those.
+        world.Advance(TimeSpan.FromSeconds(5));
         world.Spawn(joel, Suv, PoliceSuv, 0, 0, 0);
 
         return (world, joel, siriuss, dennis);

@@ -69,12 +69,19 @@ public class GrabCatchupTests
         world.Spawn(holder, Gun, Barcode, 0, 0, 0);
         holder.Grab(Gun);
 
+        // The bystander's own rig questions are answered before the join, so anything
+        // reaching them after it would be a replay they never asked for.
+        world.Advance(TimeSpan.FromSeconds(5));
         int bystanderSaw = GrabsTo(world, bystander);
         var late = JoinLate(world);
 
         Assert.Equal(Gun, late.View.Held[(holder.SmallId, Right)]);
         Assert.Equal(0, late.View.GrabsForUnknownEntities);
         Assert.Equal(bystanderSaw, GrabsTo(world, bystander));
+
+        // The first replay landed before the holder's rig, where a real client drops it,
+        // so what stuck came from the rig request.
+        Assert.True(late.View.GrabsWithoutARig > 0);
         Assert.True(FirstTo(world, late, FusionProtocol.TagPlayerRepGrab)
                     > FirstTo(world, late, FusionProtocol.TagSpawnResponse));
     }
@@ -242,6 +249,44 @@ public class GrabCatchupTests
         world.Advance(TimeSpan.FromSeconds(30));
 
         Assert.Equal(0, GrabsTo(world, late));
+    }
+
+    /// <summary>The same grab addressed to nobody, which the relay neither stamps nor passes on.</summary>
+    private static byte[] AddressedToNobody(byte[] grab)
+    {
+        byte[] message = new byte[grab.Length - 2];
+
+        message[0] = grab[0];
+        message[2] = grab[2];
+        grab.AsSpan(5).CopyTo(message.AsSpan(3));
+
+        return message;
+    }
+
+    [Fact]
+    public void A_grab_addressed_to_nobody_is_not_recorded()
+    {
+        using var world = new World();
+        var holder = world.Join(76561198000000002, "Holder");
+        holder.FinishLoading();
+
+        world.Spawn(holder, Gun, Barcode, 0, 0, 0);
+        holder.Send(AddressedToNobody(
+            FusionProtocol.BuildGrab(holder.SmallId, FusionProtocol.Handedness.RIGHT, 0, Gun)));
+
+        Assert.Empty(world.Server.HoldersOf(Gun));
+    }
+
+    [Fact]
+    public void A_grab_on_your_own_rig_is_not_recorded()
+    {
+        using var world = new World();
+        var holder = world.Join(76561198000000002, "Holder");
+        holder.FinishLoading();
+
+        holder.Send(FusionProtocol.BuildGrab(holder.SmallId, FusionProtocol.Handedness.RIGHT, 0, holder.SmallId));
+
+        Assert.Empty(world.Server.HoldersOf(holder.SmallId));
     }
 
     [Fact]

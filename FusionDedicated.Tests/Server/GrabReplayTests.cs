@@ -62,17 +62,21 @@ public class GrabReplayTests
 
     [Fact]
     public void A_prop_the_server_has_is_a_grab_worth_recording()
-        => Assert.True(WorldCatchup.KnownGrabTarget(300, id => true, id => false));
+        => Assert.True(WorldCatchup.KnownGrabTarget(300, 3, id => true, id => false));
 
     [Fact]
     public void An_id_the_server_never_registered_is_not()
-        => Assert.False(WorldCatchup.KnownGrabTarget(300, id => false, id => true));
+        => Assert.False(WorldCatchup.KnownGrabTarget(300, 3, id => false, id => true));
 
     [Fact]
     public void Holding_somebody_who_is_here_is_recorded_though_no_entity_has_that_id()
-        => Assert.True(WorldCatchup.KnownGrabTarget(4, id => false, id => true));
+        => Assert.True(WorldCatchup.KnownGrabTarget(4, 3, id => false, id => true));
 
     [Fact]
     public void Holding_somebody_who_has_left_is_not()
-        => Assert.False(WorldCatchup.KnownGrabTarget(4, id => true, id => false));
+        => Assert.False(WorldCatchup.KnownGrabTarget(4, 3, id => true, id => false));
+
+    [Fact]
+    public void Nobody_holds_their_own_rig()
+        => Assert.False(WorldCatchup.KnownGrabTarget(3, 3, id => true, id => true));
 }

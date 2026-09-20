@@ -134,11 +134,12 @@ public static class WorldCatchup
 
     /// <summary>
     /// Whether a grab names something the server knows: a prop it has, or the rig of
-    /// somebody here. An id it has never heard of would sit in the book until that id
-    /// went to a real prop, and then show a joiner a hold nobody ever made.
+    /// somebody here other than the grabber. An id it has never heard of would sit in
+    /// the book until that id went to a real prop, and then show a joiner a hold nobody
+    /// ever made.
     /// </summary>
-    public static bool KnownGrabTarget(ushort id, Func<ushort, bool> known, Func<byte, bool> present)
-        => id < EntityRegistry.FirstEntityId ? present((byte)id) : known(id);
+    public static bool KnownGrabTarget(ushort id, byte grabber, Func<ushort, bool> known, Func<byte, bool> present)
+        => id != grabber && (id < EntityRegistry.FirstEntityId ? present((byte)id) : known(id));
 
     /// <summary>
     /// The grabs to replay to a client that has just built an entity: every hand

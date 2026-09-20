@@ -66,6 +66,14 @@ public sealed class World : IDisposable
     {
         Now += by;
         Server.PumpDeferred();
+
+        // Other players' rigs are built over the seconds after the level, and each one
+        // asks about itself as it appears.
+        foreach (var player in _players.ToList())
+        {
+            player.View.BuildRigs();
+        }
+
         Sync();
     }
 

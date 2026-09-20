@@ -29,6 +29,7 @@ public sealed class ClientView
 {
     private readonly List<byte[]> _heldForLoading = new();
     private readonly List<(ushort Entity, byte Owner)> _pendingDataRequests = new();
+    private readonly HashSet<byte> _rigsBeingBuilt = new();
 
     public ClientView(byte smallId) => SmallId = smallId;
 
@@ -48,8 +49,14 @@ public sealed class ClientView
     /// <summary>What each hand of each player holds.</summary>
     public Dictionary<(byte Player, byte Hand), ushort> Held { get; } = new();
 
+    /// <summary>The rigs this game has finished building. A grab needs one to attach to.</summary>
+    public HashSet<byte> Rigs { get; } = new();
+
     /// <summary>Grabs naming an entity this game has not built, which a real client drops.</summary>
     public int GrabsForUnknownEntities { get; private set; }
+
+    /// <summary>Grabs whose holder has no rig here yet, which RequestGrab drops without a word.</summary>
+    public int GrabsWithoutARig { get; private set; }
 
     /// <summary>Vehicles with an Atv driver seat at index 0. A modded car without one has no lock.</summary>
     public HashSet<ushort> DriverLockedVehicles { get; } = new();
@@ -71,6 +78,15 @@ public sealed class ClientView
     {
         Loaded = true;
 
+        // Your own rig is there with the level. Everyone else's is built over the
+        // seconds after it, and until then a grab of theirs has nothing to attach to.
+        Rigs.Add(SmallId);
+
+        foreach (byte smallId in Players.Keys.Where(NeedsARig).ToList())
+        {
+            _rigsBeingBuilt.Add(smallId);
+        }
+
         foreach (byte[] held in _heldForLoading.ToList())
         {
             Receive(held);
@@ -78,6 +94,21 @@ public sealed class ClientView
 
         _heldForLoading.Clear();
     }
+
+    /// <summary>Finishes the rigs that were being built and asks each one for its state, as OnFoundRigManager does.</summary>
+    public void BuildRigs()
+    {
+        foreach (byte smallId in _rigsBeingBuilt.ToList())
+        {
+            Rigs.Add(smallId);
+            _pendingDataRequests.Add((smallId, smallId));
+        }
+
+        _rigsBeingBuilt.Clear();
+    }
+
+    /// <summary>The server's own player 0 has no rig, and neither does this game's own player twice.</summary>
+    private bool NeedsARig(byte smallId) => smallId != SmallId && smallId != 0;
 
     public void Receive(byte[] message)
     {
@@ -195,6 +226,11 @@ public sealed class ClientView
         }
 
         Players[response.SmallID] = player;
+
+        if (Loaded && NeedsARig(response.SmallID))
+        {
+            _rigsBeingBuilt.Add(response.SmallID);
+        }
     }
 
     private void MetadataChanged(Envelope envelope)
@@ -227,6 +263,8 @@ public sealed class ClientView
         byte smallId = player.SmallId;
         Players.Remove(smallId);
         Seats.Remove(smallId);
+        Rigs.Remove(smallId);
+        _rigsBeingBuilt.Remove(smallId);
 
         foreach (var entity in Entities.Values)
         {
@@ -327,6 +365,12 @@ public sealed class ClientView
         if (grab.Group != FusionProtocol.GrabGroupEntity || !grab.IsGrabbed)
         {
             Held.Remove((holder, grab.Hand));
+            return;
+        }
+
+        if (!Rigs.Contains(holder))
+        {
+            GrabsWithoutARig++;
             return;
         }
 
