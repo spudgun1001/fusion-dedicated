@@ -331,6 +331,71 @@ public class LoadSimulationTests
         Assert.True(seconds > 0, "nothing was paced, so the outbox was not used");
     }
 
+    /// <summary>
+    /// What the log costs the message loop.
+    ///
+    /// Log holds a lock, appends to a dated file and flushes the writer on every line,
+    /// and the replay paths write a line per request, so a joiner puts thousands of
+    /// them through the thread everybody else's traffic runs on.
+    /// </summary>
+    [Fact]
+    public void Logging_costs_the_message_loop_what_a_flushed_write_costs()
+    {
+        using var rig = new LoadRig();
+        rig.Fill(20);
+        rig.LoadLevelVariables(rig.Players[0], EvoCityLevelVariables);
+        var props = rig.Populate(2000);
+
+        // A joiner asking about every prop, which is what a client does as it builds them.
+        var joiner = rig.Join(99);
+        long before = LoggedLines(rig);
+
+        var sample = rig.Measure("2000 data requests",
+            () => joiner.SendMany(joiner.DataRequests(props, rig.Players[0].SmallId)));
+
+        long lines = LoggedLines(rig) - before;
+
+        // The same call the handlers make, on the same file, so this is the real path.
+        var writing = rig.Measure($"{lines} log lines", () =>
+        {
+            for (long i = 0; i < lines; i++)
+            {
+                rig.Server.Log("INFO", $"Data request by Player99 for entity {i} " +
+                                       "redirected from nobody to player 1", console: false);
+            }
+        });
+
+        double perLine = writing.Milliseconds * 1000 / Math.Max(1, lines);
+
+        Print("A joiner's data requests, and what logging them cost", new[] { sample, writing });
+
+        _out.WriteLine($"{lines} lines written, {perLine:F2} us each, " +
+                       $"{writing.Milliseconds / Math.Max(0.01, sample.Milliseconds) * 100:F0}% of the work above");
+
+        Assert.True(lines > 0, "the replay paths logged nothing, so this measures the wrong thing");
+    }
+
+    /// <summary>Lines in the server's own log file, which is where every Log call lands.</summary>
+    private static long LoggedLines(LoadRig rig)
+        => Directory.Exists(rig.Config.LogDirectory)
+            ? Directory.GetFiles(rig.Config.LogDirectory, "*.log").Sum(f => Lines(f))
+            : 0;
+
+    private static long Lines(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+
+        long count = 0;
+
+        while (reader.ReadLine() != null)
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     // ---- 4. both at once ----
 
     [Fact]
