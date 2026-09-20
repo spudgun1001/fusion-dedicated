@@ -427,7 +427,9 @@ than `MaxAvatarMass` (5000), or whose length or radius is negative, is relayed w
 those numbers pulled back inside the limits rather than dropped, so everybody sees the
 avatar at the nearest size the server allows. The numbers come from what players here
 actually wear: tiny avatars, a 40 times scale and a 1,649 kg avatar were all being
-dropped at the first limits, so the limits moved rather than the players. Values no
+dropped at the first limits, so the limits moved rather than the players. A negative
+scale axis mirrors the avatar rather than shrinking it, so only its size is held to the
+limits and the sign is kept. Values no
 real avatar has are dropped and are strikes: a number that is not a real number or is
 too small to hold, a mass or a scale over 100000 either way, any other stat over a
 billion either way, a negative mass, or a whole avatar with no mass.
@@ -437,7 +439,10 @@ the same way: one with a value no real avatar has is refused with "impossible av
 stats", and one only over the limits is let in with its numbers pulled back inside
 them. A limit set below its own minimum, such as a `MinAvatarScale` over
 `MaxAvatarScale`, is ignored rather than obeyed and named in the log at startup, since
-obeying it would refuse every avatar on the server. This applies while
+obeying it would refuse every avatar on the server. A `MinAvatarScale` over 0.01 is
+named at startup as well, because an avatar ported from another game is often built
+that small and the floor pulls it up, so everybody but its wearer sees it oversized.
+This applies while
 `ExtendedProtection` is on, to every rank. Whatever the settings, any message whose
 prefix Fusion would read differently from the server is dropped and noted in the log
 file only.
@@ -600,7 +605,7 @@ gitignored.
 | `DriverSeatIndex` | the seat that drives a vehicle, whose poses take it and who inherits it (0 by default) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (5000 and 2500 by default, 0 for no limit) |
-| `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.005 and 50 by default, 0 for no limit on that side) |
+| `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.005 and 50 by default, 0 for no limit on that side, and a minimum over 0.01 enlarges ported avatars for everyone but their wearer) |
 | `AvatarStrikesBeforeKick` | avatars with impossible stats inside `AvatarStrikeWindowSeconds` (60) that get a player kicked (3 by default, 0 never kicks) |
 | `PoseThinDistance` | metres from a moving prop past which a player gets fewer of its poses (60 by default, 0 sends all) |
 | `FarPosesPerSecond` | poses a second those far players get (5 by default, 0 sends all) |

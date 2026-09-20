@@ -26,6 +26,9 @@ public static class AvatarStatsCheck
     private const float ImpossibleSize = 1000000000f;
     private const float MassFloor = 1f;
 
+    /// <summary>An avatar ported from another game is built about this small, so a floor above it enlarges real ones.</summary>
+    private const float PortedScale = 0.01f;
+
     private static readonly int PartsStart = FieldNames.Count - 6;
     private static readonly int Total = FieldNames.Count - 1;
     private static readonly int Height = FieldNames.ToList().IndexOf("height");
@@ -51,11 +54,12 @@ public static class AvatarStatsCheck
         for (var i = 0; i < FieldNames.Count; i++)
         {
             float value = Read(stats, i);
+            float size = Size(i, value);
             var (min, max) = Bounds(i, limits);
 
-            if (value < min || value > max)
+            if (size < min || size > max)
             {
-                return new AvatarStatsVerdict($"{FieldNames[i]} {Show(value)}, {(value < min ? "under " + Show(min) : "over " + Show(max))}", false);
+                return new AvatarStatsVerdict($"{FieldNames[i]} {Show(value)}, {(size < min ? "under " + Show(min) : "over " + Show(max))}", false);
             }
         }
 
@@ -70,8 +74,10 @@ public static class AvatarStatsCheck
         for (var i = 0; i < FieldNames.Count && clamped.Length == FusionProtocol.AvatarStatsSize; i++)
         {
             var (min, max) = Bounds(i, limits);
+            float value = Read(clamped, i);
+            float size = Math.Clamp(Size(i, value), min, max);
 
-            BinaryPrimitives.WriteSingleBigEndian(clamped.AsSpan(i * 4, 4), Math.Clamp(Read(clamped, i), min, max));
+            BinaryPrimitives.WriteSingleBigEndian(clamped.AsSpan(i * 4, 4), Mirrored(i, value) ? -size : size);
         }
 
         return clamped;
@@ -92,6 +98,12 @@ public static class AvatarStatsCheck
         {
             yield return $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
                          $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed";
+        }
+        else if (limits.MinAvatarScale > PortedScale)
+        {
+            // The floor pulls a smaller avatar up to it, and only the copy everyone else is sent.
+            yield return $"MinAvatarScale {Show(limits.MinAvatarScale)} is over the {Show(PortedScale)} a ported " +
+                         "avatar is often built at, so everyone else is sent those avatars larger than their wearer sees them";
         }
 
         if (limits.MaxAvatarMass > 0f && limits.MaxAvatarMass < MassFloor)
@@ -176,6 +188,12 @@ public static class AvatarStatsCheck
 
         return (min, max);
     }
+
+    /// <summary>A negative scale axis mirrors the avatar rather than shrinking it, and only the three scale floats do that.</summary>
+    private static bool Mirrored(int i, float value) => i < 3 && value < 0f;
+
+    /// <summary>What the limits judge: a mirrored axis is measured by its size, with the sign put back afterwards.</summary>
+    private static float Size(int i, float value) => Mirrored(i, value) ? -value : value;
 
     private static bool IsRadiusOrLength(string name)
         => (name.Contains("Ellipse") && !name.EndsWith("Bias"))

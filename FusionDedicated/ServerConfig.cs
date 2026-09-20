@@ -320,7 +320,10 @@ public sealed class ServerConfig
     /// <summary>Heaviest arm, chest, head, leg or pelvis an avatar may have. Zero or less means no limit.</summary>
     public float MaxAvatarPartMass { get; set; } = 2500f;
 
-    /// <summary>Avatar scale limits, which also bound height. Zero or less leaves that side open.</summary>
+    /// <summary>
+    /// Avatar scale limits, which also bound height. Zero or less leaves that side open, and a minimum
+    /// above 0.01 sends a ported avatar to everyone else larger than its wearer sees it.
+    /// </summary>
     public float MinAvatarScale { get; set; } = 0.005f;
 
     public float MaxAvatarScale { get; set; } = 50f;

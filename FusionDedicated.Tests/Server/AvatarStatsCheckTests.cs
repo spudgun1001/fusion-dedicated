@@ -95,7 +95,7 @@ public class AvatarStatsCheckTests
     [Theory]
     [InlineData("localScale.x", 0.001f)]
     [InlineData("localScale.y", 60f)]
-    [InlineData("localScale.z", -1f)]
+    [InlineData("localScale.z", -60f)]
     public void A_scale_out_of_range_fails(string field, float value)
         => Assert.StartsWith($"{field} ", AvatarStatsCheck.Problem(With(field, value), Limits));
 
@@ -208,6 +208,41 @@ public class AvatarStatsCheckTests
         Assert.True(AvatarStatsCheck.Check(With("massTotal", 100000000f), config).Impossible);
     }
 
+    /// <summary>Ported avatars are often mirrored on one axis, and squashing that axis flattened them for everyone else.</summary>
+    [Fact]
+    public void A_mirrored_axis_keeps_its_sign_and_only_its_size_is_limited()
+    {
+        Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", -1f), Limits));
+        Assert.Equal("localScale.x -60, over 50", AvatarStatsCheck.Problem(With("localScale.x", -60f), Limits));
+        Assert.Equal("localScale.z -0.001, under 0.005", AvatarStatsCheck.Problem(With("localScale.z", -0.001f), Limits));
+
+        var stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "localScale.x", -60f);
+        ClientMessages.SetAvatarStat(stats, "localScale.y", -1f);
+        ClientMessages.SetAvatarStat(stats, "localScale.z", -0.001f);
+
+        byte[] clamped = AvatarStatsCheck.Clamp(stats, Limits);
+
+        Assert.Null(AvatarStatsCheck.Problem(clamped, Limits));
+        Assert.Equal(-50f, Stat(clamped, "localScale.x"));
+        Assert.Equal(-1f, Stat(clamped, "localScale.y"));
+        Assert.Equal(-0.005f, Stat(clamped, "localScale.z"));
+    }
+
+    /// <summary>Only the three scale floats mirror. A negative length is still pulled up to zero.</summary>
+    [Fact]
+    public void A_negative_length_is_not_treated_as_a_mirror()
+    {
+        var stats = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(stats, "armLength", -1f);
+        ClientMessages.SetAvatarStat(stats, "height", -1.76f);
+
+        byte[] clamped = AvatarStatsCheck.Clamp(stats, Limits);
+
+        Assert.Equal(0f, Stat(clamped, "armLength"));
+        Assert.Equal(0.0088f, Stat(clamped, "height"), 4);
+    }
+
     [Fact]
     public void A_minimum_over_the_maximum_is_no_limit_at_all()
     {
@@ -221,7 +256,10 @@ public class AvatarStatsCheckTests
     public void Every_limit_the_bounds_ignore_is_named_at_the_start()
     {
         Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig()));
-        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
+
+        // A maximum of zero turns its own side off and leaves the minimum of 5 enlarging everything.
+        Assert.Equal(new[] { Enlarging(5f) },
+            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
 
         Assert.Equal(new[] { "MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed" },
             AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f }));
@@ -232,6 +270,25 @@ public class AvatarStatsCheckTests
         Assert.Equal(new[] { "MaxAvatarScale Infinity is not a finite number, so fix it before trusting the avatar limits" },
             AvatarStatsCheck.SettingWarnings(new ServerConfig { MaxAvatarScale = float.PositiveInfinity }));
     }
+
+    /// <summary>The 0.05 that made ported police and military avatars huge for everyone but their wearer.</summary>
+    [Fact]
+    public void A_scale_floor_above_a_ported_avatar_is_named_at_the_start()
+    {
+        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 0.01f }));
+        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 0f }));
+
+        Assert.Equal(new[] { Enlarging(0.05f) },
+            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 0.05f }));
+
+        // A floor over the ceiling is ignored outright, so it is not also called enlarging.
+        Assert.Equal(new[] { "MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed" },
+            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f }));
+    }
+
+    private static string Enlarging(float floor)
+        => $"MinAvatarScale {floor:0.###} is over the 0.01 a ported avatar is often built at, so everyone " +
+           "else is sent those avatars larger than their wearer sees them";
 
     [Fact]
     public void Clamping_brings_every_limit_back_inside()

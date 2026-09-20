@@ -318,6 +318,24 @@ public class AvatarStatsGateTests
             e => e.Level == "WARN" && e.Message == "Joel sent an avatar with localScale.x 0.01, under 0.05, clamped to the limits");
     }
 
+    [Fact]
+    public void A_mirrored_avatar_reaches_everyone_still_mirrored()
+    {
+        var config = Config();
+        config.MinAvatarScale = 0.05f;
+        using var world = new World(config);
+        var (joel, kanza, _) = Loaded(world);
+        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
+        byte[] mirrored = ClientMessages.AvatarStats();
+        ClientMessages.SetAvatarStat(mirrored, "localScale.x", -1f);
+
+        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, mirrored));
+
+        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
+        Assert.Equal(-1f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
+        Assert.Equal(-1f, StatOf(world.Server.Players.GetByPlatformId(JoelId)!.AvatarStats, "localScale.x"));
+    }
+
     /// <summary>The proportions block inside the last avatar message this player received.</summary>
     private static byte[]? StatsTo(World world, FakePlayer player, int before)
         => world.Transport.SentTo(player.Connection)
