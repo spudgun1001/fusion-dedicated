@@ -202,7 +202,16 @@ public sealed class PlayerRegistry
 
     private readonly Dictionary<byte, ConnectedPlayer> _bySmallId = new();
     private readonly Dictionary<ulong, byte> _byPlatformId = new();
+    private readonly Dictionary<uint, ConnectedPlayer> _byConnection = new();
     private readonly object _lock = new();
+
+    /// <summary>
+    /// The ordered list, held until somebody joins or leaves.
+    ///
+    /// Broadcast reads it for every message it relays, so rebuilding it each time cost
+    /// a sort and a copy of the whole register on the message loop.
+    /// </summary>
+    private IReadOnlyList<ConnectedPlayer>? _ordered;
 
     public int MaxPlayers { get; set; } = 10;
 
@@ -225,7 +234,7 @@ public sealed class PlayerRegistry
         {
             lock (_lock)
             {
-                return _bySmallId.Values.OrderBy(p => p.SmallId).ToList();
+                return _ordered ??= _bySmallId.Values.OrderBy(p => p.SmallId).ToList();
             }
         }
     }
@@ -284,7 +293,9 @@ public sealed class PlayerRegistry
     {
         lock (_lock)
         {
-            return _bySmallId.Values.FirstOrDefault(p => p.PlatformId == platformId);
+            return _byPlatformId.TryGetValue(platformId, out byte smallId)
+                ? _bySmallId.GetValueOrDefault(smallId)
+                : null;
         }
     }
 
@@ -292,8 +303,7 @@ public sealed class PlayerRegistry
     {
         lock (_lock)
         {
-            return _bySmallId.Values.FirstOrDefault(
-                p => p.Connection.m_HSteamNetConnection == connection.m_HSteamNetConnection);
+            return _byConnection.GetValueOrDefault(connection.m_HSteamNetConnection);
         }
     }
 
@@ -323,6 +333,8 @@ public sealed class PlayerRegistry
         {
             _bySmallId[player.SmallId] = player;
             _byPlatformId[player.PlatformId] = player.SmallId;
+            _byConnection[player.Connection.m_HSteamNetConnection] = player;
+            _ordered = null;
         }
     }
 
@@ -330,18 +342,7 @@ public sealed class PlayerRegistry
     {
         lock (_lock)
         {
-            var player = _bySmallId.Values.FirstOrDefault(
-                p => p.Connection.m_HSteamNetConnection == connection.m_HSteamNetConnection);
-
-            if (player == null)
-            {
-                return null;
-            }
-
-            _bySmallId.Remove(player.SmallId);
-            _byPlatformId.Remove(player.PlatformId);
-
-            return player;
+            return Forget(_byConnection.GetValueOrDefault(connection.m_HSteamNetConnection));
         }
     }
 
@@ -349,15 +350,29 @@ public sealed class PlayerRegistry
     {
         lock (_lock)
         {
-            if (!_bySmallId.TryGetValue(smallId, out var player))
-            {
-                return null;
-            }
-
-            _bySmallId.Remove(smallId);
-            _byPlatformId.Remove(player.PlatformId);
-
-            return player;
+            return Forget(_bySmallId.GetValueOrDefault(smallId));
         }
+    }
+
+    /// <summary>Drops a player from all three indexes. Call under the lock.</summary>
+    private ConnectedPlayer? Forget(ConnectedPlayer? player)
+    {
+        if (player == null)
+        {
+            return null;
+        }
+
+        _bySmallId.Remove(player.SmallId);
+        _byPlatformId.Remove(player.PlatformId);
+
+        // Only if it is still theirs: Steam hands a closed handle out again.
+        if (_byConnection.TryGetValue(player.Connection.m_HSteamNetConnection, out var holder)
+            && ReferenceEquals(holder, player))
+        {
+            _byConnection.Remove(player.Connection.m_HSteamNetConnection);
+        }
+
+        _ordered = null;
+        return player;
     }
 }
