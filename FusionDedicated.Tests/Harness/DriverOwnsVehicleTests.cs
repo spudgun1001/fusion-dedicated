@@ -190,6 +190,51 @@ public class DriverOwnsVehicleTests
         Assert.True(world.Server.Entities.Get(Van)!.CulledForOwner);
     }
 
+    [Fact]
+    public void An_uncull_from_an_owner_outside_the_van_changes_nothing()
+    {
+        var (world, driver, _) = VanWithThree(driverLock: false);
+        using var __ = world;
+        Pose(driver, 1);
+
+        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, Van, 0, false));
+        world.Advance(TimeSpan.FromMilliseconds(600));
+
+        driver.Send(ClientMessages.CullStatus(driver.SmallId, Van, false));
+
+        Assert.Equal(driver.SmallId, world.Server.Entities.Get(Van)!.OwnerSmallId);
+        Assert.False(world.Server.Entities.Get(Van)!.CulledForOwner);
+    }
+
+    [Fact]
+    public void A_van_culled_by_an_owner_outside_it_goes_to_the_driver_and_not_the_first_passenger()
+    {
+        var world = new World(new ServerConfig { CullOrphanedEntities = false, OwnershipRequestsPerSecond = 0 });
+        using var _ = world;
+        var outsider = world.Join(76561198000000004, "Siriuss");
+        var driver = world.Join(76561198000000001, "s1mple");
+        var passenger = world.Join(76561198000000002, "PokeMrowa");
+
+        foreach (var player in world.Players)
+        {
+            player.FinishLoading();
+            player.View.DriverLockedVehicles.Add(Van);
+        }
+
+        world.Spawn(outsider, Van, "BaBaCorp.AssortedAutomobiles.Spawnable.VanSWATTransport", 0, 0, 0);
+
+        passenger.Send(FusionProtocol.BuildSeat(passenger.SmallId, Van, 2, true));
+        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, Van, 0, true));
+
+        // Every client has the van locked to the driver, so a handover to the
+        // passenger would leave the server disagreeing with all of them for good.
+        outsider.Send(ClientMessages.CullStatus(outsider.SmallId, Van, true));
+
+        Assert.Equal(driver.SmallId, world.Server.Entities.Get(Van)!.OwnerSmallId);
+        Assert.True(world.AgreeOnOwner(Van), string.Join(", ", world.OwnersOf(Van)));
+        Assert.All(world.OwnersOf(Van).Values, owner => Assert.Equal(driver.SmallId, owner));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

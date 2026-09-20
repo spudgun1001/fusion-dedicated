@@ -394,7 +394,10 @@ while he is still simulating it, so it carries on moving rather than freezing, a
 who wants it is answered as soon as he is out of the seat. Walking far enough away makes his
 game cull the vehicle and stop sending its poses, and that cull hands it to a rider on the
 spot, so a van full of players does not hibernate where it stood. Set `DriverSeatIndex` to
-the seat that drives a vehicle whose driver is not seat 0.
+the seat that drives a vehicle whose driver is not seat 0. It has to match the vehicle's real
+driver seat: a client locks a vehicle to whoever sits in the seat the vehicle itself drives
+from, so a wrong setting has the server handing ownership to a rider every client has locked
+to somebody else.
 
 A rider a plugin refuses a seat is then left alone for `SeatRefusalCooldownSeconds` (2)
 before that seat is put to plugins again. Fusion registers the seat again while the rider
