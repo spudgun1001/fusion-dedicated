@@ -26,9 +26,6 @@ public static class AvatarStatsCheck
     private const float ImpossibleSize = 1000000000f;
     private const float MassFloor = 1f;
 
-    /// <summary>An avatar ported from another game is built about this small, so a floor above it enlarges real ones.</summary>
-    private const float PortedScale = 0.01f;
-
     private static readonly int PartsStart = FieldNames.Count - 6;
     private static readonly int Total = FieldNames.Count - 1;
     private static readonly int Height = FieldNames.ToList().IndexOf("height");
@@ -94,18 +91,6 @@ public static class AvatarStatsCheck
             }
         }
 
-        if (limits.MinAvatarScale > 0f && limits.MaxAvatarScale > 0f && limits.MinAvatarScale > limits.MaxAvatarScale)
-        {
-            yield return $"MinAvatarScale {Show(limits.MinAvatarScale)} is over " +
-                         $"MaxAvatarScale {Show(limits.MaxAvatarScale)}, so both are ignored until they are fixed";
-        }
-        else if (limits.MinAvatarScale > PortedScale)
-        {
-            // The floor pulls a smaller avatar up to it, and only the copy everyone else is sent.
-            yield return $"MinAvatarScale {Show(limits.MinAvatarScale)} is over the {Show(PortedScale)} a ported " +
-                         "avatar is often built at, so everyone else is sent those avatars larger than their wearer sees them";
-        }
-
         if (limits.MaxAvatarMass > 0f && limits.MaxAvatarMass < MassFloor)
         {
             yield return $"MaxAvatarMass {Show(limits.MaxAvatarMass)} is under the {Show(MassFloor)} every avatar " +
@@ -115,7 +100,6 @@ public static class AvatarStatsCheck
 
     private static IEnumerable<(string Name, float Value)> Settings(ServerConfig limits)
     {
-        yield return (nameof(limits.MinAvatarScale), limits.MinAvatarScale);
         yield return (nameof(limits.MaxAvatarScale), limits.MaxAvatarScale);
         yield return (nameof(limits.MaxAvatarMass), limits.MaxAvatarMass);
         yield return (nameof(limits.MaxAvatarPartMass), limits.MaxAvatarPartMass);
@@ -159,12 +143,13 @@ public static class AvatarStatsCheck
 
     private static (float Min, float Max) Configured(int i, ServerConfig limits)
     {
-        float lowScale = limits.MinAvatarScale > 0f ? limits.MinAvatarScale : float.NegativeInfinity;
         float highScale = limits.MaxAvatarScale > 0f ? limits.MaxAvatarScale : float.PositiveInfinity;
 
         if (i < 3)
         {
-            return (lowScale, highScale);
+            // No floor: a ported avatar is built small on purpose, and raising it would
+            // only enlarge the copy every other player is sent.
+            return (float.NegativeInfinity, highScale);
         }
 
         if (i == Total)
@@ -182,7 +167,6 @@ public static class AvatarStatsCheck
 
         if (i == Height)
         {
-            min = Math.Max(min, lowScale * CalibrationHeight);
             max = Math.Min(max, highScale * CalibrationHeight);
         }
 

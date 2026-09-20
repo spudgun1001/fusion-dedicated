@@ -1,4 +1,4 @@
-using BonelabServerBrowser.Fusion;
+﻿using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 using Steamworks;
@@ -294,36 +294,34 @@ public class AvatarStatsGateTests
             e => e.Level == "WARN" && e.Message == "Joel sent an avatar with massTotal 6000, over 5000, clamped to the limits");
     }
 
+    /// <summary>A ported avatar carries a tiny root scale to fix its units, and a floor enlarged it for everyone but its wearer.</summary>
     [Fact]
-    public void A_tiny_avatar_reaches_everyone_with_its_scale_clamped()
+    public void A_tiny_ported_avatar_reaches_everyone_at_its_real_scale()
     {
-        var config = Config();
-        config.MinAvatarScale = 0.05f;
-        using var world = new World(config);
+        using var world = new World(Config());
         var (joel, kanza, max) = Loaded(world);
         int toKanza = world.Transport.SentTo(kanza.Connection).Count;
         int toMax = world.Transport.SentTo(max.Connection).Count;
         byte[] tiny = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(tiny, "localScale.x", 0.01f);
+        ClientMessages.SetAvatarStat(tiny, "localScale.x", 0.001f);
+        ClientMessages.SetAvatarStat(tiny, "localScale.y", 0.001f);
+        ClientMessages.SetAvatarStat(tiny, "localScale.z", 0.001f);
 
         joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, tiny));
 
         Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
         Assert.Equal(1, AvatarsTo(world, max, toMax));
-        Assert.Equal(0.05f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
-        Assert.Equal(0.05f, StatOf(StatsTo(world, max, toMax)!, "localScale.x"));
+        Assert.Equal(0.001f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
+        Assert.Equal(0.001f, StatOf(StatsTo(world, max, toMax)!, "localScale.z"));
         Assert.Equal(Barcode, world.Server.Players.GetByPlatformId(JoelId)!.AvatarBarcode);
-        Assert.Equal(0.05f, StatOf(world.Server.Players.GetByPlatformId(JoelId)!.AvatarStats, "localScale.x"));
-        Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN" && e.Message == "Joel sent an avatar with localScale.x 0.01, under 0.05, clamped to the limits");
+        Assert.Equal(0.001f, StatOf(world.Server.Players.GetByPlatformId(JoelId)!.AvatarStats, "localScale.x"));
+        Assert.DoesNotContain(world.Server.RecentLog(2000), e => e.Message.Contains("clamped to the limits"));
     }
 
     [Fact]
     public void A_mirrored_avatar_reaches_everyone_still_mirrored()
     {
-        var config = Config();
-        config.MinAvatarScale = 0.05f;
-        using var world = new World(config);
+        using var world = new World(Config());
         var (joel, kanza, _) = Loaded(world);
         int toKanza = world.Transport.SentTo(kanza.Connection).Count;
         byte[] mirrored = ClientMessages.AvatarStats();
@@ -345,57 +343,6 @@ public class AvatarStatsGateTests
             .LastOrDefault();
 
     [Fact]
-    public void Crossed_scale_limits_are_ignored_rather_than_obeyed()
-    {
-        var config = Config();
-        config.MinAvatarScale = 2f;
-        config.MaxAvatarScale = 1f;
-        using var world = new World(config);
-        var (joel, kanza, _) = Loaded(world);
-        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
-        byte[] stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
-
-        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
-
-        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
-        Assert.Equal(5f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
-
-        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
-
-        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
-        Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Level == "WARN"
-                 && e.Message == "MinAvatarScale 2 is over MaxAvatarScale 1, so both are ignored until they are fixed");
-    }
-
-    [Fact]
-    public void Limits_crossed_after_the_start_check_are_ignored_too()
-    {
-        using var world = new World(Config());
-        var (joel, kanza, _) = Loaded(world);
-        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
-        byte[] stats = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(stats, "localScale.x", 5f);
-
-        // Written after the start check, which is the only way one reaches the bounds.
-        world.Server.Config.MinAvatarScale = 2f;
-        world.Server.Config.MaxAvatarScale = 1f;
-
-        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, stats));
-
-        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
-        Assert.Equal(5f, StatOf(StatsTo(world, kanza, toKanza)!, "localScale.x"));
-        Assert.NotNull(world.Server.Players.GetByPlatformId(MaxId));
-
-        AskWith(world, 76561198000000006, "Newcomer", ClientMessages.AvatarStats());
-        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, Heavy()));
-
-        Assert.NotNull(world.Server.Players.GetByPlatformId(76561198000000006));
-        Assert.Equal(1, AvatarsTo(world, kanza, toKanza));
-    }
-
-    [Fact]
     public void A_maximum_mass_under_the_floor_is_ignored_too()
     {
         var config = Config();
@@ -415,27 +362,9 @@ public class AvatarStatsGateTests
     }
 
     [Fact]
-    public void A_swap_a_limit_of_infinity_would_clamp_to_infinity_is_dropped()
-    {
-        using var world = new World(Config());
-        var (joel, kanza, _) = Loaded(world);
-        int toKanza = world.Transport.SentTo(kanza.Connection).Count;
-
-        // Set after the joins, since no avatar can sit inside this pair.
-        world.Server.Config.MinAvatarScale = float.PositiveInfinity;
-        world.Server.Config.MaxAvatarScale = float.PositiveInfinity;
-
-        joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, ClientMessages.AvatarStats()));
-
-        Assert.Equal(0, AvatarsTo(world, kanza, toKanza));
-        Assert.False(Kicked(world, JoelId));
-    }
-
-    [Fact]
     public void A_join_a_subnormal_limit_would_clamp_to_a_subnormal_is_refused()
     {
         var config = Config();
-        config.MinAvatarScale = 0f;
         config.MaxAvatarScale = 1e-42f;
         using var world = new World(config);
 
@@ -448,12 +377,10 @@ public class AvatarStatsGateTests
     [Fact]
     public void A_late_joiner_is_told_the_clamped_stats()
     {
-        var config = Config();
-        config.MinAvatarScale = 0.05f;
-        using var world = new World(config);
+        using var world = new World(Config());
         var (joel, _, _) = Loaded(world);
         byte[] tiny = ClientMessages.AvatarStats();
-        ClientMessages.SetAvatarStat(tiny, "localScale.x", 0.01f);
+        ClientMessages.SetAvatarStat(tiny, "localScale.x", 60f);
 
         joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, tiny));
 
@@ -465,7 +392,7 @@ public class AvatarStatsGateTests
             .Last(envelope => envelope.Tag == FusionProtocol.TagConnectionResponse
                               && System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(envelope.Payload) == JoelId);
 
-        Assert.Equal(0.05f, StatOf(clamped, "localScale.x"));
+        Assert.Equal(50f, StatOf(clamped, "localScale.x"));
         Assert.True(told.Payload.AsSpan().IndexOf(clamped) > 0);
         Assert.True(told.Payload.AsSpan().IndexOf(tiny) < 0);
     }

@@ -420,8 +420,8 @@ while `ExtendedProtection` is on, to every rank.
 
 An avatar swap carries the avatar's proportions and masses, and every other game gives
 the model those numbers, so a modded client sending a huge mass flings whoever it
-touches. A swap whose scale is outside `MinAvatarScale` to `MaxAvatarScale` (0.005 to
-50), whose height is outside 1.76 times those, whose arm, chest, head, leg or pelvis
+touches. A swap whose scale is over `MaxAvatarScale` (50), whose height is over 1.76
+times that, whose arm, chest, head, leg or pelvis
 weighs more than `MaxAvatarPartMass` (2500), whose whole avatar weighs under 1 or more
 than `MaxAvatarMass` (5000), or whose length or radius is negative, is relayed with
 those numbers pulled back inside the limits rather than dropped, so everybody sees the
@@ -437,12 +437,12 @@ billion either way, a negative mass, or a whole avatar with no mass.
 player, so a big avatar that is only over the limits costs nothing. Joins are checked
 the same way: one with a value no real avatar has is refused with "impossible avatar
 stats", and one only over the limits is let in with its numbers pulled back inside
-them. A limit set below its own minimum, such as a `MinAvatarScale` over
-`MaxAvatarScale`, is ignored rather than obeyed and named in the log at startup, since
-obeying it would refuse every avatar on the server. A `MinAvatarScale` over 0.01 is
-named at startup as well, because an avatar ported from another game is often built
-that small and the floor pulls it up, so everybody but its wearer sees it oversized.
-This applies while
+them. A limit set below its own minimum, such as a `MaxAvatarMass` under the 1 every
+avatar weighs, is ignored rather than obeyed and named in the log at startup, since
+obeying it would refuse every avatar on the server. There is no lower bound on scale:
+an avatar ported from another game is built small on purpose to fix its units, and a
+floor would raise only the copy other players are sent, so its wearer would look normal
+to themselves and oversized to everybody else. This applies while
 `ExtendedProtection` is on, to every rank. Whatever the settings, any message whose
 prefix Fusion would read differently from the server is dropped and noted in the log
 file only.
@@ -605,7 +605,7 @@ gitignored.
 | `DriverSeatIndex` | the seat that drives a vehicle, whose poses take it and who inherits it (0 by default) |
 | `HitsPerSecond` | hits one player may land on another per second (20 by default, 0 for no limit) |
 | `MaxAvatarMass` / `MaxAvatarPartMass` | heaviest avatar a player may send, and heaviest body part (5000 and 2500 by default, 0 for no limit) |
-| `MinAvatarScale` / `MaxAvatarScale` | smallest and largest avatar scale a player may send, which also bound height (0.005 and 50 by default, 0 for no limit on that side, and a minimum over 0.01 enlarges ported avatars for everyone but their wearer) |
+| `MaxAvatarScale` | largest avatar scale a player may send, which also bounds height (50 by default, 0 for no limit); there is no smallest, since ported avatars are built small on purpose |
 | `AvatarStrikesBeforeKick` | avatars with impossible stats inside `AvatarStrikeWindowSeconds` (60) that get a player kicked (3 by default, 0 never kicks) |
 | `PoseThinDistance` | metres from a moving prop past which a player gets fewer of its poses (60 by default, 0 sends all) |
 | `FarPosesPerSecond` | poses a second those far players get (5 by default, 0 sends all) |

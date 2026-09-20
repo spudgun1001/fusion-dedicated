@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated;
 using FusionDedicated.Server.Safety;
@@ -20,13 +20,12 @@ public class AvatarStatsCheckTests
     }
 
     [Fact]
-    public void The_defaults_are_a_5000_avatar_2500_a_part_scale_from_0005_to_50_and_3_strikes_a_minute()
+    public void The_defaults_are_a_5000_avatar_2500_a_part_scale_up_to_50_and_3_strikes_a_minute()
     {
         var config = new ServerConfig();
 
         Assert.Equal(5000f, config.MaxAvatarMass);
         Assert.Equal(2500f, config.MaxAvatarPartMass);
-        Assert.Equal(0.005f, config.MinAvatarScale);
         Assert.Equal(50f, config.MaxAvatarScale);
         Assert.Equal(3, config.AvatarStrikesBeforeKick);
         Assert.Equal(60, config.AvatarStrikeWindowSeconds);
@@ -93,10 +92,10 @@ public class AvatarStatsCheckTests
         => Assert.StartsWith("massTotal ", AvatarStatsCheck.Problem(With("massTotal", total), Limits));
 
     [Theory]
-    [InlineData("localScale.x", 0.001f)]
+    [InlineData("localScale.x", 60f)]
     [InlineData("localScale.y", 60f)]
     [InlineData("localScale.z", -60f)]
-    public void A_scale_out_of_range_fails(string field, float value)
+    public void A_scale_over_the_ceiling_fails(string field, float value)
         => Assert.StartsWith($"{field} ", AvatarStatsCheck.Problem(With(field, value), Limits));
 
     [Fact]
@@ -149,9 +148,7 @@ public class AvatarStatsCheckTests
     [InlineData("massTotal", 0.5f)]
     [InlineData("massLeg", 3000f)]
     [InlineData("localScale.x", 60f)]
-    [InlineData("localScale.y", 0.001f)]
     [InlineData("height", 100f)]
-    [InlineData("height", 0.005f)]
     [InlineData("armLength", -0.5f)]
     [InlineData("headEllipseX", -0.1f)]
     [InlineData("kneeEllipse.XRadius", -0.1f)]
@@ -165,7 +162,9 @@ public class AvatarStatsCheckTests
 
     [Theory]
     [InlineData("height", 0.0088f)]
+    [InlineData("height", 0.0001f)]
     [InlineData("height", 88f)]
+    [InlineData("localScale.y", 0.001f)]
     [InlineData("kneeEllipse.XBias", -0.5f)]
     [InlineData("speed", 500000f)]
     [InlineData("headTop", -500000f)]
@@ -176,6 +175,8 @@ public class AvatarStatsCheckTests
     /// <summary>Values real players were dropped or refused for on 2026-09-18, before the limits were widened.</summary>
     [Theory]
     [InlineData("localScale.x", 0.01f)]
+    [InlineData("localScale.x", 0.01905f)]
+    [InlineData("localScale.x", 0.001f)]
     [InlineData("localScale.x", 0.022f)]
     [InlineData("localScale.x", 40f)]
     [InlineData("massTotal", 1649.314f)]
@@ -185,19 +186,19 @@ public class AvatarStatsCheckTests
         => Assert.Null(AvatarStatsCheck.Problem(With(field, value), Limits));
 
     [Fact]
-    public void Height_follows_the_scale_limits()
+    public void Height_follows_the_scale_ceiling()
     {
-        var config = new ServerConfig { MinAvatarScale = 1f, MaxAvatarScale = 2f };
+        var config = new ServerConfig { MaxAvatarScale = 2f };
 
-        Assert.StartsWith("height ", AvatarStatsCheck.Problem(With("height", 1.7f), config));
         Assert.StartsWith("height ", AvatarStatsCheck.Problem(With("height", 3.6f), config));
         Assert.Null(AvatarStatsCheck.Problem(With("height", 3.5f), config));
+        Assert.Null(AvatarStatsCheck.Problem(With("height", 1.7f), config));
     }
 
     [Fact]
     public void A_limit_of_zero_or_less_turns_that_bound_off()
     {
-        var config = new ServerConfig { MaxAvatarMass = 0f, MaxAvatarPartMass = -1f, MinAvatarScale = 0f, MaxAvatarScale = 0f };
+        var config = new ServerConfig { MaxAvatarMass = 0f, MaxAvatarPartMass = -1f, MaxAvatarScale = 0f };
 
         Assert.Null(AvatarStatsCheck.Problem(With("massTotal", 5000f), config));
         Assert.Null(AvatarStatsCheck.Problem(With("massChest", 5000f), config));
@@ -214,7 +215,7 @@ public class AvatarStatsCheckTests
     {
         Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", -1f), Limits));
         Assert.Equal("localScale.x -60, over 50", AvatarStatsCheck.Problem(With("localScale.x", -60f), Limits));
-        Assert.Equal("localScale.z -0.001, under 0.005", AvatarStatsCheck.Problem(With("localScale.z", -0.001f), Limits));
+        Assert.Null(AvatarStatsCheck.Problem(With("localScale.z", -0.001f), Limits));
 
         var stats = ClientMessages.AvatarStats();
         ClientMessages.SetAvatarStat(stats, "localScale.x", -60f);
@@ -226,7 +227,7 @@ public class AvatarStatsCheckTests
         Assert.Null(AvatarStatsCheck.Problem(clamped, Limits));
         Assert.Equal(-50f, Stat(clamped, "localScale.x"));
         Assert.Equal(-1f, Stat(clamped, "localScale.y"));
-        Assert.Equal(-0.005f, Stat(clamped, "localScale.z"));
+        Assert.Equal(-0.001f, Stat(clamped, "localScale.z"));
     }
 
     /// <summary>Only the three scale floats mirror. A negative length is still pulled up to zero.</summary>
@@ -240,29 +241,18 @@ public class AvatarStatsCheckTests
         byte[] clamped = AvatarStatsCheck.Clamp(stats, Limits);
 
         Assert.Equal(0f, Stat(clamped, "armLength"));
-        Assert.Equal(0.0088f, Stat(clamped, "height"), 4);
+        Assert.Equal(0f, Stat(clamped, "height"));
     }
 
     [Fact]
-    public void A_minimum_over_the_maximum_is_no_limit_at_all()
-    {
-        var crossed = new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f };
-
-        Assert.Null(AvatarStatsCheck.Problem(With("localScale.x", 5f), crossed));
-        Assert.Null(AvatarStatsCheck.Problem(With("massTotal", 80f), new ServerConfig { MaxAvatarMass = 0.5f }));
-    }
+    public void A_maximum_under_its_own_minimum_is_no_limit_at_all()
+        => Assert.Null(AvatarStatsCheck.Problem(With("massTotal", 80f), new ServerConfig { MaxAvatarMass = 0.5f }));
 
     [Fact]
     public void Every_limit_the_bounds_ignore_is_named_at_the_start()
     {
         Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig()));
-
-        // A maximum of zero turns its own side off and leaves the minimum of 5 enlarging everything.
-        Assert.Equal(new[] { Enlarging(5f) },
-            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 0f }));
-
-        Assert.Equal(new[] { "MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed" },
-            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f }));
+        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MaxAvatarScale = 0f }));
 
         Assert.Equal(new[] { "MaxAvatarMass 0.5 is under the 1 every avatar weighs, so it is ignored until it is fixed" },
             AvatarStatsCheck.SettingWarnings(new ServerConfig { MaxAvatarMass = 0.5f }));
@@ -270,25 +260,6 @@ public class AvatarStatsCheckTests
         Assert.Equal(new[] { "MaxAvatarScale Infinity is not a finite number, so fix it before trusting the avatar limits" },
             AvatarStatsCheck.SettingWarnings(new ServerConfig { MaxAvatarScale = float.PositiveInfinity }));
     }
-
-    /// <summary>The 0.05 that made ported police and military avatars huge for everyone but their wearer.</summary>
-    [Fact]
-    public void A_scale_floor_above_a_ported_avatar_is_named_at_the_start()
-    {
-        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 0.01f }));
-        Assert.Empty(AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 0f }));
-
-        Assert.Equal(new[] { Enlarging(0.05f) },
-            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 0.05f }));
-
-        // A floor over the ceiling is ignored outright, so it is not also called enlarging.
-        Assert.Equal(new[] { "MinAvatarScale 5 is over MaxAvatarScale 2, so both are ignored until they are fixed" },
-            AvatarStatsCheck.SettingWarnings(new ServerConfig { MinAvatarScale = 5f, MaxAvatarScale = 2f }));
-    }
-
-    private static string Enlarging(float floor)
-        => $"MinAvatarScale {floor:0.###} is over the 0.01 a ported avatar is often built at, so everyone " +
-           "else is sent those avatars larger than their wearer sees them";
 
     [Fact]
     public void Clamping_brings_every_limit_back_inside()

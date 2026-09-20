@@ -72,6 +72,19 @@ public class ConfigLoadTests : IDisposable
         Assert.Equal(new ServerConfig().MaxAvatarScale, config.MaxAvatarScale);
     }
 
+    /// <summary>Live servers still carry MinAvatarScale, and the scale floor it set was removed.</summary>
+    [Fact]
+    public void A_setting_that_no_longer_exists_does_not_stop_the_file_loading()
+    {
+        var config = ServerConfig.Load(
+            Write("""{"ServerName":"Kept","MinAvatarScale":0.05,"MaxPlayers":24}"""), out string? error);
+
+        Assert.Null(error);
+        Assert.Equal("Kept", config.ServerName);
+        Assert.Equal(24, config.MaxPlayers);
+        Assert.DoesNotContain("MinAvatarScale", typeof(ServerConfig).GetProperties().Select(p => p.Name));
+    }
+
     [Fact]
     public void A_good_file_reports_no_error()
     {
