@@ -845,7 +845,8 @@ public sealed class FusionServer : IDisposable
                 // Watched, then passed on like anything else. Only the owner's
                 // word counts, which is the same rule the clients apply.
                 if (FusionProtocol.TryReadCullStatus(message) is var (culledId, culled)
-                    && Entities.Get(culledId)?.OwnerSmallId == sender.SmallId)
+                    && Entities.Get(culledId)?.OwnerSmallId == sender.SmallId
+                    && !(culled && PassCulledVehicleToARider(culledId, sender)))
                 {
                     Entities.SetCulledForOwner(culledId, culled);
                 }
@@ -5092,6 +5093,32 @@ public sealed class FusionServer : IDisposable
     /// <summary>Who is sitting in a vehicle, by small id, first to sit first.</summary>
     public IReadOnlyList<byte> RidersOf(ushort entityId)
         => _seats.RidersOf(entityId).Select(s => s.Rider).ToList();
+
+    /// <summary>
+    /// Hands a vehicle to one of its riders when its owner culls it from outside. He has
+    /// stopped simulating it, and a van full of players would freeze where it stood.
+    /// </summary>
+    /// <returns>False when nobody else is sitting in it, so the cull is recorded as usual.</returns>
+    private bool PassCulledVehicleToARider(ushort entityId, ConnectedPlayer owner)
+    {
+        var riders = DriverFirstRidersOf(entityId);
+
+        if (riders.Count == 0 || riders.Contains(owner.SmallId))
+        {
+            return false;
+        }
+
+        byte heir = riders[0];
+
+        Entities.SetOwner(entityId, heir);
+        _ownershipHold.Note(entityId);
+        AnnounceOwner(entityId, heir);
+
+        Log("INFO", $"Entity {entityId} now owned by {Players.Get(heir)?.DisplayName ?? "nobody"} (player {heir}), " +
+                    $"who rides in it, because {owner.DisplayName} culled it from outside", console: false);
+
+        return true;
+    }
 
     /// <summary>The same riders with the driver first, so a vehicle its owner left goes to whoever can drive it.</summary>
     private IReadOnlyList<byte> DriverFirstRidersOf(ushort entityId)

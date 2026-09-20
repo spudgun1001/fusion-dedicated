@@ -464,7 +464,7 @@ public sealed class ServerConfig
     /// The seat that drives a vehicle. Only that seat's poses take it, and a vehicle its owner
     /// leaves goes to whoever is in it. Change it for a vehicle whose driver is not seat 0.
     /// </summary>
-    public byte DriverSeatIndex { get; set; }
+    public byte DriverSeatIndex { get; set; } = 0;
 
     /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
     public int CatchupMessagesPerSecond { get; set; } = 100;

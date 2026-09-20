@@ -28,6 +28,10 @@ public class SeatedOwnerTests
         => Assert.False(WorldCatchup.OwnerFromSeatedPose(3, 1, 300, 300, seat, 0));
 
     [Fact]
+    public void The_driver_seat_is_0_by_default()
+        => Assert.Equal((byte)0, new ServerConfig().DriverSeatIndex);
+
+    [Fact]
     public void The_driver_seat_a_vehicle_uses_is_a_setting()
         => Assert.True(WorldCatchup.OwnerFromSeatedPose(3, 1, 300, 300, senderSeatIndex: 2, driverSeatIndex: 2));
 

@@ -390,9 +390,11 @@ off the driver, the driver's next pose took it back, and in between everybody el
 were thrown away as a non-owner's, which is the jitter riders saw and why a player stepping
 out landed somewhere nobody else had them. A vehicle its owner left behind goes to its
 driver first and only then to the other riders. A driver who stands up keeps the vehicle
-until somebody asks for it, so it carries on moving rather than freezing, and a rider who
-wants it is answered as soon as the driver is out of the seat. Set `DriverSeatIndex` to the
-seat that drives a vehicle whose driver is not seat 0.
+while he is still simulating it, so it carries on moving rather than freezing, and a rider
+who wants it is answered as soon as he is out of the seat. Walking far enough away makes his
+game cull the vehicle and stop sending its poses, and that cull hands it to a rider on the
+spot, so a van full of players does not hibernate where it stood. Set `DriverSeatIndex` to
+the seat that drives a vehicle whose driver is not seat 0.
 
 A rider a plugin refuses a seat is then left alone for `SeatRefusalCooldownSeconds` (2)
 before that seat is put to plugins again. Fusion registers the seat again while the rider

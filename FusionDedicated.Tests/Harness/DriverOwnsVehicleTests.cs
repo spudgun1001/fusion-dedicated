@@ -152,6 +152,73 @@ public class DriverOwnsVehicleTests
     }
 
     [Fact]
+    public void A_van_its_owner_culls_goes_to_a_rider_rather_than_freezing()
+    {
+        var (world, driver, passengers) = VanWithThree(driverLock: false);
+        using var _ = world;
+        Pose(driver, 1);
+
+        driver.Send(FusionProtocol.BuildSeat(driver.SmallId, Van, 0, false));
+        world.Advance(TimeSpan.FromMilliseconds(600));
+        int[] before = world.Players.Select(p => world.Transport.SentTo(p.Connection).Count).ToArray();
+
+        // He has walked far enough away that his game culls the van and stops
+        // sending its poses, with both passengers still sitting in it.
+        driver.Send(ClientMessages.CullStatus(driver.SmallId, Van, true));
+
+        Assert.Equal(passengers[0].SmallId, world.Server.Entities.Get(Van)!.OwnerSmallId);
+        Assert.False(world.Server.Entities.Get(Van)!.CulledForOwner);
+        Assert.True(world.AgreeOnOwner(Van), string.Join(", ", world.OwnersOf(Van)));
+        Assert.All(world.OwnersOf(Van).Values, owner => Assert.Equal(passengers[0].SmallId, owner));
+
+        for (var i = 0; i < world.Players.Count; i++)
+        {
+            Assert.Equal(1, AnnouncementsNaming(world, world.Players[i], passengers[0].SmallId, before[i]));
+        }
+    }
+
+    [Fact]
+    public void A_driver_culling_the_van_he_sits_in_keeps_it()
+    {
+        var (world, driver, _) = VanWithThree(driverLock: false);
+        using var __ = world;
+        Pose(driver, 1);
+
+        driver.Send(ClientMessages.CullStatus(driver.SmallId, Van, true));
+
+        Assert.Equal(driver.SmallId, world.Server.Entities.Get(Van)!.OwnerSmallId);
+        Assert.True(world.Server.Entities.Get(Van)!.CulledForOwner);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void With_nobody_driving_a_van_its_owner_leaves_goes_to_whoever_sat_first(bool frontFirst)
+    {
+        var world = new World(new ServerConfig { CullOrphanedEntities = false, OwnershipRequestsPerSecond = 0 });
+        using var _ = world;
+        var outsider = world.Join(76561198000000004, "Siriuss");
+        var front = world.Join(76561198000000002, "PokeMrowa");
+        var back = world.Join(76561198000000003, "FOLZY");
+
+        foreach (var player in world.Players)
+        {
+            player.FinishLoading();
+        }
+
+        world.Spawn(outsider, Van, "BaBaCorp.AssortedAutomobiles.Spawnable.VanSWATTransport", 0, 0, 0);
+
+        var first = frontFirst ? front : back;
+        var second = frontFirst ? back : front;
+        first.Send(FusionProtocol.BuildSeat(first.SmallId, Van, frontFirst ? (byte)1 : (byte)2, true));
+        second.Send(FusionProtocol.BuildSeat(second.SmallId, Van, frontFirst ? (byte)2 : (byte)1, true));
+
+        world.Leave(outsider, "Closing Connection");
+
+        Assert.Equal(first.SmallId, world.Server.Entities.Get(Van)!.OwnerSmallId);
+    }
+
+    [Fact]
     public void A_van_whose_owner_leaves_goes_to_the_driver_and_not_the_first_passenger()
     {
         var world = new World(new ServerConfig { CullOrphanedEntities = false, OwnershipRequestsPerSecond = 0 });
