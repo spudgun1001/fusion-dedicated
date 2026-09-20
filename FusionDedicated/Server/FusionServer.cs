@@ -1380,6 +1380,12 @@ public sealed class FusionServer : IDisposable
         get { lock (_cacheLock) { return _rpcVariables.Count > 0; } }
     }
 
+    /// <summary>How many RPC variables are held for the next joiner, out of <see cref="RpcVariableCache.MaxVariables"/>.</summary>
+    public int CachedRpcVariables
+    {
+        get { lock (_cacheLock) { return _rpcVariables.Count; } }
+    }
+
     /// <summary>
     /// Tells a newcomer about every scene object already networked.
     ///

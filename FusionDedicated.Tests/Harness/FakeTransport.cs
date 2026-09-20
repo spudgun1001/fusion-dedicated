@@ -25,6 +25,33 @@ public sealed class FakeTransport : ISocketTransport
     /// <summary>How long the server took over each message it was handed.</summary>
     public List<TimeSpan> HandleTimes { get; } = new();
 
+    /// <summary>Every send the server made, whether or not the bytes were kept.</summary>
+    public long Sends { get; private set; }
+
+    public long SendBytes { get; private set; }
+
+    /// <summary>Off for a load run, where keeping every message would cost more than the server does.</summary>
+    public bool KeepSent { get; set; } = true;
+
+    /// <summary>Off for a load run: the oracle walks every message and would be measured as server time.</summary>
+    public bool CheckCanonical { get; set; } = true;
+
+    /// <summary>Messages queued and not yet handed to the server.</summary>
+    public int Pending
+    {
+        get { lock (_lock) { return _inbox.Count; } }
+    }
+
+    public void ResetCounters()
+    {
+        lock (_lock)
+        {
+            Sends = 0;
+            SendBytes = 0;
+            HandleTimes.Clear();
+        }
+    }
+
     /// <summary>Makes the connection and calls the connecting callback, the way Steam's status callback does.</summary>
     public HSteamNetConnection Connect()
     {
@@ -103,14 +130,21 @@ public sealed class FakeTransport : ISocketTransport
 
         lock (_lock)
         {
-            if (!_sent.TryGetValue(connection.m_HSteamNetConnection, out var list))
+            Sends++;
+            SendBytes += message.Length;
+
+            if (KeepSent)
             {
-                _sent[connection.m_HSteamNetConnection] = list = new();
+                if (!_sent.TryGetValue(connection.m_HSteamNetConnection, out var list))
+                {
+                    _sent[connection.m_HSteamNetConnection] = list = new();
+                }
+
+                list.Add((message, reliable));
             }
 
-            list.Add((message, reliable));
-
-            if (FusionDedicated.Tests.Protocol.OracleMessage.NotCanonical(message) is { } problem)
+            if (CheckCanonical
+                && FusionDedicated.Tests.Protocol.OracleMessage.NotCanonical(message) is { } problem)
             {
                 NonCanonicalSends.Add($"tag {message[0]}: {problem}");
             }
