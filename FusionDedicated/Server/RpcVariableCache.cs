@@ -17,6 +17,14 @@ public sealed class RpcVariableCache
     public const int MaxVariables = 2048;
 
     private readonly Dictionary<(byte Tag, string Key), (byte From, byte[] Body, bool Stale, byte[] Path)> _values = new();
+
+    /// <summary>
+    /// Which keys belong to which prop. A client asks about one prop at a time and a
+    /// full cache holds thousands of the level's own, so finding a prop's few by
+    /// walking all of them cost the whole cache on every request.
+    /// </summary>
+    private readonly Dictionary<ushort, List<(byte Tag, string Key)>> _byEntity = new();
+
     private readonly object _lock = new();
 
     public int Count
@@ -38,6 +46,7 @@ public sealed class RpcVariableCache
             }
 
             _values[key] = (from, body, false, path.ToArray());
+            Index(key, EntityOf(path));
             return true;
         }
     }
@@ -82,7 +91,13 @@ public sealed class RpcVariableCache
 
         lock (_lock)
         {
-            return _values.Remove(key);
+            if (!_values.Remove(key))
+            {
+                return false;
+            }
+
+            Unindex(key, EntityOf(path));
+            return true;
         }
     }
 
@@ -90,20 +105,19 @@ public sealed class RpcVariableCache
     /// <returns>How many went.</returns>
     public int ForgetEntity(ushort entityId)
     {
-        string prefix = EntityPrefix(entityId);
-
         lock (_lock)
         {
-            var doomed = _values.Keys
-                .Where(k => k.Key.StartsWith(prefix, StringComparison.Ordinal))
-                .ToList();
+            if (!_byEntity.Remove(entityId, out var keys))
+            {
+                return 0;
+            }
 
-            foreach (var key in doomed)
+            foreach (var key in keys)
             {
                 _values.Remove(key);
             }
 
-            return doomed.Count;
+            return keys.Count;
         }
     }
 
@@ -112,6 +126,7 @@ public sealed class RpcVariableCache
         lock (_lock)
         {
             _values.Clear();
+            _byEntity.Clear();
         }
     }
 
@@ -127,14 +142,19 @@ public sealed class RpcVariableCache
     /// <summary>Every held value on one prop, for a client that has just spawned it.</summary>
     public List<(byte Tag, byte From, byte[] Body)> ForEntity(ushort entityId)
     {
-        string prefix = EntityPrefix(entityId);
-
         lock (_lock)
         {
-            return _values
-                .Where(v => v.Key.Key.StartsWith(prefix, StringComparison.Ordinal))
-                .Select(v => (v.Key.Tag, v.Value.From, v.Value.Body))
-                .ToList();
+            var held = new List<(byte Tag, byte From, byte[] Body)>();
+
+            foreach (var key in Keys(entityId))
+            {
+                if (_values.TryGetValue(key, out var value))
+                {
+                    held.Add((key.Tag, value.From, value.Body));
+                }
+            }
+
+            return held;
         }
     }
 
@@ -153,16 +173,56 @@ public sealed class RpcVariableCache
     /// <summary>Every held value's identity on one prop. See <see cref="AllPaths"/>.</summary>
     public List<(byte Tag, byte[] Path)> EntityPaths(ushort entityId)
     {
-        string prefix = EntityPrefix(entityId);
-
         lock (_lock)
         {
-            return _values
-                .Where(v => v.Key.Key.StartsWith(prefix, StringComparison.Ordinal))
-                .Select(v => (v.Key.Tag, v.Value.Path))
-                .ToList();
+            var paths = new List<(byte Tag, byte[] Path)>();
+
+            foreach (var key in Keys(entityId))
+            {
+                if (_values.TryGetValue(key, out var value))
+                {
+                    paths.Add((key.Tag, value.Path));
+                }
+            }
+
+            return paths;
         }
     }
+
+    /// <summary>One prop's keys, oldest first. Call under the lock.</summary>
+    private IReadOnlyList<(byte Tag, string Key)> Keys(ushort entityId)
+        => _byEntity.TryGetValue(entityId, out var keys) ? keys : Array.Empty<(byte, string)>();
+
+    private void Index((byte Tag, string Key) key, ushort? entityId)
+    {
+        if (entityId is not { } id)
+        {
+            return;
+        }
+
+        if (!_byEntity.TryGetValue(id, out var keys))
+        {
+            _byEntity[id] = keys = new List<(byte Tag, string Key)>();
+        }
+
+        if (!keys.Contains(key))
+        {
+            keys.Add(key);
+        }
+    }
+
+    private void Unindex((byte Tag, string Key) key, ushort? entityId)
+    {
+        if (entityId is { } id && _byEntity.TryGetValue(id, out var keys)
+            && keys.Remove(key) && keys.Count == 0)
+        {
+            _byEntity.Remove(id);
+        }
+    }
+
+    /// <summary>The prop a path names, or null when it is one of the level's own.</summary>
+    private static ushort? EntityOf(ReadOnlySpan<byte> path)
+        => path.Length >= 5 && path[0] == 1 ? (ushort)((path[1] << 8) | path[2]) : null;
 
     /// <summary>The value currently held for one variable, or null when it has gone.</summary>
     public (byte From, byte[] Body)? Current(byte tag, byte[] path)
