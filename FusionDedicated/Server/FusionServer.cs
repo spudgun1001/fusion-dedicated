@@ -1325,6 +1325,17 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private readonly Dictionary<(int Hash, int Index), FusionProtocol.PropCreate> _sceneProps = new();
 
+    /// <summary>The entity a level object was networked as, for a plugin. Null when nobody has or it has gone.</summary>
+    public ushort? SceneEntityOf(int hash, int index)
+    {
+        lock (_cacheLock)
+        {
+            return _sceneProps.TryGetValue((hash, index), out var prop) && Entities.Get(prop.EntityId) != null
+                ? prop.EntityId
+                : null;
+        }
+    }
+
     /// <summary>
     /// Guards the three caches below.
     ///

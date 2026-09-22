@@ -69,6 +69,7 @@ public sealed class LevelRig : IDisposable
             HolsteredLookup = server.HolsteredBy,
             HeldLookup = server.HeldBy,
             SeatOfLookup = server.SeatOfPlayer,
+            SceneEntityLookup = server.SceneEntityOf,
         };
 
         var actions = new ServerPluginActions(

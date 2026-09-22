@@ -74,6 +74,9 @@ public sealed class PluginWorld
     /// <summary>How the server finds the seat a player sits in. Null outside a server.</summary>
     public Func<ulong, PluginSeat?>? SeatOfLookup { get; set; }
 
+    /// <summary>How the server finds the entity a level object was networked as. Null outside a server.</summary>
+    public Func<int, int, ushort?>? SceneEntityLookup { get; set; }
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
 
     public PluginMotion? Motion(ushort entityId) => MotionLookup?.Invoke(entityId);
@@ -91,6 +94,12 @@ public sealed class PluginWorld
 
     /// <summary>The seat a player sits in, or null when they are standing or there is no server.</summary>
     public PluginSeat? SeatOf(ulong platformId) => SeatOfLookup?.Invoke(platformId);
+
+    /// <summary>
+    /// The entity a level object became when somebody grabbed it, by the hash and index Fusion names it with
+    /// in the level. Null when nobody has networked it or there is no server.
+    /// </summary>
+    public ushort? SceneEntity(int hash, int index) => SceneEntityLookup?.Invoke(hash, index);
 
     /// <summary>Everything in the world, empty when there is no server.</summary>
     public IReadOnlyList<PluginEntity> All()

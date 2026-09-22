@@ -96,4 +96,12 @@ public class ProgramLockTests
         Assert.Contains("platformId => server.UnseatForPlugin(platformId)", actions);
         Assert.Contains("SeatOfLookup = server.SeatOfPlayer,", world);
     }
+
+    [Fact]
+    public void Plugins_can_ask_which_entity_a_level_object_became()
+    {
+        string world = ProgramSource.Between("var pluginWorld = new PluginWorld", "var plugins = new PluginHost(");
+
+        Assert.Contains("SceneEntityLookup = server.SceneEntityOf,", world);
+    }
 }

@@ -310,6 +310,7 @@ public static class Program
             HolsteredLookup = server.HolsteredBy,
             HeldLookup = server.HeldBy,
             SeatOfLookup = server.SeatOfPlayer,
+            SceneEntityLookup = server.SceneEntityOf,
         };
 
         var plugins = new PluginHost(

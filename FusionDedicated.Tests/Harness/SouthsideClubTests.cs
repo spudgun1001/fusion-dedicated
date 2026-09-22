@@ -10,10 +10,14 @@ namespace FusionDedicated.Tests.Harness;
 public class SouthsideClubTests
 {
     private const int DeckAnnounce = 1002;
-    private const int DeckHeldAnnounce = 1003;
+    private const int DeckEntityAnnounce = 1003;
     private const ushort AnnounceVariable = 0;
     private const ushort UrlVariable = 1;
     private const ushort DeckEntity = 700;
+    private const ushort OtherProp = 701;
+
+    /// <summary>The hash Fusion gives the deck's MarrowEntity, which its own RPCInt shares while it is still a level object.</summary>
+    private const uint DeckEntityHash = 0xC1DB00E1;
 
     private const ulong Joel = 76561198000000001;
     private const ulong Dennis = 76561198000000002;
@@ -22,6 +26,7 @@ public class SouthsideClubTests
     private const string Song = "https://example.com/club/track.mp4";
 
     private static readonly string Deck = LevelRpc.Hash(0xC1DB0001);
+    private static readonly string DeckItself = LevelRpc.Hash(DeckEntityHash);
 
     private static LevelRig Rig(int rpcBudget)
     {
@@ -39,6 +44,7 @@ public class SouthsideClubTests
         return rig;
     }
 
+    /// <summary>Joins, stands, and has the level say where its deck is, as every game does when the level starts.</summary>
     private static FakePlayer Arrive(LevelRig rig, ulong platformId, string name)
     {
         var player = rig.World.Join(platformId, name);
@@ -46,33 +52,40 @@ public class SouthsideClubTests
         player.Send(FusionProtocol.BuildPlayerPoseUpdate(player.SmallId,
             new FusionRigPose { PelvisPosition = new Vec3(4f, 0f, 9f) }));
         player.Send(LevelRpc.Int(player.SmallId, Deck, AnnounceVariable, DeckAnnounce));
+        player.Send(LevelRpc.Int(player.SmallId, DeckItself, AnnounceVariable, DeckEntityAnnounce));
 
         return player;
     }
 
-    /// <summary>The deck as a level object somebody has networked by grabbing it, registered as the server does one.</summary>
-    private static void NetworkDeck(LevelRig rig, FakePlayer by)
+    /// <summary>A level object somebody networked by grabbing it, registered and announced as the server sees one.</summary>
+    private static void NetworkSceneObject(LevelRig rig, FakePlayer by, ushort entity, uint hash)
     {
-        var deck = rig.Server.Entities.Register(DeckEntity, "", by.SmallId, 0, 0, 0);
-        deck.Discovered = true;
-        deck.PositionKnown = false;
+        var registered = rig.Server.Entities.Register(entity, "", by.SmallId, 0, 0, 0);
+        registered.Discovered = true;
+        registered.PositionKnown = false;
+        by.Send(FusionProtocol.BuildPropCreate(by.SmallId, unchecked((int)hash), 0, entity));
     }
 
-    /// <summary>What one game sends on a menu tap: the deck entity names itself, then the clipboard goes to the url.</summary>
+    private static void NetworkDeck(LevelRig rig, FakePlayer by) => NetworkSceneObject(rig, by, DeckEntity, DeckEntityHash);
+
+    /// <summary>What one game sends on a menu tap: its clipboard, to the url.</summary>
     private static void MenuTap(FakePlayer player, string url)
+        => player.Send(LevelRpc.Message(player.SmallId, RpcKind.String, Deck, UrlVariable, RpcValue.OfString(url)));
+
+    /// <summary>An int on a networked entity's own path, which is how a held prop's RPCInt speaks.</summary>
+    private static byte[] EntityInt(FakePlayer player, ushort entity, int value)
     {
         byte[] payload = RpcProtocol.WriteValue(RpcKind.Int,
-            Convert.FromHexString(RpcProtocol.PathFor(DeckEntity, AnnounceVariable)), RpcValue.OfInt(DeckHeldAnnounce));
-        var named = new FusionNetWriter(payload.Length + 32);
+            Convert.FromHexString(RpcProtocol.PathFor(entity, AnnounceVariable)), RpcValue.OfInt(value));
+        var message = new FusionNetWriter(payload.Length + 32);
 
-        named.Write((byte)RpcKind.Int);
-        named.Write((byte)3);
-        named.Write((byte)0);
-        named.WriteNullable(player.SmallId);
-        named.WriteBlock(payload);
+        message.Write((byte)RpcKind.Int);
+        message.Write((byte)3);
+        message.Write((byte)0);
+        message.WriteNullable(player.SmallId);
+        message.WriteBlock(payload);
 
-        player.Send(named.ToArray());
-        player.Send(LevelRpc.Message(player.SmallId, RpcKind.String, Deck, UrlVariable, RpcValue.OfString(url)));
+        return message.ToArray();
     }
 
     private static List<string> Heard(LevelRig rig, FakePlayer player)
@@ -173,5 +186,64 @@ public class SouthsideClubTests
 
         Assert.Equal(new[] { Song }, Heard(rig, dennis));
         Assert.Equal(Song, Last(rig, Arrive(rig, Tony, "Tony")));
+    }
+
+    [Theory]
+    [InlineData(60)]
+    [InlineData(250)]
+    public void A_prop_announcing_itself_as_the_deck_does_not_let_its_holder_play(int budget)
+    {
+        using var rig = Rig(budget);
+        var joel = Arrive(rig, Joel, "Joel");
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        NetworkDeck(rig, joel);
+        NetworkSceneObject(rig, dennis, OtherProp, 0xBADBAD01);
+        dennis.Grab(OtherProp);
+
+        dennis.Send(EntityInt(dennis, OtherProp, DeckEntityAnnounce));
+        MenuTap(dennis, "https://example.com/forged.mp4");
+
+        Assert.Empty(Heard(rig, joel));
+        Assert.Empty(Heard(rig, dennis));
+        Assert.Single(LevelRpc.Heard(rig.World, joel, RpcProtocol.PathFor(OtherProp, AnnounceVariable), RpcKind.Int));
+    }
+
+    [Theory]
+    [InlineData(60)]
+    [InlineData(250)]
+    public void Announces_from_anywhere_else_pass_through_and_move_nothing(int budget)
+    {
+        using var rig = Rig(budget);
+        var joel = Arrive(rig, Joel, "Joel");
+        var dennis = Arrive(rig, Dennis, "Dennis");
+        string elsewhere = LevelRpc.Hash(0x0BADDECC);
+
+        dennis.Send(LevelRpc.Int(dennis.SmallId, elsewhere, AnnounceVariable, DeckAnnounce));
+        dennis.Send(LevelRpc.Int(dennis.SmallId, elsewhere, 2, DeckEntityAnnounce));
+        dennis.Send(LevelRpc.Message(dennis.SmallId, RpcKind.String, elsewhere, UrlVariable, RpcValue.OfString(Song)));
+
+        NetworkDeck(rig, joel);
+        joel.Grab(DeckEntity);
+        MenuTap(joel, Song);
+
+        Assert.Equal(new[] { DeckAnnounce }, LevelRpc.Heard(rig.World, joel, elsewhere, AnnounceVariable, RpcKind.Int).Select(v => v.Int));
+        Assert.Equal(new[] { DeckEntityAnnounce }, LevelRpc.Heard(rig.World, joel, elsewhere, 2, RpcKind.Int).Select(v => v.Int));
+        Assert.Equal(new[] { Song }, Heard(rig, dennis));
+        Assert.Empty(LevelRpc.Heard(rig.World, dennis, elsewhere, UrlVariable, RpcKind.String));
+    }
+
+    [Theory]
+    [InlineData(60)]
+    [InlineData(250)]
+    public void Nothing_plays_before_the_deck_has_been_networked(int budget)
+    {
+        using var rig = Rig(budget);
+        var joel = Arrive(rig, Joel, "Joel");
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        MenuTap(joel, Song);
+
+        Assert.Empty(Heard(rig, dennis));
     }
 }
