@@ -8,6 +8,7 @@ namespace FusionDedicated.Tests.Harness;
 /// live RPC budget of 60 and the shipped 250. They are plain level RPCs that only the server's cache carries.
 /// Paths come from Southside.unity as built and baked on 2026-09-22.
 /// </summary>
+[Trait("Needs", "fusion-server-mods")]
 public class SouthsideShowTests
 {
     private const ushort OnVariable = 0;

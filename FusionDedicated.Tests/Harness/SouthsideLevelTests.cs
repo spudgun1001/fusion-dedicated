@@ -10,6 +10,7 @@ namespace FusionDedicated.Tests.Harness;
 /// The Southside level against a real server and the real plugins, at the live RPC budget of 60 and the shipped 250.
 /// Paths come from Southside.unity as built on 2026-09-22, and the phones are synthetic until the owner places some.
 /// </summary>
+[Trait("Needs", "fusion-server-mods")]
 public class SouthsideLevelTests
 {
     private const int LevelAnnounce = 1001;

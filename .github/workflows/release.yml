@@ -19,8 +19,9 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
+      # The level tests load plugins from the private fusion-server-mods checkout, which CI does not have.
       - name: Test
-        run: dotnet test --configuration Release
+        run: dotnet test --configuration Release --filter "Needs!=fusion-server-mods"
 
       - name: Publish
         run: >

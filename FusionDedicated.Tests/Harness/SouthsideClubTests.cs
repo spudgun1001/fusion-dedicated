@@ -7,6 +7,7 @@ namespace FusionDedicated.Tests.Harness;
 /// The Club Zombo DJ deck against a real server and the real club plugin, at the live RPC budget of 60 and the shipped 250.
 /// The plugin learns the deck's level path from its announce, so a made up hash stands in for Southside_Club/Deck.
 /// </summary>
+[Trait("Needs", "fusion-server-mods")]
 public class SouthsideClubTests
 {
     private const int DeckAnnounce = 1002;

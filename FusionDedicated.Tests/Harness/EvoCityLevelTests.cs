@@ -11,6 +11,7 @@ namespace FusionDedicated.Tests.Harness;
 /// Run this before packing a level build. Nothing here mocks the server or the
 /// plugins, so a pass means the messages the level sends really did reach them.
 /// </summary>
+[Trait("Needs", "fusion-server-mods")]
 public class EvoCityLevelTests
 {
     // What the level writes on its handshake object, and the two components on it.
@@ -452,6 +453,7 @@ public class EvoCityLevelTests
 /// The same rig as EvoCityLevelTests, a real server with the real phones plugin
 /// off disk. Everything asserted here is read off the wire.
 /// </summary>
+[Trait("Needs", "fusion-server-mods")]
 public class EvoCityPhoneCallTests
 {
     private const ushort KindVariable = 2;
