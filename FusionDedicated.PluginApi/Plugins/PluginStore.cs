@@ -28,6 +28,14 @@ public sealed class PluginStore
     private Dictionary<string, JsonElement> _values = new(StringComparer.OrdinalIgnoreCase);
     private bool _warned;
 
+    /// <summary>
+    /// False only while this store is a faithful, untouched copy of an existing
+    /// file it read with <see cref="Load"/>. True to start with (there is
+    /// nothing on disk to match yet, so a first save must still go through and
+    /// warn if the path is unwritable) and true again after any Set or Remove.
+    /// </summary>
+    private bool _dirty = true;
+
     public PluginStore(string path, Action<string, string>? log = null)
     {
         _path = path;
@@ -78,6 +86,7 @@ public sealed class PluginStore
         lock (_lock)
         {
             _values[key] = element;
+            _dirty = true;
         }
     }
 
@@ -85,7 +94,14 @@ public sealed class PluginStore
     {
         lock (_lock)
         {
-            return _values.Remove(key);
+            bool removed = _values.Remove(key);
+
+            if (removed)
+            {
+                _dirty = true;
+            }
+
+            return removed;
         }
     }
 
@@ -111,6 +127,7 @@ public sealed class PluginStore
             lock (_lock)
             {
                 _values = new Dictionary<string, JsonElement>(parsed, StringComparer.OrdinalIgnoreCase);
+                _dirty = false;
             }
         }
         catch (JsonException)
@@ -165,6 +182,26 @@ public sealed class PluginStore
         }
     }
 
+    /// <summary>
+    /// Saves only if Set or Remove has changed something since this store was
+    /// loaded or last saved. Used for the host's own automatic saves (on
+    /// unload, and for every store a plugin opened but only reads), so a data
+    /// file changed on disk after it was loaded, such as a rebuilt level
+    /// manifest, is not overwritten with the stale copy still held in memory.
+    /// </summary>
+    internal bool SaveIfChanged()
+    {
+        lock (_lock)
+        {
+            if (!_dirty)
+            {
+                return true;
+            }
+        }
+
+        return TrySave();
+    }
+
     private bool WriteFile()
     {
         string tmp = _path + ".tmp";
@@ -199,6 +236,11 @@ public sealed class PluginStore
 
             Writable = true;
             _warned = false;
+
+            lock (_lock)
+            {
+                _dirty = false;
+            }
 
             return true;
         }

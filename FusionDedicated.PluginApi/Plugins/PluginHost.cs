@@ -377,7 +377,7 @@ public sealed class PluginHost
             // Timers first. One left running would fire into an assembly that is
             // no longer loaded, which ends the process rather than throwing.
             plugin.Given?.StopTimers();
-            plugin.Store.Save();
+            plugin.Store.SaveIfChanged();
             plugin.Given?.SaveOpenedStores();
             plugin.Context?.Unload();
         }

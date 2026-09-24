@@ -94,7 +94,7 @@ public sealed class PluginContext
 
         foreach (var store in stores)
         {
-            store.Save();
+            store.SaveIfChanged();
         }
     }
 

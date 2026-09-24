@@ -94,6 +94,15 @@ public class PluginOpenStoreTests : IDisposable
         }
     }
 
+    private sealed class ManifestReaderPlugin : IFusionPlugin
+    {
+        public void Start(PluginContext context) => context.OpenStore("audit");
+
+        public void Shutdown()
+        {
+        }
+    }
+
     [Fact]
     public void Unloading_a_plugin_saves_the_stores_it_opened()
     {
@@ -111,5 +120,35 @@ public class PluginOpenStoreTests : IDisposable
         saved.Load();
 
         Assert.Equal(5, saved.Get<int>("count"));
+    }
+
+    [Fact]
+    public void Unloading_does_not_overwrite_an_opened_store_that_changed_on_disk_after_load()
+    {
+        var health = new PluginHealth();
+        var host = new PluginHost(Path.Combine(_dir, "plugins"),
+            new PluginEvents(health, (_, _) => { }), health,
+            new PluginPanel(health, (_, _) => { }),
+            new PluginModules(health, (_, _) => { }),
+            new NoActions(), () => Array.Empty<PluginPlayer>(), (_, _) => { });
+
+        string auditPath = Path.Combine(_dir, "plugin-data", "labrp.audit.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(auditPath)!);
+        File.WriteAllText(auditPath, "{\"count\":1}");
+
+        // Reads the manifest through OpenStore but never writes to it, the
+        // same as doors and southside reading their level manifests.
+        Assert.True(host.LoadFromInstance("labrp", new ManifestReaderPlugin()));
+
+        // The owner rebuilds the level and copies in a new manifest while the
+        // plugin is loaded and holding the old one in memory.
+        File.WriteAllText(auditPath, "{\"count\":99}");
+
+        Assert.True(host.Unload("labrp"));
+
+        var saved = new PluginStore(auditPath);
+        saved.Load();
+
+        Assert.Equal(99, saved.Get<int>("count"));
     }
 }
