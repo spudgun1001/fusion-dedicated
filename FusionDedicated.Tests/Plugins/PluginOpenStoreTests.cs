@@ -151,4 +151,30 @@ public class PluginOpenStoreTests : IDisposable
 
         Assert.Equal(99, saved.Get<int>("count"));
     }
+
+    [Fact]
+    public void Unloading_does_not_write_an_opened_store_whose_file_did_not_exist_at_load()
+    {
+        var health = new PluginHealth();
+        var host = new PluginHost(Path.Combine(_dir, "plugins"),
+            new PluginEvents(health, (_, _) => { }), health,
+            new PluginPanel(health, (_, _) => { }),
+            new PluginModules(health, (_, _) => { }),
+            new NoActions(), () => Array.Empty<PluginPlayer>(), (_, _) => { });
+
+        // The first-deploy order: the plugin starts before the manifest exists.
+        Assert.True(host.LoadFromInstance("labrp", new ManifestReaderPlugin()));
+
+        // The owner copies the manifest in while the plugin is already running.
+        string auditPath = Path.Combine(_dir, "plugin-data", "labrp.audit.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(auditPath)!);
+        File.WriteAllText(auditPath, "{\"count\":42}");
+
+        Assert.True(host.Unload("labrp"));
+
+        var saved = new PluginStore(auditPath);
+        saved.Load();
+
+        Assert.Equal(42, saved.Get<int>("count"));
+    }
 }

@@ -11,7 +11,12 @@ public class PluginReloadResilienceTests
     {
         public bool Started;
 
-        public void Start(PluginContext context) => Started = true;
+        public void Start(PluginContext context)
+        {
+            Started = true;
+            // Something to save, so unload's automatic save is actually attempted.
+            context.Store.Set("started", true);
+        }
 
         public void Shutdown() => throw new UnauthorizedAccessException(
             "Access to the path '/home/container/plugins/labrp/data.json' is denied.");

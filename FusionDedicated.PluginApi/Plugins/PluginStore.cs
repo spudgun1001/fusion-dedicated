@@ -29,12 +29,12 @@ public sealed class PluginStore
     private bool _warned;
 
     /// <summary>
-    /// False only while this store is a faithful, untouched copy of an existing
-    /// file it read with <see cref="Load"/>. True to start with (there is
-    /// nothing on disk to match yet, so a first save must still go through and
-    /// warn if the path is unwritable) and true again after any Set or Remove.
+    /// True once Set or Remove has changed something since this store was
+    /// constructed, loaded or last saved. A file missing at load time is not a
+    /// change: a plugin can open a manifest before the owner has copied it in,
+    /// and that must not make the store write an empty file over it later.
     /// </summary>
-    private bool _dirty = true;
+    private bool _dirty;
 
     public PluginStore(string path, Action<string, string>? log = null)
     {
@@ -110,6 +110,13 @@ public sealed class PluginStore
     {
         if (!File.Exists(_path))
         {
+            // Nothing on disk yet is not a change to protect against; only
+            // Set or Remove after this should make the store worth saving.
+            lock (_lock)
+            {
+                _dirty = false;
+            }
+
             return;
         }
 
