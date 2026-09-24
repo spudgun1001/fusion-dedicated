@@ -64,6 +64,9 @@ public sealed class FusionServer : IDisposable
     private readonly FlightCheck _flight;
     private readonly AvatarStrikes _avatarStrikes;
 
+    /// <summary>Caps LogRpc at 30 lines a second overall; the smallId key is unused, there is only ever the one line of traffic.</summary>
+    private readonly SpawnRateLimiter _rpcLogLimiter = new(30);
+
     public FusionServer(ServerConfig config, ISocketTransport? transport = null)
     {
         _transport = transport ?? new SteamSocketTransport(message => Log("ERROR", $"Failed to read a packet: {message}"));
@@ -752,6 +755,7 @@ public sealed class FusionServer : IDisposable
                 // Before the cache and the plugins see it, so a dropped one leaves no trace.
                 if (!WithinBudget(sender, MessageKind.Rpc))
                 {
+                    LogRpc(sender, tag, message, "dropped by budget");
                     return;
                 }
 
@@ -3630,7 +3634,7 @@ public sealed class FusionServer : IDisposable
     /// Shows an RPC to whatever plugins are watching, and says whether it should
     /// still go on to the other clients.
     /// </summary>
-    private FusionDedicated.Plugins.RpcActionKind OfferRpcToPlugins(ConnectedPlayer sender, byte tag, byte[] message)
+    internal FusionDedicated.Plugins.RpcActionKind OfferRpcToPlugins(ConnectedPlayer sender, byte tag, byte[] message)
     {
         if (PluginRpc is not { Watched: true } rpc)
         {
@@ -3639,17 +3643,48 @@ public sealed class FusionServer : IDisposable
 
         byte[]? body = GateProtocol.TryReadBody(message, tag);
 
-        if (body == null || RpcProtocol.TryReadPath(body) is not { } path)
+        if (body == null)
         {
+            LogRpc(sender, tag, message, "body unreadable");
+            return FusionDedicated.Plugins.RpcActionKind.Pass;
+        }
+
+        if (RpcProtocol.TryReadPath(body) is not { } path)
+        {
+            LogRpc(sender, tag, message, "path unreadable");
             return FusionDedicated.Plugins.RpcActionKind.Pass;
         }
 
         var kind = RpcProtocol.KindOf(tag);
 
-        return rpc.Dispatch(new FusionDedicated.Plugins.RpcRequest(
+        var result = rpc.Dispatch(new FusionDedicated.Plugins.RpcRequest(
             sender.PlatformId, sender.DisplayName, sender.Permission, kind,
             path.Key, path.HasEntity, path.EntityId, path.ComponentIndex,
             RpcProtocol.ReadValue(kind, body))).Kind;
+
+        LogRpc(sender, tag, message, $"offered: {result}", path);
+
+        return result;
+    }
+
+    /// <summary>
+    /// One line per RPC message while <see cref="ServerConfig.LogRpc"/> is on, for chasing why a
+    /// plugin never saw one. Rate-limited overall so turning it on cannot flood the log.
+    /// </summary>
+    private void LogRpc(ConnectedPlayer sender, byte tag, byte[] message, string outcome, RpcProtocol.RpcPath? path = null)
+    {
+        if (!Config.LogRpc || !_rpcLogLimiter.Allow(0, Clock()))
+        {
+            return;
+        }
+
+        string hex = Convert.ToHexString(message.AsSpan(0, Math.Min(message.Length, 32)));
+        string pathInfo = path is { } p
+            ? $", HasEntity={p.HasEntity}, EntityId={p.EntityId}, ComponentIndex={p.ComponentIndex}, hash={p.Key}"
+            : "";
+
+        Log("INFO", $"RPC from {sender.DisplayName}: tag={tag}, {message.Length} bytes, hex={hex} - {outcome}{pathInfo}",
+            console: false);
     }
 
     /// <summary>

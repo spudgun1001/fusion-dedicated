@@ -599,6 +599,7 @@ gitignored.
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (250 by default, 0 for no limit) |
+| `LogRpc` | logs one line per RPC message received: sender, tag, length, first bytes, and whether it was dropped by budget, unreadable, or offered to plugins (off by default, capped at 30 lines a second) |
 | `OwnershipRequestsPerSecond` | ownership requests each player may send per second (10 by default, 0 for no limit) |
 | `OwnershipHoldMilliseconds` | how long an entity stays with its new owner before it may change hands again (500 by default, 0 lets every change through) |
 | `SeatRefusalCooldownSeconds` | how long a rider a plugin refused a seat is left alone before that seat is put to plugins again (2 by default, 0 refuses every attempt) |

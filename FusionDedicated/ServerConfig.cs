@@ -248,6 +248,14 @@ public sealed class ServerConfig
     /// </summary>
     public bool ModuleInspection { get; set; }
 
+    /// <summary>
+    /// Logs one line per level RPC message (tags 209-214) received: sender, tag,
+    /// length, the first bytes and what happened to it. Off unless asked for, since
+    /// it is for chasing why a plugin never saw an RPC rather than everyday use.
+    /// Capped at 30 lines a second so it cannot flood the log.
+    /// </summary>
+    public bool LogRpc { get; set; }
+
     public bool CullOrphanedEntities { get; set; } = true;
 
     public int OrphanTimeoutSeconds { get; set; } = 120;
