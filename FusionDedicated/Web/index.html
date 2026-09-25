@@ -2347,6 +2347,8 @@ function askFor(el, spec) {
 
   const ask = el.parentElement.nextElementSibling;
   const box = ask.querySelector('input, select');
+
+  if (f.placeholder) box.value = f.placeholder;
   const [ok, cancel] = ask.querySelectorAll('button');
 
   ok.onclick = () => sendAction(spec, { [f.key]: box.value.trim() });
@@ -2373,6 +2375,10 @@ async function sendAction(spec, extra) {
 
   if (!r.ok) {
     alert(r.error || 'That did not work.');
+
+    // What was pressed may have changed under it, so show the page as it is now.
+    // A box that was typed into stays open so the words are not lost.
+    if (!spec.input) renderPluginPage(true);
     return;
   }
 

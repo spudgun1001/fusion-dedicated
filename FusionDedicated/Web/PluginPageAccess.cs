@@ -39,11 +39,15 @@ public static class PluginPageAccess
 
     /// <summary>
     /// Whether an action is one of the buttons this account is shown. Row buttons
-    /// count as well as a block's own, since a table's rows carry their own.
+    /// and tree node buttons count as well as a block's own.
     /// </summary>
     public static bool MayInvoke(PluginPanel? panel, string plugin, string action, PluginViewer viewer)
         => Visible(panel, plugin, viewer) is { } page
            && page.Sections.Any(section =>
                section.Buttons.Any(b => b.Action == action)
-               || section.Rows.Any(r => r.Actions.Any(b => b.Action == action)));
+               || section.Rows.Any(r => r.Actions.Any(b => b.Action == action))
+               || section.Nodes.Any(n => HasButton(n, action)));
+
+    private static bool HasButton(PluginTreeNode node, string action)
+        => node.Buttons.Any(b => b.Action == action) || node.Children.Any(c => HasButton(c, action));
 }

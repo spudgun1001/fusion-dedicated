@@ -79,4 +79,20 @@ public class PluginPageAccessTests
     [Fact]
     public void No_panel_means_no_page()
         => Assert.Null(PluginPageAccess.Visible(null, "labrp", new PluginViewer("Sam", PanelRole.Owner)));
+
+    [Fact]
+    public void A_button_deep_in_a_tree_may_be_pressed_but_a_hidden_tree_may_not()
+    {
+        var leaf = new PluginTreeNode { Text = "Goodbye" };
+        leaf.Buttons.Add(new PluginButton("Link", "relink"));
+        var root = new PluginTreeNode { Text = "Hello." };
+        root.Children.Add(new PluginTreeNode { Text = "Money?", Children = { leaf } });
+
+        var panel = Panel();
+        panel.Register("talk", _ => new PluginPage("Talk").Tree("Sal", new[] { root }).OnlyFor(PanelRole.Owner));
+
+        Assert.True(PluginPageAccess.MayInvoke(panel, "talk", "relink", new PluginViewer("Own", PanelRole.Owner)));
+        Assert.False(PluginPageAccess.MayInvoke(panel, "talk", "relink", new PluginViewer("Mod", PanelRole.Moderator)));
+        Assert.False(PluginPageAccess.MayInvoke(panel, "talk", "nothing", new PluginViewer("Own", PanelRole.Owner)));
+    }
 }

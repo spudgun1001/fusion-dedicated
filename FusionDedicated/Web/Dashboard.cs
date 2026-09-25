@@ -49,6 +49,9 @@ public sealed class Dashboard
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+
+        // A plugin tree nests four levels for every line of a conversation, so the default 64 runs out.
+        MaxDepth = 256,
     };
 
     public Dashboard(FusionServer server, ServerConfig config, LobbyPublisher lobby)
