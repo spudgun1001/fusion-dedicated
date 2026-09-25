@@ -13,7 +13,10 @@ public class SouthsideClubTests
     private const int DeckAnnounce = 1002;
     private const int DeckEntityAnnounce = 1003;
     private const ushort AnnounceVariable = 0;
-    private const ushort UrlVariable = 1;
+
+    // Fusion numbers the deck host's variables in reverse: the announce arrives at 1 and the url is at 0.
+    private const ushort HostAnnounceVariable = 1;
+    private const ushort UrlVariable = 0;
     private const ushort DeckEntity = 700;
     private const ushort OtherProp = 701;
 
@@ -52,7 +55,7 @@ public class SouthsideClubTests
         player.FinishLoading();
         player.Send(FusionProtocol.BuildPlayerPoseUpdate(player.SmallId,
             new FusionRigPose { PelvisPosition = new Vec3(4f, 0f, 9f) }));
-        player.Send(LevelRpc.Int(player.SmallId, Deck, AnnounceVariable, DeckAnnounce));
+        player.Send(LevelRpc.Int(player.SmallId, Deck, HostAnnounceVariable, DeckAnnounce));
         player.Send(LevelRpc.Int(player.SmallId, DeckItself, AnnounceVariable, DeckEntityAnnounce));
 
         return player;
@@ -89,8 +92,9 @@ public class SouthsideClubTests
         return message.ToArray();
     }
 
+    /// <summary>The urls a player was sent, leaving out the empty one the plugin clears the deck with when it learns it.</summary>
     private static List<string> Heard(LevelRig rig, FakePlayer player)
-        => LevelRpc.Heard(rig.World, player, Deck, UrlVariable, RpcKind.String).Select(v => v.Text).ToList();
+        => LevelRpc.Heard(rig.World, player, Deck, UrlVariable, RpcKind.String).Select(v => v.Text).Where(t => t.Length > 0).ToList();
 
     private static string Last(LevelRig rig, FakePlayer player)
         => Heard(rig, player) is { Count: > 0 } heard ? heard[^1] : "";
