@@ -95,4 +95,40 @@ public class PluginPageTests
         Assert.Contains("\"kind\"", json);
         Assert.Contains("Badger", json);
     }
+
+    [Fact]
+    public void A_tree_keeps_its_nodes_and_children_in_order()
+    {
+        var root = new PluginTreeNode { Text = "Hello.", Tag = "start" };
+        root.Children.Add(new PluginTreeNode { Text = "Goodbye", Tag = "→ goodbye" });
+
+        var tree = new PluginPage("Talk").Tree("Sal", new[] { root }).Sections.Single();
+
+        Assert.Equal("tree", tree.Kind);
+        Assert.Equal("Sal", tree.Title);
+        Assert.Equal("Goodbye", tree.Nodes.Single().Children.Single().Text);
+    }
+
+    [Fact]
+    public void A_tree_serialises_to_the_names_the_panel_reads()
+    {
+        var node = new PluginTreeNode { Text = "Hello.", Tag = "start" };
+        node.Buttons.Add(new PluginButton("Edit", "setText") { Input = new PluginField("Says", "text", "Hello.") });
+
+        string json = JsonSerializer.Serialize(new PluginPage("Talk").Tree("Sal", new[] { node }));
+
+        foreach (string name in new[] { "\"nodes\"", "\"text\"", "\"tag\"", "\"children\"", "\"buttons\"", "\"input\"" })
+        {
+            Assert.Contains(name, json);
+        }
+    }
+
+    [Fact]
+    public void A_button_without_an_input_leaves_it_out()
+        => Assert.DoesNotContain("\"input\"", JsonSerializer.Serialize(new PluginButton("Remove", "remove")));
+
+    [Fact]
+    public void Only_for_limits_a_tree()
+        => Assert.Equal(PanelRole.Owner,
+            new PluginPage("Talk").Tree("Sal", Array.Empty<PluginTreeNode>()).OnlyFor(PanelRole.Owner).Sections.Single().Required);
 }

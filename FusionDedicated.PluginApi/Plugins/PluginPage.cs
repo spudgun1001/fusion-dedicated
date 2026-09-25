@@ -95,6 +95,11 @@ public sealed class PluginButton
 
     [JsonPropertyName("arguments")]
     public Dictionary<string, string> Arguments { get; set; } = new();
+
+    /// <summary>One value the panel asks for before it sends, sent under the field's key. The placeholder is the starting text.</summary>
+    [JsonPropertyName("input")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PluginField? Input { get; set; }
 }
 
 public sealed class PluginRow
@@ -112,6 +117,22 @@ public sealed class PluginRow
         Actions.Add(button);
         return this;
     }
+}
+
+/// <summary>One node of a tree section: a tag, its words, its buttons and the nodes under it.</summary>
+public sealed class PluginTreeNode
+{
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("tag")]
+    public string Tag { get; set; } = "";
+
+    [JsonPropertyName("children")]
+    public List<PluginTreeNode> Children { get; set; } = new();
+
+    [JsonPropertyName("buttons")]
+    public List<PluginButton> Buttons { get; set; } = new();
 }
 
 /// <summary>
@@ -141,6 +162,9 @@ public sealed class PluginSection
 
     [JsonPropertyName("text")]
     public string Text { get; set; } = "";
+
+    [JsonPropertyName("nodes")]
+    public List<PluginTreeNode> Nodes { get; set; } = new();
 
     /// <summary>
     /// Who this block is for. Moderator is the page's own floor and what almost
@@ -194,6 +218,12 @@ public sealed class PluginPage
             Buttons = buttons.ToList(),
         });
 
+        return this;
+    }
+
+    public PluginPage Tree(string title, IEnumerable<PluginTreeNode> roots)
+    {
+        Sections.Add(new PluginSection { Kind = "tree", Title = title, Nodes = roots.ToList() });
         return this;
     }
 
