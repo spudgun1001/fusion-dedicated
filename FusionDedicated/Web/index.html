@@ -328,6 +328,12 @@
   td.dim { color: hsl(var(--muted-foreground)); }
   .right { text-align: right; }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+  .tree ul { margin-left: 12px; padding-left: 14px; border-left: 1px solid hsl(var(--border)); }
+  .tree .node { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; }
+  .tree .words { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+  .ask { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0 10px; }
+  .ask input, .ask select { flex: 1 1 200px; min-width: 0; }
 
   .name { font-weight: 500; }
   .sub {
@@ -2193,6 +2199,9 @@ async function renderPluginPage(force) {
   // the selection with it, so this waits for a poll after they have moved on.
   if (!force && box.contains(document.activeElement)) return;
 
+  // A button's inline box is open. A redraw would close it and lose what was typed.
+  if (!force && box.querySelector('.ask')) return;
+
   const held = {};
 
   box.querySelectorAll('[id^="pf-"]').forEach(el => { held[el.id] = el.value; });
@@ -2228,6 +2237,11 @@ function pluginSection(section, at) {
       '<div class="panel"><div class="pad">' + esc(section.text) + '</div></div>';
   }
 
+  if (section.kind === 'tree') {
+    return '<h2>' + esc(section.title) + '</h2><div class="panel"><div class="pad"><ul class="tree">' +
+      (section.nodes || []).map(pluginNode).join('') + '</ul></div></div>';
+  }
+
   if (section.kind === 'table') return pluginTable(section);
 
   return '<h2>' + esc(section.title) + '</h2><div class="fields">' +
@@ -2235,6 +2249,18 @@ function pluginSection(section, at) {
     '</div><div class="bar flat">' +
     section.buttons.map(b => pluginButton(b, section.fields, at)).join('') +
     '</div>';
+}
+
+/** A tree node: its tag, its words, its buttons, then the nodes under it. */
+function pluginNode(node) {
+  const kids = node.children || [];
+
+  return '<li><div class="node">' +
+    (node.tag ? '<span class="chip">' + esc(node.tag) + '</span>' : '') +
+    '<span class="words">' + esc(node.text) + '</span>' +
+    '<div class="acts">' + (node.buttons || []).map(b => pluginButton(b)).join('') + '</div></div>' +
+    (kids.length ? '<ul>' + kids.map(pluginNode).join('') + '</ul>' : '') +
+    '</li>';
 }
 
 const fieldId = (at, key) => 'pf-' + at + '-' + key;
@@ -2284,6 +2310,7 @@ function pluginButton(button, fields, at) {
     args: button.arguments || {},
     fields: (fields || []).map(f => f.key),
     at: at,
+    input: button.input || null,
   });
 
   const style = button.danger ? 'bad' : (fields ? 'go' : '');
@@ -2293,11 +2320,49 @@ function pluginButton(button, fields, at) {
     esc(button.label) + '</button>';
 }
 
-async function pluginAction(el) {
+function pluginAction(el) {
   const spec = JSON.parse(el.dataset.spec);
+
+  if (spec.input) {
+    askFor(el, spec);
+    return;
+  }
+
+  sendAction(spec, {});
+}
+
+/** Opens a button's one box under its row of buttons, with OK and Cancel. */
+function askFor(el, spec) {
+  document.querySelectorAll('.ask').forEach(a => a.remove());
+
+  const f = spec.input;
+  const input = (f.options || []).length
+    ? '<select aria-label="' + esc(f.label) + '">' + f.options.map(o =>
+      '<option value="' + esc(o.value) + '">' + esc(plain(o.label, 60)) + '</option>').join('') + '</select>'
+    : '<input aria-label="' + esc(f.label) + '" value="' + esc(f.placeholder || '') + '">';
+
+  el.parentElement.insertAdjacentHTML('afterend',
+    '<div class="ask"><label>' + esc(f.label) + '</label>' + input +
+    '<button class="go">OK</button><button>Cancel</button></div>');
+
+  const ask = el.parentElement.nextElementSibling;
+  const box = ask.querySelector('input, select');
+  const [ok, cancel] = ask.querySelectorAll('button');
+
+  ok.onclick = () => sendAction(spec, { [f.key]: box.value.trim() });
+  cancel.onclick = () => ask.remove();
+  box.onkeydown = e => {
+    if (e.key === 'Enter') ok.click();
+    if (e.key === 'Escape') ask.remove();
+  };
+  box.focus();
+}
+
+async function sendAction(spec, extra) {
   const q = new URLSearchParams({ plugin: pluginTab, action: spec.action });
 
   Object.keys(spec.args).forEach(k => q.set(k, spec.args[k]));
+  Object.keys(extra).forEach(k => q.set(k, extra[k]));
 
   (spec.fields || []).forEach(key => {
     const field = $(fieldId(spec.at, key));
