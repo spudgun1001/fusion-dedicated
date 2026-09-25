@@ -25,7 +25,7 @@ public sealed class PluginPanel
     /// <summary>Who a page is built for when the caller does not say.</summary>
     private static readonly PluginViewer Owner = new("panel", PanelRole.Owner);
 
-    private readonly Dictionary<string, Action<IReadOnlyDictionary<string, string>>> _actions =
+    private readonly Dictionary<string, Func<IReadOnlyDictionary<string, string>, string?>> _actions =
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly PluginHealth _health;
@@ -57,6 +57,18 @@ public sealed class PluginPanel
 
     public void OnAction(string plugin, string action,
         Action<IReadOnlyDictionary<string, string>> handler)
+        => OnRefusableAction(plugin, action, values =>
+        {
+            handler(values);
+            return (string?)null;
+        });
+
+    /// <summary>
+    /// An action that can refuse: a message it returns is shown to whoever pressed the button.
+    /// Its own name, because an OnAction lambda that happens to return a string would otherwise land here.
+    /// </summary>
+    public void OnRefusableAction(string plugin, string action,
+        Func<IReadOnlyDictionary<string, string>, string?> handler)
     {
         lock (_lock)
         {
@@ -102,7 +114,7 @@ public sealed class PluginPanel
             return PanelActionResult.Failed($"'{plugin}' is disabled");
         }
 
-        Action<IReadOnlyDictionary<string, string>>? handler;
+        Func<IReadOnlyDictionary<string, string>, string?>? handler;
 
         lock (_lock)
         {
@@ -114,8 +126,8 @@ public sealed class PluginPanel
 
         try
         {
-            handler(values);
-            return PanelActionResult.Done;
+            string? refused = handler(values);
+            return refused == null ? PanelActionResult.Done : PanelActionResult.Failed(refused);
         }
         catch (Exception e)
         {

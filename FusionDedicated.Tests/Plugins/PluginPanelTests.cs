@@ -114,4 +114,27 @@ public class PluginPanelTests
         Assert.Empty(panel.Pages);
         Assert.False(panel.Invoke("police", "add", new Dictionary<string, string>()).Handled);
     }
+
+    [Fact]
+    public void An_action_can_refuse_with_a_message_the_panel_shows()
+    {
+        var panel = Panel();
+        panel.OnRefusableAction("talk", "addReply", _ => "A line has room for 6 responses");
+
+        var result = panel.Invoke("talk", "addReply", new Dictionary<string, string>());
+
+        Assert.False(result.Handled);
+        Assert.Equal("A line has room for 6 responses", result.Error);
+        Assert.Empty(_log);
+        Assert.False(_health.IsDisabled("talk"));
+    }
+
+    [Fact]
+    public void An_action_that_returns_nothing_is_done()
+    {
+        var panel = Panel();
+        panel.OnRefusableAction("talk", "rename", _ => null);
+
+        Assert.True(panel.Invoke("talk", "rename", new Dictionary<string, string>()).Handled);
+    }
 }
