@@ -56,18 +56,6 @@ public class SteadyOwnerTests
     }
 
     [Fact]
-    public void A_leavers_props_go_to_a_loaded_player_rather_than_one_still_loading()
-    {
-        var (world, joel, kanza, mia) = KanzaStillLoading();
-        using var _ = world;
-
-        world.Spawn(joel, 300, "Pack.Spawnable.Crate", 1, 2, 3);
-        world.Leave(joel, "Closing Connection");
-
-        Assert.Equal((byte?)mia.SmallId, world.Server.Entities.Get(300)!.OwnerSmallId);
-    }
-
-    [Fact]
     public void A_scene_prop_whose_owners_have_gone_is_named_for_a_loaded_player()
     {
         var (world, joel, kanza, mia) = KanzaStillLoading();

@@ -643,8 +643,9 @@ public sealed class EntityRegistry
     /// </param>
     public List<ushort> CullStale(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
-        TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null)
-        => CullStaleDetailed(orphanTimeout, inheritedTimeout, idleTimeout, ammoTimeout, inUse)
+        TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null,
+        IReadOnlyCollection<string>? shortLived = null)
+        => CullStaleDetailed(orphanTimeout, inheritedTimeout, idleTimeout, ammoTimeout, inUse, shortLived)
             .Select(e => e.Id)
             .ToList();
 
@@ -654,7 +655,8 @@ public sealed class EntityRegistry
     /// </summary>
     public List<TrackedEntity> CullStaleDetailed(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
-        TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null)
+        TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null,
+        IReadOnlyCollection<string>? shortLived = null)
     {
         var removed = new List<TrackedEntity>();
         var now = Clock();
@@ -731,7 +733,8 @@ public sealed class EntityRegistry
                     && !entity.Attached
                     && !InOwnersPouch(entity)
                     && (timeout <= TimeSpan.Zero || ammoTimeout < timeout)
-                    && Safety.Ammunition.IsAmmo(entity.Barcode))
+                    && (Safety.Ammunition.IsAmmo(entity.Barcode)
+                        || shortLived?.Any(w => entity.Barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true))
                 {
                     timeout = ammoTimeout;
                     zeroMeansNever = false;

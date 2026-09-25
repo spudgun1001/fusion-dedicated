@@ -290,7 +290,13 @@ public sealed class ServerConfig
     /// still and must not go. Turning the idle timeout down far enough to catch
     /// the magazines would take the build with it.
     /// </summary>
-    public int AmmoTimeoutSeconds { get; set; } = 120;
+    public int AmmoTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Words in a crate name that put it on the ammo clock too, for effects like spray
+    /// mist that nobody misses.
+    /// </summary>
+    public List<string> ShortLivedBarcodes { get; set; } = new() { "Mist" };
 
     /// <summary>
     /// When the world is at <see cref="MaxEntities"/>, drop this many of the oldest

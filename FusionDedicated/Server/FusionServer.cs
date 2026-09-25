@@ -453,12 +453,11 @@ public sealed class FusionServer : IDisposable
         DropConstraintsNaming(player.SmallId, $"{player.DisplayName} left");
 
         // Their entities lost the only machine simulating them. A vehicle goes to
-        // somebody still sitting in it, a held thing to somebody still holding it,
-        // and otherwise to whichever connected player has joined the longest,
-        // loaded or not.
-        byte? fallback = Players.SteadiestPlayer()?.SmallId;
+        // somebody still sitting in it and a held thing to somebody still holding it.
+        // The rest is left unowned: handing ~600 props to one heir timed their game
+        // out, and whoever grabs or bumps one claims it.
         var affected = Entities.OrphanWith(player.SmallId, entity =>
-            WorldCatchup.HeirFor(DriverFirstRidersOf(entity.Id), HoldersOf(entity.Id), fallback, player.SmallId));
+            WorldCatchup.HeirFor(DriverFirstRidersOf(entity.Id), HoldersOf(entity.Id), null, player.SmallId));
 
         // Before the heirs, because a client that locked a vehicle to the driver who
         // left ignores any new owner until it has cleaned that driver up.
@@ -5912,7 +5911,8 @@ public sealed class FusionServer : IDisposable
             TimeSpan.FromSeconds(Config.InheritedTimeoutSeconds),
             TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)),
             TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)),
-            EntitiesInUse());
+            EntitiesInUse(),
+            Config.ShortLivedBarcodes);
 
         var removed = culled.Select(e => e.Id).ToList();
 

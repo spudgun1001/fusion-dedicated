@@ -132,32 +132,28 @@ public class HeirTests
     [Fact]
     public void An_heir_who_still_owns_it_is_named_again_a_moment_later()
     {
-        var server = new FusionServer(new ServerConfig());
-        server.Entities.Register(300, "Pack.Spawnable.Atv", Leaver, 0, 0, 0);
-        server.Entities.Register(301, "Pack.Spawnable.Crate", Leaver, 0, 0, 0);
+        using var world = new Harness.World();
+        var leaver = world.Join(76561198000000001, "Leaver");
+        var holder = world.Join(76561198000000002, "Holder");
+        var other = world.Join(76561198000000003, "Other");
+        world.Spawn(leaver, 300, "Pack.Spawnable.Atv", 0, 0, 0);
+        world.Spawn(leaver, 301, "Pack.Spawnable.Crate", 0, 0, 0);
+        holder.Send(BonelabServerBrowser.Fusion.FusionProtocol.BuildGrab(holder.SmallId,
+            BonelabServerBrowser.Fusion.FusionProtocol.Handedness.RIGHT, 0, 300));
+        holder.Send(BonelabServerBrowser.Fusion.FusionProtocol.BuildGrab(holder.SmallId,
+            BonelabServerBrowser.Fusion.FusionProtocol.Handedness.LEFT, 0, 301));
 
-        foreach (byte smallId in new byte[] { Leaver, 2, 3 })
-        {
-            server.Players.Add(new ConnectedPlayer
-            {
-                Connection = new Steamworks.HSteamNetConnection(smallId),
-                PlatformId = 76561198000000000UL + smallId,
-                SmallId = smallId,
-            });
-        }
+        world.Leave(leaver, "test");
 
-        server.Kick(Leaver, "test");
-
-        Assert.Equal((byte?)2, server.Entities.Get(300)!.OwnerSmallId);
-        Assert.Equal((byte?)2, server.Entities.Get(301)!.OwnerSmallId);
+        Assert.Equal(holder.SmallId, world.Server.Entities.Get(300)!.OwnerSmallId);
+        Assert.Equal(holder.SmallId, world.Server.Entities.Get(301)!.OwnerSmallId);
 
         // Ownership of one moved on before the second announcement was due.
-        server.Entities.SetOwner(301, 3);
+        world.Server.Entities.SetOwner(301, other.SmallId);
 
-        Thread.Sleep(TimeSpan.FromSeconds(1.2));
-        server.PumpDeferred();
+        world.Advance(TimeSpan.FromSeconds(1.2));
 
-        Assert.Contains(server.RecentLog(),
+        Assert.Contains(world.Server.RecentLog(),
             e => e.Message == "Announced the new owner of 1 inherited entity(ies) again");
     }
 }

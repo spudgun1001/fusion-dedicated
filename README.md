@@ -509,11 +509,19 @@ Across one night of testing (140 joins, peaks of 8–12 players) the guard remov
 
 Props are not kept forever, and this matters if you plan to build something.
 
-When a player leaves, their props are handed to whoever is still connected so they
-keep being simulated instead of freezing mid-air. The catch is that they stop being
-ownerless, so ordinary orphan cleanup never sees them again and the world only grows.
-Left unchecked it reaches the entity cap, and from then on **every spawn is silently
-refused**, the player pulls the trigger and nothing happens.
+When a player leaves, a vehicle goes to somebody sitting in it and a held prop to
+somebody holding it. Everything else is left without an owner until somebody grabs or
+bumps it, and is removed after `OrphanTimeoutSeconds` (2 minutes) if nobody does.
+Handing a leaver's whole pile to one player froze that player's game: late in a busy
+day that was about 590 props, and the heir timed out within 20 seconds.
+
+Props a joiner adopts and props handed on stop being ownerless, so orphan cleanup never
+sees them. Left unchecked the world reaches the entity cap, and from then on **every
+spawn is silently refused**, the player pulls the trigger and nothing happens.
+
+Magazines, and any crate whose name contains a word in `ShortLivedBarcodes` (`Mist` by
+default, for spray paint mist), are removed `AmmoTimeoutSeconds` (1 minute) after they
+last moved, even while their owner is still playing.
 
 So inherited props that have not moved for `InheritedTimeoutSeconds` (15 minutes by
 default) are removed. Anything a player is actively using keeps sending position
@@ -592,6 +600,8 @@ gitignored.
 | `LevelModId` | mod.io ID of the current map; also supplies the server's picture in the browser |
 | `MaxEntities` | world-wide prop ceiling |
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
+| `AmmoTimeoutSeconds` | how long a dropped magazine or short-lived effect survives after it last moved (60 by default, 0 leaves them to the other timeouts) |
+| `ShortLivedBarcodes` | words in a crate name that put it on the ammo clock too (`["Mist"]` by default) |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
 | `BlockHolsterDuplicates` | refuses a repeat source None spawn of a barcode the player has holstered or just drew, at every rank (on by default) |
 | `HolsterDrawSeconds` | how long an item a player has drawn still counts as holstered for that check (3 by default, 0 remembers no draws) |

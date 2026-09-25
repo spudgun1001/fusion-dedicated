@@ -21,7 +21,7 @@ public class CullFlagCatchupTests
         joel.Send(ClientMessages.CullStatus(joel.SmallId, 302, true));
 
         world.Leave(joel, "Closing Connection");
-        Assert.Equal((byte?)kanza.SmallId, world.Server.Entities.Get(302)!.OwnerSmallId);
+        Assert.Null(world.Server.Entities.Get(302)!.OwnerSmallId);
 
         var late = world.Join(76561198000000003, "Late");
         late.FinishLoading();
