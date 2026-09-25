@@ -13,27 +13,28 @@ namespace FusionDedicated.Tests.Harness;
 [Trait("Needs", "fusion-server-mods")]
 public class SouthsideLevelTests
 {
+    // Wire indices: Fusion registers a level host's components in the reverse of the builder's order.
     private const int LevelAnnounce = 1001;
-    private const ushort HandshakeVariable = 0;
-    private const ushort AnswerVariable = 1;
+    private const ushort HandshakeVariable = 1;
+    private const ushort AnswerVariable = 0;
 
-    private const ushort ToggleEvent = 0;
-    private const ushort OpenMenuEvent = 2;
-    private const ushort LockedVariable = 0;
-    private const ushort MenuShownVariable = 4;
-    private const ushort TitleVariable = 5;
+    private const ushort ToggleEvent = 14;
+    private const ushort OpenMenuEvent = 12;
+    private const ushort LockedVariable = 27;
+    private const ushort MenuShownVariable = 23;
+    private const ushort TitleVariable = 22;
 
-    private const ushort DigitVariable = 0;
-    private const ushort MyNumberVariable = 1;
-    private const ushort KindVariable = 2;
-    private const ushort DisplayVariable = 3;
+    private const ushort DigitVariable = 8;
+    private const ushort MyNumberVariable = 7;
+    private const ushort KindVariable = 6;
+    private const ushort DisplayVariable = 5;
     private const ushort ChannelVariable = 4;
-    private const ushort InCallVariable = 5;
-    private const ushort RingMutedVariable = 6;
-    private const ushort ToneMutedVariable = 7;
-    private const ushort RingbackMutedVariable = 8;
-    private const ushort HangUpEvent = 1;
-    private const ushort CallEvent = 3;
+    private const ushort InCallVariable = 3;
+    private const ushort RingMutedVariable = 2;
+    private const ushort ToneMutedVariable = 1;
+    private const ushort RingbackMutedVariable = 0;
+    private const ushort HangUpEvent = 7;
+    private const ushort CallEvent = 5;
     private const ushort LiftEvent = 4;
     private const int LevelKind = 0;
 
