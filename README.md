@@ -515,8 +515,10 @@ bumps it, and is removed after `OrphanTimeoutSeconds` (2 minutes) if nobody does
 Handing a leaver's whole pile to one player froze that player's game: late in a busy
 day that was about 590 props, and the heir timed out within 20 seconds.
 
-Props a joiner adopts and props handed on stop being ownerless, so orphan cleanup never
-sees them. Left unchecked the world reaches the entity cap, and from then on **every
+A player joining leaves those props unowned too. Only a prop somebody rides or holds, or
+one the server or a plugin placed, is given to the longest-joined player.
+
+Props handed on stop being ownerless, so orphan cleanup never sees them. Left unchecked the world reaches the entity cap, and from then on **every
 spawn is silently refused**, the player pulls the trigger and nothing happens.
 
 Magazines, and any crate whose name contains a word in `ShortLivedBarcodes` (`Mist` by

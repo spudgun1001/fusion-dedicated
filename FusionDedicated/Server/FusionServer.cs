@@ -2798,7 +2798,14 @@ public sealed class FusionServer : IDisposable
                 //
                 // Adopting rather than naming one for this message alone, so the next
                 // person told about it hears the same answer.
-                byte owner = entity.OwnerSmallId ?? Adopt(entity, player);
+                //
+                // Only what somebody rides or holds, or the server placed. A loose prop
+                // goes as owned by player 0, who is nobody, so it stays unowned like a
+                // leaver's and the first grab claims it, instead of a burst on one player.
+                byte owner = entity.OwnerSmallId
+                    ?? (entity.PluginSpawned || entity.Persistent || entity.Occupied || HoldersOf(entity.Id).Count > 0
+                        ? Adopt(entity, player)
+                        : PlayerRegistry.ServerSmallId);
 
                 // A kept prop goes where it was kept. Its owner's game can report it
                 // anywhere, even before that game has loaded the level.
