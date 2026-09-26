@@ -1784,6 +1784,7 @@ public sealed class FusionServer : IDisposable
             && WorldCatchup.LoadingState(request.Value.Key, request.Value.Value) is { } loading)
         {
             sender.Loaded = !loading;
+            sender.Loading = loading;
         }
 
         var target = Players.Get(request.Value.PlayerSmallId);
@@ -4048,7 +4049,8 @@ public sealed class FusionServer : IDisposable
         {
             Defer(delay, () =>
             {
-                if (Players.Get(player.SmallId) != player)
+                // A loading game drops these, and the resend once it has loaded covers it.
+                if (Players.Get(player.SmallId) != player || player.Loading)
                 {
                     return;
                 }
@@ -4999,7 +5001,7 @@ public sealed class FusionServer : IDisposable
 
         foreach (var player in Players.Players)
         {
-            if (player.SmallId == sender.SmallId)
+            if (player.SmallId == sender.SmallId || SkipsWhileLoading(player, stamped, reliable: false))
             {
                 continue;
             }
@@ -5549,7 +5551,7 @@ public sealed class FusionServer : IDisposable
     {
         foreach (var player in Players.Players)
         {
-            if (except.HasValue && player.SmallId == except.Value)
+            if ((except.HasValue && player.SmallId == except.Value) || SkipsWhileLoading(player, message, reliable))
             {
                 continue;
             }
@@ -5596,6 +5598,7 @@ public sealed class FusionServer : IDisposable
         {
             PacketsOut++;
             BytesOut += message.Length;
+            _sentByTag[message[0]] += message.Length;
             return true;
         }
 
@@ -5608,6 +5611,13 @@ public sealed class FusionServer : IDisposable
 
         return false;
     }
+
+    /// <summary>
+    /// A moving prop's pose to a game that says it is loading. Fusion skips it while loading and
+    /// has no props built before the level is, so it is only bandwidth the catch-up needs.
+    /// </summary>
+    private static bool SkipsWhileLoading(ConnectedPlayer player, byte[] message, bool reliable)
+        => player.Loading && !reliable && message[0] == FusionProtocol.TagEntityPoseUpdate;
 
     private static bool IsPose(byte[] message)
         => message.Length > 0
@@ -5659,6 +5669,7 @@ public sealed class FusionServer : IDisposable
 
             PacketsOut++;
             BytesOut += message.Length;
+            _sentByTag[message[0]] += message.Length;
             SendsRetried++;
             _retriedSinceSummary++;
 
@@ -5809,7 +5820,21 @@ public sealed class FusionServer : IDisposable
                 Log(health.IsPoor ? "WARN" : "INFO", health.Describe(player.DisplayName), console: health.IsPoor);
             }
         }
+
+        var top = Enumerable.Range(0, 256).Where(t => _sentByTag[t] > 0)
+            .OrderByDescending(t => _sentByTag[t]).Take(6)
+            .Select(t => _sentByTag[t] >= 10_000 ? $"{t} {_sentByTag[t] / 1000} KB" : $"{t} {_sentByTag[t]} B").ToList();
+
+        if (top.Count > 0)
+        {
+            Log("INFO", $"Sent by tag in the last minute: {string.Join(", ", top)}", console: false);
+        }
+
+        Array.Clear(_sentByTag);
     }
+
+    /// <summary>Bytes sent per message tag since the last health line, to show where the bandwidth goes.</summary>
+    private readonly long[] _sentByTag = new long[256];
 
     public void Kick(byte smallId, string reason)
     {

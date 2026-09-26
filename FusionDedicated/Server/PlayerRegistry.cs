@@ -152,6 +152,12 @@ public sealed class ConnectedPlayer
     /// </summary>
     public bool Loaded { get; set; }
 
+    /// <summary>
+    /// Whether their game last said it is loading. Unlike Loaded it is false for a game that
+    /// has said nothing yet, so only a player known to be loading is skipped.
+    /// </summary>
+    public bool Loading { get; set; }
+
     /// <summary>Set once the server has said it is not keeping all of their metadata, so it is said once.</summary>
     public bool MetadataCapLogged { get; set; }
 

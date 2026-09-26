@@ -81,4 +81,29 @@ public class NetworkHealthTests
 
         Assert.Empty(NetLines(world));
     }
+
+    private static List<string> TagLines(World world)
+        => world.Server.RecentLog(2000).Select(e => e.Message).Where(m => m.StartsWith("Sent by tag")).ToList();
+
+    [Fact]
+    public void What_was_sent_is_split_by_tag_once_a_minute()
+    {
+        using var world = new World();
+        var joel = world.Join(JoelId, "Joel");
+        world.Join(KanzaId, "Kanza");
+        world.Advance(TimeSpan.FromMinutes(1));
+        world.Tick();
+        int before = TagLines(world).Count;
+
+        byte[] pose = BonelabServerBrowser.Fusion.FusionProtocol.BuildPlayerPoseUpdate(joel.SmallId, new BonelabServerBrowser.Fusion.FusionRigPose());
+        joel.Send(pose);
+        world.Advance(TimeSpan.FromMinutes(1));
+        world.Tick();
+
+        Assert.Contains($" 4 {pose.Length} B", TagLines(world).Skip(before).Single());
+
+        world.Advance(TimeSpan.FromMinutes(1));
+        world.Tick();
+        Assert.DoesNotContain(TagLines(world).Skip(before + 1), line => line.Contains($" 4 {pose.Length} B"));
+    }
 }
