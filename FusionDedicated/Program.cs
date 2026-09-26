@@ -427,6 +427,7 @@ public static class Program
         var lastSample = DateTime.UtcNow;
         var lobbyRetry = new LobbyRetry(TimeSpan.FromSeconds(30));
         var lobbyPublish = new LobbyPublishGate();
+        var lobbyVisibility = new LobbyVisibility(TimeSpan.FromSeconds(config.LobbyVisibilityCheckSeconds), DateTime.UtcNow);
 
         while (!quit.IsCancellationRequested)
         {
@@ -474,6 +475,37 @@ public static class Program
                         lobby.Update(config, server.Players.Players, SteamUser.GetSteamID().m_SteamID);
                         wasPublished = true;
                         server.Log("INFO", $"Lobby published: {lobby.LobbyId}. The server is visible in the browser.");
+                    }
+
+                    // Steam can keep the lobby yet leave it out of the list Fusion's browser gets,
+                    // and nothing above notices. A full or private lobby is left out on purpose.
+                    if (lobbyVisibility.Due(DateTime.UtcNow)
+                        && config.Privacy is not (1 or 3)
+                        && server.Players.Players.Count < config.MaxPlayers)
+                    {
+                        lobby.CheckVisibility(config, (listed, inBrowser, byCode) =>
+                        {
+                            if (inBrowser)
+                            {
+                                server.Log("INFO", $"Lobby check: visible, {listed} lobbies listed");
+                            }
+                            else
+                            {
+                                server.Log("WARN", $"Lobby check: our lobby is not among the {listed} lobbies Steam " +
+                                                   "lists for Fusion's browser query" +
+                                                   (byCode ? ", but its code finds it" : ", and its code does not find it either"));
+                            }
+
+                            if (lobbyVisibility.ShouldRepublish(inBrowser, byCode, DateTime.UtcNow)
+                                && lobbyPublish.MayStart(DateTime.UtcNow))
+                            {
+                                // Players are on the relay, not the lobby, so nobody is dropped.
+                                lobby.Close();
+                                wasPublished = false;
+                                lobbyPublish.Started(lobby.PublishAsync(config.MaxPlayers), DateTime.UtcNow);
+                                server.Log("INFO", "Republished the lobby to get back into the browser list");
+                            }
+                        });
                     }
 
                     // Anything waiting on a shorter clock than the tick below.

@@ -601,6 +601,7 @@ gitignored.
 | `VersionMajor` / `VersionMinor` | **must match** the Fusion build your players run |
 | `Privacy` | 0 public, 1 private, 2 friends only, 3 locked; checked at join, see below |
 | `MaxPlayers` | slots; Fusion addresses players with one byte, so 255 is the hard ceiling |
+| `LobbyVisibilityCheckSeconds` | seconds between searches for the server's own lobby the way the browser searches, see Troubleshooting (300 by default, 0 turns it off) |
 | `LevelBarcode` / `LevelTitle` | the map clients are told to load |
 | `LevelModId` | mod.io ID of the current map; also supplies the server's picture in the browser |
 | `MaxEntities` | world-wide prop ceiling |
@@ -659,6 +660,26 @@ Look for `Lobby published` in the log. If it is missing, Steam is up but the lob
 was refused, usually a signed-out client. If it is present and players still cannot
 see it, check `Privacy` in `server.json` and that `VersionMajor`/`VersionMinor` match
 their Fusion build.
+
+**Server drops out of the browser after a while**
+Every `LobbyVisibilityCheckSeconds` the server runs the same lobby search Fusion's
+browser runs, then a search by its code. Steam gives that browser search at most 50
+lobbies, nearest first, so at busy times a lobby can fall off the list while it still
+exists. The search runs from the server's own location, so it cannot see what a
+player far away sees.
+
+- `INFO Lobby check: visible, N lobbies listed`: the browser search found the lobby.
+- `WARN Lobby check: our lobby is not among the N lobbies Steam lists for Fusion's browser query, but its code finds it`:
+  Steam has the lobby but left it off the list. Two of these in a row make a fresh lobby,
+  at most once every 15 minutes.
+- `WARN ... and its code does not find it either`: the lobby has gone, so a fresh one is
+  made at once.
+- `INFO Republished the lobby to get back into the browser list`: the old lobby was
+  left and a new one made with the same code. Players stay connected, because they are
+  on the relay and not the lobby.
+
+The check is skipped while the server is full or `Privacy` is 1 or 3, because the
+browser leaves those lobbies out on purpose.
 
 **Players connect, then immediately drop**
 Almost always a version mismatch. The log records the rejection reason. A player told

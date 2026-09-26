@@ -32,6 +32,9 @@ public sealed class LobbyPublisher : IDisposable
     private readonly List<CallResult<LobbyCreated_t>> _outstanding = new();
     private readonly object _outstandingLock = new();
 
+    private readonly CallResult<LobbyMatchList_t> _browserCheck = CallResult<LobbyMatchList_t>.Create();
+    private readonly CallResult<LobbyMatchList_t> _codeCheck = CallResult<LobbyMatchList_t>.Create();
+
     private CSteamID _lobbyId = CSteamID.Nil;
     private long _generation;
 
@@ -150,6 +153,73 @@ public sealed class LobbyPublisher : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Runs the search Fusion's browser runs, then a search by our code, and reports
+    /// how many lobbies the browser search listed and whether ours was in each. Steam
+    /// answers through RunCallbacks, so this never waits. A new check replaces one
+    /// still waiting, and a failed search reports nothing.
+    /// </summary>
+    public void CheckVisibility(ServerConfig config, Action<int, bool, bool> done)
+    {
+        if (!IsPublished)
+        {
+            return;
+        }
+
+        var lobby = _lobbyId;
+
+        // No result count filter, the same as Fusion, so Steam lists at most 50 by distance.
+        AddFusionFilters();
+        SteamMatchmaking.AddRequestLobbyListStringFilter(FullKey, bool.FalseString, ELobbyComparison.k_ELobbyComparisonEqual);
+        SteamMatchmaking.AddRequestLobbyListNumericalFilter(VersionMajorKey, config.VersionMajor, ELobbyComparison.k_ELobbyComparisonEqual);
+        SteamMatchmaking.AddRequestLobbyListNumericalFilter(VersionMinorKey, config.VersionMinor, ELobbyComparison.k_ELobbyComparisonEqual);
+        SteamMatchmaking.AddRequestLobbyListNumericalFilter(PrivacyKey, 1, ELobbyComparison.k_ELobbyComparisonNotEqual);
+        SteamMatchmaking.AddRequestLobbyListNumericalFilter(PrivacyKey, 3, ELobbyComparison.k_ELobbyComparisonNotEqual);
+
+        _browserCheck.Set(SteamMatchmaking.RequestLobbyList(), (browser, failed) =>
+        {
+            if (failed)
+            {
+                return;
+            }
+
+            int listed = (int)browser.m_nLobbiesMatching;
+            bool inBrowser = Contains(lobby, listed);
+
+            AddFusionFilters();
+            SteamMatchmaking.AddRequestLobbyListStringFilter(LobbyCodeKey, config.ServerCode.ToUpperInvariant(), ELobbyComparison.k_ELobbyComparisonEqual);
+
+            _codeCheck.Set(SteamMatchmaking.RequestLobbyList(), (byCode, codeFailed) =>
+            {
+                if (!codeFailed)
+                {
+                    done(listed, inBrowser, Contains(lobby, (int)byCode.m_nLobbiesMatching));
+                }
+            });
+        });
+    }
+
+    private static void AddFusionFilters()
+    {
+        SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
+        SteamMatchmaking.AddRequestLobbyListStringFilter(IdentifierKey, bool.TrueString, ELobbyComparison.k_ELobbyComparisonEqual);
+        SteamMatchmaking.AddRequestLobbyListStringFilter(HasLobbyOpenKey, bool.TrueString, ELobbyComparison.k_ELobbyComparisonEqual);
+        SteamMatchmaking.AddRequestLobbyListStringFilter(GameKey, GameName, ELobbyComparison.k_ELobbyComparisonEqual);
+    }
+
+    private static bool Contains(CSteamID lobby, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (SteamMatchmaking.GetLobbyByIndex(i) == lobby)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private bool SetLobbyDataChecked(string key, string value)
         => SteamMatchmaking.SetLobbyData(_lobbyId, key, value);
 
@@ -165,6 +235,9 @@ public sealed class LobbyPublisher : IDisposable
 
     public void Dispose()
     {
+        _browserCheck.Dispose();
+        _codeCheck.Dispose();
+
         // Anything still waiting on Steam, so no registration outlives us.
         lock (_outstandingLock)
         {

@@ -91,6 +91,12 @@ public sealed class ServerConfig
     public string ServerCode { get; set; } = "";
 
     /// <summary>
+    /// Seconds between searches for our own lobby the way Fusion's browser searches.
+    /// Zero turns the check off.
+    /// </summary>
+    public int LobbyVisibilityCheckSeconds { get; set; } = 300;
+
+    /// <summary>
     /// Clients refuse to join across a major/minor mismatch, so this has to track
     /// whatever Fusion build the players are on.
     /// </summary>
