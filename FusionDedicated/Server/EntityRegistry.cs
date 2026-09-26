@@ -726,12 +726,10 @@ public sealed class EntityRegistry
                 // this on can only ever remove a magazine sooner.
                 // Attached is checked first and costs nothing: a magazine in a
                 // gun, or a gun in a holster, is in use however long it has been
-                // since it moved, so the shorter clock must never reach it.
-                // A pouch magazine its owner still has is in use the same way,
-                // and no attach message is known to arrive for one.
+                // since it moved, so the shorter clock must never reach it. A pouch
+                // magazine counts as loose once it is out of the hand.
                 if (ammoTimeout > TimeSpan.Zero
                     && !entity.Attached
-                    && !InOwnersPouch(entity)
                     && (timeout <= TimeSpan.Zero || ammoTimeout < timeout)
                     && (Safety.Ammunition.IsAmmo(entity.Barcode)
                         || shortLived?.Any(w => entity.Barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true))
@@ -755,16 +753,6 @@ public sealed class EntityRegistry
 
         return removed;
     }
-
-    /// <summary>
-    /// Taken from the ammo pouch and still with the player who took it. Fusion's
-    /// client deletes one of these ten seconds after it is dropped loose.
-    /// </summary>
-    private static bool InOwnersPouch(TrackedEntity entity)
-        => entity.Source == FusionProtocol.SourcePlayer
-            && !entity.IsOrphaned
-            && !entity.Inherited
-            && !entity.CulledForOwner;
 
     /// <summary>
     /// Frees space at the cap by dropping the least recently touched abandoned props.

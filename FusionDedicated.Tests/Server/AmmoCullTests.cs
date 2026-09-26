@@ -202,13 +202,12 @@ public class AmmoCullTests
     }
 
     [Fact]
-    public void A_pouch_magazine_its_owner_still_has_is_not_on_the_ammo_clock()
+    public void A_loose_pouch_magazine_is_on_the_ammo_clock_while_its_owner_is_here()
     {
-        // Holstered, it goes kinematic and sends no poses, so the clock ran out
-        // on a magazine sitting on somebody's body.
+        // Holstered or held ones are kept by the in-use set, not by where they came from.
         var registry = Pouch(5);
 
-        Assert.Empty(registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
+        Assert.Equal(new ushort[] { 300 }, registry.CullStale(TwoMinutes, FifteenMinutes, Never, TwoMinutes));
     }
 
     [Fact]

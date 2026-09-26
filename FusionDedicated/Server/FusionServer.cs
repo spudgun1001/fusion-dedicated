@@ -4119,6 +4119,7 @@ public sealed class FusionServer : IDisposable
                          .ToList())
             {
                 _loaded.Remove(magazine);
+                Entities.SetAttached(magazine, false);
             }
         }
     }
@@ -4267,6 +4268,14 @@ public sealed class FusionServer : IDisposable
 
                 lock (_cacheLock)
                 {
+                    // A gun holds one magazine. A round cleared on insert sends no eject, so the next insert ends it.
+                    foreach (ushort previous in _loaded.Where(m => m.Value == change.Holder && m.Key != change.Entity)
+                                 .Select(m => m.Key).ToList())
+                    {
+                        _loaded.Remove(previous);
+                        Entities.SetAttached(previous, false);
+                    }
+
                     if (_loaded.Count < MaxSlotsTracked)
                     {
                         _loaded[change.Entity] = change.Holder;
