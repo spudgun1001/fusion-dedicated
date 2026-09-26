@@ -299,6 +299,12 @@ public sealed class ServerConfig
     public List<string> ShortLivedBarcodes { get; set; } = new() { "Mist" };
 
     /// <summary>
+    /// Seconds before a nimbus gun or spawn gun nobody is holding or wearing is removed, counted
+    /// from the last time it moved. Zero leaves them to the ordinary rules.
+    /// </summary>
+    public int GadgetTimeoutSeconds { get; set; } = 180;
+
+    /// <summary>
     /// When the world is at <see cref="MaxEntities"/>, drop this many of the oldest
     /// abandoned props to make room rather than refusing the spawn. Refusing looks
     /// like a broken server to the player pressing the trigger.

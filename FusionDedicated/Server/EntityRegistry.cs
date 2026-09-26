@@ -656,7 +656,7 @@ public sealed class EntityRegistry
     public List<TrackedEntity> CullStaleDetailed(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
         TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null,
-        IReadOnlyCollection<string>? shortLived = null)
+        IReadOnlyCollection<string>? shortLived = null, TimeSpan gadgetTimeout = default)
     {
         var removed = new List<TrackedEntity>();
         var now = Clock();
@@ -735,6 +735,15 @@ public sealed class EntityRegistry
                         || shortLived?.Any(w => entity.Barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true))
                 {
                     timeout = ammoTimeout;
+                    zeroMeansNever = false;
+                }
+
+                if (gadgetTimeout > TimeSpan.Zero
+                    && !entity.Attached
+                    && (timeout <= TimeSpan.Zero || gadgetTimeout < timeout)
+                    && Safety.ToolGate.IsGadget(entity.Barcode))
+                {
+                    timeout = gadgetTimeout;
                     zeroMeansNever = false;
                 }
 

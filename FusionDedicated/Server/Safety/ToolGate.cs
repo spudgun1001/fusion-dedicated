@@ -82,6 +82,9 @@ public static class ToolGate
         return ToolFamily.None;
     }
 
+    /// <summary>A nimbus or dev tool gun, which the cull gives its own clock. Not the constrainer, whose welds hang off it.</summary>
+    public static bool IsGadget(string barcode) => Family(barcode) is ToolFamily.Nimbus or ToolFamily.DevTools;
+
     /// <summary>
     /// The nimbus gun is a dev tool as far as the base game is concerned, and Fusion
     /// has no permission of its own for it, so restricting dev tools restricts it.

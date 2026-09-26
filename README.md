@@ -521,7 +521,10 @@ spawn is silently refused**, the player pulls the trigger and nothing happens.
 
 Magazines, and any crate whose name contains a word in `ShortLivedBarcodes` (`Mist` by
 default, for spray paint mist), are removed `AmmoTimeoutSeconds` (1 minute) after they
-last moved, even while their owner is still playing.
+last moved, even while their owner is still playing. That includes magazines taken from
+the ammo pouch; one in a gun, in a hand or in a body slot stays. Nimbus guns and spawn
+guns nobody is holding or wearing go the same way after `GadgetTimeoutSeconds` (3
+minutes).
 
 So inherited props that have not moved for `InheritedTimeoutSeconds` (15 minutes by
 default) are removed. Anything a player is actively using keeps sending position
@@ -602,6 +605,7 @@ gitignored.
 | `InheritedTimeoutSeconds` | how long an abandoned prop survives before cleanup |
 | `AmmoTimeoutSeconds` | how long a dropped magazine or short-lived effect survives after it last moved (60 by default, 0 leaves them to the other timeouts) |
 | `ShortLivedBarcodes` | words in a crate name that put it on the ammo clock too (`["Mist"]` by default) |
+| `GadgetTimeoutSeconds` | how long a nimbus gun or spawn gun nobody holds or wears survives after it last moved (180 by default, 0 leaves them to the other timeouts) |
 | `AntiSpamExemptLevel` | rank that bypasses the spawn guard and the message allowances (`Owner` by default) |
 | `BlockHolsterDuplicates` | refuses a repeat source None spawn of a barcode the player has holstered or just drew, at every rank (on by default) |
 | `HolsterDrawSeconds` | how long an item a player has drawn still counts as holstered for that check (3 by default, 0 remembers no draws) |

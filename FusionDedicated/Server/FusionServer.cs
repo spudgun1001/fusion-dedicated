@@ -5840,7 +5840,18 @@ public sealed class FusionServer : IDisposable
         }
 
         Array.Clear(_sentByTag);
+
+        if (_magazinesCulled + _gadgetsCulled > 0)
+        {
+            Log("INFO", $"Culled in the last minute: {_magazinesCulled} magazine(s), {_gadgetsCulled} gadget(s)", console: false);
+        }
+
+        _magazinesCulled = 0;
+        _gadgetsCulled = 0;
     }
+
+    private int _magazinesCulled;
+    private int _gadgetsCulled;
 
     /// <summary>Bytes sent per message tag since the last health line, to show where the bandwidth goes.</summary>
     private readonly long[] _sentByTag = new long[256];
@@ -5946,7 +5957,11 @@ public sealed class FusionServer : IDisposable
             TimeSpan.FromSeconds(Math.Max(0, Config.IdleTimeoutSeconds)),
             TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)),
             EntitiesInUse(),
-            Config.ShortLivedBarcodes);
+            Config.ShortLivedBarcodes,
+            TimeSpan.FromSeconds(Math.Max(0, Config.GadgetTimeoutSeconds)));
+
+        _magazinesCulled += culled.Count(e => Ammunition.IsAmmo(e.Barcode));
+        _gadgetsCulled += culled.Count(e => ToolGate.IsGadget(e.Barcode));
 
         var removed = culled.Select(e => e.Id).ToList();
 
