@@ -1882,14 +1882,14 @@ public sealed class FusionServer : IDisposable
             ReportPacing(sender);
         }
 
-        // Holsters and magazines again. The sends after joining are thrown away by
-        // a client still loading, and a slow machine is still loading at 9 s.
+        // Holsters and magazines, once. The send after joining is thrown away by
+        // a client still loading, so a loading client gets it only here.
         if (finishedLoading
             && request.Value.PlayerSmallId == sender.SmallId
             && !sender.AttachmentsResent)
         {
             sender.AttachmentsResent = true;
-            ReseatAttachments(sender, AfterLoadingDelays);
+            ReseatAttachments(sender, ReseatAfterLoading);
             ResendOwnVariables(sender, AfterLoadingDelays);
         }
     }
@@ -4036,13 +4036,17 @@ public sealed class FusionServer : IDisposable
     ///
     /// Sent late rather than with the rest of the catch-up: the client builds its
     /// entities from the spawn responses asynchronously, and a message naming an
-    /// entity it has not finished making is dropped without a word. Twice, because
-    /// how long that takes depends on the machine.
+    /// entity it has not finished making is dropped without a word. Once, after
+    /// loading. This pass after joining is only for a game that has said nothing
+    /// about loading by then; if it loads later it gets the pass after loading too.
     /// </summary>
     private void ReseatAttachments(ConnectedPlayer player)
-        => ReseatAttachments(player, AfterJoinDelays);
+        => ReseatAttachments(player, AfterJoinDelays, onlyIfSilent: true);
 
-    private static readonly TimeSpan[] AfterJoinDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) };
+    private static readonly TimeSpan[] AfterJoinDelays = { TimeSpan.FromSeconds(3) };
+
+    /// <summary>The one pass after loading, late enough for a slow machine to have built the props.</summary>
+    private static readonly TimeSpan[] ReseatAfterLoading = { TimeSpan.FromSeconds(6) };
 
     /// <summary>
     /// After loading. Spawns wait for the level and are then built over a moment,
@@ -4050,14 +4054,14 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private static readonly TimeSpan[] AfterLoadingDelays = { TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(6) };
 
-    private void ReseatAttachments(ConnectedPlayer player, TimeSpan[] delays)
+    private void ReseatAttachments(ConnectedPlayer player, TimeSpan[] delays, bool onlyIfSilent = false)
     {
         foreach (var delay in delays)
         {
             Defer(delay, () =>
             {
                 // A loading game drops these, and the resend once it has loaded covers it.
-                if (Players.Get(player.SmallId) != player || player.Loading)
+                if (Players.Get(player.SmallId) != player || player.Loading || (onlyIfSilent && player.Loaded))
                 {
                     return;
                 }

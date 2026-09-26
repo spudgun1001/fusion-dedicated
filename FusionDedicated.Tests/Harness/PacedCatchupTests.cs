@@ -126,8 +126,8 @@ public class PacedCatchupTests
         late.FinishLoading();
         world.Advance(TimeSpan.FromSeconds(1));
 
-        // The resend two seconds after loading has room for one of the two.
-        world.Advance(TimeSpan.FromSeconds(1));
+        // The resend six seconds after loading has room for one of the two.
+        world.Advance(TimeSpan.FromSeconds(5));
         Assert.Equal(1, Sent(world, late, FusionProtocol.TagEntityCullStatus));
 
         world.Advance(TimeSpan.FromSeconds(10));

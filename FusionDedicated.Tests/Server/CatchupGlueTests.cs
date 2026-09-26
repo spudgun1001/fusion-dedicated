@@ -99,7 +99,7 @@ public class CatchupGlueTests
         string handler = Method("private void HandleMetadataRequest(");
 
         int guard = handler.IndexOf("sender.AttachmentsResent = true;", StringComparison.Ordinal);
-        int send = handler.IndexOf("ReseatAttachments(sender, AfterLoadingDelays);", StringComparison.Ordinal);
+        int send = handler.IndexOf("ReseatAttachments(sender, ReseatAfterLoading);", StringComparison.Ordinal);
 
         Assert.Contains("WorldCatchup.FinishedLoading(", handler);
         Assert.Contains("!sender.AttachmentsResent", handler);
@@ -111,8 +111,8 @@ public class CatchupGlueTests
         => Assert.Contains("player.AttachmentsResent = false;", Method("public void SetLevel("));
 
     [Fact]
-    public void The_join_still_reseats_at_three_and_nine_seconds()
-        => Assert.Contains("AfterJoinDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(9) }", Source());
+    public void The_join_reseats_once_at_three_seconds()
+        => Assert.Contains("AfterJoinDelays = { TimeSpan.FromSeconds(3) }", Source());
 
     [Fact]
     public void A_prop_a_client_asks_about_is_sent_its_variables()

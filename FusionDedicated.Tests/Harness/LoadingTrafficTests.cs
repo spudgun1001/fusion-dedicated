@@ -91,13 +91,13 @@ public class LoadingTrafficTests
         joiner.Send(StartedLoading(joiner.SmallId));
         int relayed = Count(world, joiner, FusionProtocol.TagEntityCullStatus);
 
-        // Past both re-seats after joining.
+        // Past the re-seat after joining.
         world.Advance(TimeSpan.FromSeconds(3));
         world.Advance(TimeSpan.FromSeconds(6));
         Assert.Equal(relayed, Count(world, joiner, FusionProtocol.TagEntityCullStatus));
 
         joiner.FinishLoading();
-        world.Advance(TimeSpan.FromSeconds(2));
+        world.Advance(TimeSpan.FromSeconds(6));
         Assert.Equal(relayed + 1, Count(world, joiner, FusionProtocol.TagEntityCullStatus));
     }
 
