@@ -111,6 +111,17 @@ public class RecentRemovalsTests
     }
 
     [Fact]
+    public void A_level_change_forgets_the_half_hour_record_after_the_old_level_is_forgotten()
+    {
+        string method = FusionServerSource.Method("public void SetLevel(");
+
+        int forget = method.IndexOf("Entities.Forget();", StringComparison.Ordinal);
+        int clear = method.IndexOf("_removedThisLevel.Clear();", StringComparison.Ordinal);
+
+        Assert.True(clear > forget && forget > 0, "not cleared after the old level is forgotten");
+    }
+
+    [Fact]
     public void A_kept_prop_is_refused_before_anybody_is_asked_whether_they_may_despawn()
     {
         string method = FusionServerSource.Method("private void HandleDespawnRequest(");

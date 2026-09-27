@@ -115,6 +115,9 @@ public sealed class FusionServer : IDisposable
         _recentRemovals = new RecentRemovals(() => Clock());
         Entities.Removed += id => _recentRemovals.Note(id);
 
+        _removedThisLevel = new RecentRemovals(() => Clock(), TimeSpan.FromMinutes(30));
+        Entities.Removed += id => _removedThisLevel.Note(id);
+
         _catchup = new CatchupOutbox(() => Config.CatchupMessagesPerSecond, () => Clock(),
             (player, message, reliable) =>
             {
@@ -2218,6 +2221,12 @@ public sealed class FusionServer : IDisposable
     /// <summary>Ids removed in the last few seconds, so a resent despawn for one is dropped.</summary>
     private readonly RecentRemovals _recentRemovals;
 
+    /// <summary>
+    /// Ids removed in the last half hour. A client still downloading a mod drops the despawn, then
+    /// spawns the item anyway once the download ends.
+    /// </summary>
+    private readonly RecentRemovals _removedThisLevel;
+
     private void HandleDespawnRequest(ConnectedPlayer sender, byte[] message)
     {
         var request = ServerProtocol.TryReadDespawnRequest(message);
@@ -3297,6 +3306,7 @@ public sealed class FusionServer : IDisposable
 
         // After Forget, which noted every entity on the old level as removed.
         _recentRemovals.Clear();
+        _removedThisLevel.Clear();
         _levelPropsRefused.Clear();
 
         lock (_cacheLock)
@@ -5213,6 +5223,19 @@ public sealed class FusionServer : IDisposable
         if (FusionProtocol.TryReadEntityDataRequest(message) is not { } request)
         {
             Relay(sender, message);
+            return;
+        }
+
+        // The item was spawned late on this client after it was despawned here, so it asks about a dead id.
+        if (Entities.Get(request.EntityId) == null && _removedThisLevel.Contains(request.EntityId))
+        {
+            byte despawner = DespawnAttribution.For(sender.SmallId, Players.Players.Select(p => p.SmallId).ToList());
+
+            SendTo(sender.Connection,
+                ServerProtocol.WriteDespawnResponse(despawner, request.EntityId, false), reliable: true);
+
+            Log("INFO", $"Data request by {sender.DisplayName} for removed entity {request.EntityId} " +
+                        "answered with a despawn", console: false);
             return;
         }
 

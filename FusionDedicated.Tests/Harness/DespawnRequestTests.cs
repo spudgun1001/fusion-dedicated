@@ -29,6 +29,12 @@ public class DespawnRequestTests
     private static int DespawnsTo(World world, FakePlayer player, ushort entity, int from = 0)
         => world.Transport.SentTo(player.Connection).Skip(from).Count(sent => IsDespawnOf(sent.Message, entity));
 
+    private static int DataRequestsTo(World world, FakePlayer player, FakePlayer from, ushort entity, int skip = 0)
+        => world.Transport.SentTo(player.Connection).Skip(skip).Count(sent =>
+            Envelope.Read(sent.Message) is { Tag: FusionProtocol.TagEntityDataRequest } envelope
+            && envelope.Sender == from.SmallId
+            && FusionProtocol.TryReadEntityDataRequest(sent.Message)?.EntityId == entity);
+
     private static int DespawnLines(World world, ushort entity)
         => world.Server.RecentLog(2000).Count(e => e.Message.StartsWith($"Despawn: id={entity} "));
 
@@ -126,5 +132,87 @@ public class DespawnRequestTests
 
         var warning = Assert.Single(world.Server.RecentLog(2000), e => e.Level == "WARN" && e.Message.Contains($"kept prop {Crate}"));
         Assert.Equal("Joel tried to despawn kept prop 300 ('Crate'); remove it from the control panel", warning.Message);
+    }
+
+    /// <summary>Kanza's game finishes downloading the crate's mod after Joel despawned it, then asks for its state.</summary>
+    private static (int Joel, int Kanza) LateSpawnAsks(World world, FakePlayer joel, FakePlayer kanza, ushort entity)
+    {
+        int joelBefore = world.Transport.SentTo(joel.Connection).Count;
+        int kanzaBefore = world.Transport.SentTo(kanza.Connection).Count;
+
+        kanza.Send(FusionProtocol.BuildEntityDataRequest(kanza.SmallId, joel.SmallId, entity));
+
+        return (joelBefore, kanzaBefore);
+    }
+
+    [Fact]
+    public void A_late_spawn_of_a_despawned_crate_is_despawned_for_that_player_alone()
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        joel.Send(ClientMessages.Despawn(joel.SmallId, Crate));
+        world.Advance(TimeSpan.FromMinutes(2));
+
+        var (joelBefore, kanzaBefore) = LateSpawnAsks(world, joel, kanza, Crate);
+
+        Assert.Equal(1, DespawnsTo(world, kanza, Crate, kanzaBefore));
+        Assert.Equal(0, DespawnsTo(world, joel, Crate, joelBefore));
+        Assert.Equal(0, DataRequestsTo(world, joel, kanza, Crate, joelBefore));
+    }
+
+    [Fact]
+    public void A_data_request_for_a_live_crate_is_still_passed_on()
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        var (joelBefore, kanzaBefore) = LateSpawnAsks(world, joel, kanza, Crate);
+
+        Assert.Equal(1, DataRequestsTo(world, joel, kanza, Crate, joelBefore));
+        Assert.Equal(0, DespawnsTo(world, kanza, Crate, kanzaBefore));
+    }
+
+    [Fact]
+    public void A_data_request_for_an_id_the_server_never_tracked_is_still_passed_on()
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        var (joelBefore, kanzaBefore) = LateSpawnAsks(world, joel, kanza, 999);
+
+        Assert.Equal(1, DataRequestsTo(world, joel, kanza, 999, joelBefore));
+        Assert.Equal(0, DespawnsTo(world, kanza, 999, kanzaBefore));
+    }
+
+    [Fact]
+    public void A_data_request_for_a_crate_spawned_again_under_its_old_id_is_still_passed_on()
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        joel.Send(ClientMessages.Despawn(joel.SmallId, Crate));
+        world.Spawn(joel, Crate, "Pack.Spawnable.Crate", 4, 5, 6);
+        world.Advance(TimeSpan.FromMinutes(2));
+
+        var (joelBefore, kanzaBefore) = LateSpawnAsks(world, joel, kanza, Crate);
+
+        Assert.Equal(1, DataRequestsTo(world, joel, kanza, Crate, joelBefore));
+        Assert.Equal(0, DespawnsTo(world, kanza, Crate, kanzaBefore));
+    }
+
+    [Fact]
+    public void A_data_request_for_a_crate_despawned_thirty_minutes_ago_is_still_passed_on()
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        joel.Send(ClientMessages.Despawn(joel.SmallId, Crate));
+        world.Advance(TimeSpan.FromMinutes(30));
+
+        var (joelBefore, kanzaBefore) = LateSpawnAsks(world, joel, kanza, Crate);
+
+        Assert.Equal(1, DataRequestsTo(world, joel, kanza, Crate, joelBefore));
+        Assert.Equal(0, DespawnsTo(world, kanza, Crate, kanzaBefore));
     }
 }

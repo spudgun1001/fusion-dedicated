@@ -1,12 +1,12 @@
 namespace FusionDedicated.Server;
 
 /// <summary>
-/// The ids the server removed in the last five seconds. A client resends a despawn, and every copy
-/// for an id already gone went to everybody again.
+/// The ids the server removed in the last five seconds, or the window given. A client resends a
+/// despawn, and every copy for an id already gone went to everybody again.
 /// </summary>
 public sealed class RecentRemovals
 {
-    public static readonly TimeSpan Window = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _window;
 
     private readonly Func<DateTime> _clock;
     private readonly Dictionary<ushort, DateTime> _removed = new();
@@ -15,7 +15,11 @@ public sealed class RecentRemovals
     /// <summary>A removal is noted on whichever thread removed the entity, while the loop reads them.</summary>
     private readonly object _lock = new();
 
-    public RecentRemovals(Func<DateTime> clock) => _clock = clock;
+    public RecentRemovals(Func<DateTime> clock, TimeSpan? window = null)
+    {
+        _clock = clock;
+        _window = window ?? TimeSpan.FromSeconds(5);
+    }
 
     /// <summary>How many removals are held, expired ones included until the next prune.</summary>
     public int Count
@@ -42,7 +46,7 @@ public sealed class RecentRemovals
         }
     }
 
-    /// <summary>Whether this id was removed less than five seconds ago.</summary>
+    /// <summary>Whether this id was removed within the window.</summary>
     public bool Contains(ushort id)
     {
         DateTime now = _clock();
@@ -66,7 +70,7 @@ public sealed class RecentRemovals
 
     private void Prune(DateTime now)
     {
-        while (_order.TryPeek(out var oldest) && now - oldest.At >= Window)
+        while (_order.TryPeek(out var oldest) && now - oldest.At >= _window)
         {
             _order.Dequeue();
 
