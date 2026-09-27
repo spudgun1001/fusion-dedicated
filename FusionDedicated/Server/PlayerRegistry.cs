@@ -161,6 +161,12 @@ public sealed class ConnectedPlayer
     /// <summary>Set once the server has said it is not keeping all of their metadata, so it is said once.</summary>
     public bool MetadataCapLogged { get; set; }
 
+    /// <summary>The LobbyInfo they were last sent, so settings go to them only when theirs is out of date.</summary>
+    public string? SettingsSent { get; set; }
+
+    /// <summary>Poses of theirs relayed, so a far player can be sent every Nth.</summary>
+    public int PosesRelayed { get; set; }
+
     /// <summary>
     /// Level this player joined with. Mirrored into their Fusion metadata so every
     /// client shows the right badge, and re-checked here before honouring a command.

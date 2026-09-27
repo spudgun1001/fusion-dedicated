@@ -528,6 +528,15 @@ public sealed class ServerConfig
     /// </summary>
     public float VoiceRelayRange { get; set; } = 41f;
 
+    /// <summary>
+    /// Metres past which a player is sent only every <see cref="FarPoseDivisor"/>th pose of somebody.
+    /// Fusion moves a body on at its last velocity between poses. Zero sends every pose to everyone.
+    /// </summary>
+    public float FarPoseRange { get; set; } = 80f;
+
+    /// <summary>Which of a far player's poses are sent, one in this many. One or less sends every pose.</summary>
+    public int FarPoseDivisor { get; set; } = 3;
+
     // ---- panel ----
 
     /// <summary>

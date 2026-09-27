@@ -450,8 +450,21 @@ file only.
 A moving prop's poses go to players further than `PoseThinDistance` (60 m) from it only
 `FarPosesPerSecond` (5) times a second instead of about 20. Fusion only freezes a prop
 after half a second without a pose, so far props keep moving, a little less smoothly.
-Player movement and a prop's resting pose are always sent, and so is everything to a
-player whose position is not known yet. Set either to 0 to send every pose to everyone.
+A prop's resting pose is always sent, and so is everything to a player whose position
+is not known yet. Set either to 0 to send every pose to everyone.
+
+Player poses were the largest share after voice. A player further than `FarPoseRange`
+(80 m) from somebody is sent only one in `FarPoseDivisor` (3) of their poses, about 7 a
+second instead of 20. Fusion moves a body on at its last velocity between poses and eases
+the head and hands to each new one, so at that distance a walker looks the same and hands
+move a little less finely. Anybody loading, anybody the server has no position for, and
+anybody sitting in a vehicle, at either end, is sent every pose. Set `FarPoseRange` to 0,
+or `FarPoseDivisor` to 1, to send every pose to everyone.
+
+The rules and player list (ServerSettings) go to a player when they join and again only
+when their copy is out of date, such as after a join, a leave, an avatar change or a
+change in the panel. Fusion's own host does the same. They were sent to everybody every
+10 seconds, with the whole player list in each.
 
 A fly mod spawns its gun on the player's own machine through BoneLib, so the server never
 sees the gun, only where their body goes. `FlightSpeed` (6 m/s) and `FlightWindowSeconds`
@@ -656,6 +669,8 @@ gitignored.
 | `SendRateMin` / `SendRateMax` | bytes a second Steam sends to each player, keep them equal (1048576 by default, 0 keeps Steam's 256 KB) |
 | `SendBufferSize` | bytes Steam holds for one player before it refuses a send (2097152 by default, 0 keeps Steam's 512 KB) |
 | `VoiceRelayRange` | metres from a speaker past which a player is not sent their voice (41 by default, 0 sends every voice to everyone) |
+| `FarPoseRange` | metres from a player past which somebody gets fewer of their poses (80 by default, 0 sends all) |
+| `FarPoseDivisor` | those far players get one in this many poses (3 by default, 1 sends all) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 

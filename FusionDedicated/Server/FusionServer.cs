@@ -817,6 +817,13 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagPlayerPoseUpdate when sender != null:
                 TrackPlayerPose(sender, message);
+
+                if (Config.FarPoseRange > 0 && Config.FarPoseDivisor > 1 && ServerProtocol.ReadRoute(message).RelayType == 3)
+                {
+                    RelayPlayerPose(sender, message);
+                    return;
+                }
+
                 break;
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
@@ -1175,7 +1182,7 @@ public sealed class FusionServer : IDisposable
         SendTo(connection, ServerProtocol.WriteEmptyDynamicsAssignment(), reliable: true);
 
         // 5. The rules: privacy, combat toggles and which level each action needs.
-        SendTo(connection, ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
+        SendSettings(player, BuildLobbyInfoJson());
 
         // 6. What is already in the world. Nobody else does this: Fusion only
         //    sends creation catch-up when it is the host, and no client here is,
@@ -3472,6 +3479,23 @@ public sealed class FusionServer : IDisposable
     /// <summary>The name last sent for player 0, so a rename in the panel reaches connected players.</summary>
     private string? _serverPlayerName;
 
+    /// <summary>Sends a player the settings unless they already have them. A refused send is tried again next tick.</summary>
+    private void SendSettings(ConnectedPlayer player, string settings)
+    {
+        if (player.SettingsSent == settings)
+        {
+            return;
+        }
+
+        var message = ServerProtocol.WriteServerSettings(settings);
+
+        if (SendTo(player.Connection, message, reliable: true))
+        {
+            player.SettingsSent = settings;
+            player.BytesOut += message.Length;
+        }
+    }
+
     /// <summary>
     /// Pushes the current settings to everyone connected. Without this a change made
     /// in the panel would only reach players who join afterwards.
@@ -3494,7 +3518,12 @@ public sealed class FusionServer : IDisposable
             }
         }
 
-        Broadcast(ServerProtocol.WriteServerSettings(BuildLobbyInfoJson()), reliable: true);
+        string settings = BuildLobbyInfoJson();
+
+        foreach (var player in Players.Players)
+        {
+            SendSettings(player, settings);
+        }
 
         // Player 0 carries the server's name. Stored only when it is sent, so a rename
         // from the panel thread cannot be recorded without reaching players.
@@ -5008,6 +5037,35 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Passes a player's pose on, sending a player further than FarPoseRange only every FarPoseDivisor'th.
+    /// Voice's test of distance is used, so a loading player or an unknown position is sent everything.
+    /// A seated rider moves with the vehicle, so neither end being seated is thinned.
+    /// </summary>
+    private void RelayPlayerPose(ConnectedPlayer sender, byte[] message)
+    {
+        var stamped = ServerProtocol.StampSender(message, sender.SmallId);
+        bool senderSeated = _seats.SeatOf(sender.SmallId) != null;
+        int count = sender.PosesRelayed++;
+
+        foreach (var player in Players.Players)
+        {
+            // Offset by the receiver, so far players are not all sent the same tick's pose.
+            if (player.SmallId == sender.SmallId
+                || ((count + player.SmallId) % Config.FarPoseDivisor != 0
+                    && !senderSeated && _seats.SeatOf(player.SmallId) == null
+                    && !VoiceReach.Reaches(sender, player, Config.FarPoseRange)))
+            {
+                continue;
+            }
+
+            if (SendTo(player.Connection, stamped, reliable: false))
+            {
+                player.BytesOut += stamped.Length;
+            }
+        }
+    }
+
     private readonly PoseThinning _thinning = new();
 
     /// <summary>
@@ -5985,11 +6043,8 @@ public sealed class FusionServer : IDisposable
     /// <summary>Periodic housekeeping: republish settings and drop dead entities.</summary>
     public void Tick()
     {
-        // A client builds its rules purely from the ServerSettings message. If it ever
-        // misses one, or its own scene-load hook overwrites LobbyInfo with local
-        // preferences, it falls back to LobbyInfo.Empty, where mortality and knockout
-        // are both off. In game that looks like being unkillable with nothing happening
-        // on death, so it is worth a small reliable message to keep everyone converged.
+        // Settings go only to players whose copy is out of date, such as after an avatar
+        // change or a send Steam refused. Fusion's client keeps its copy until it disconnects.
         if (Players.Count > 0)
         {
             PushSettings();

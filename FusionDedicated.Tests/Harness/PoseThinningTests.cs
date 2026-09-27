@@ -133,9 +133,11 @@ public class PoseThinningTests
     }
 
     [Fact]
-    public void Player_movement_is_never_thinned()
+    public void Prop_thinning_leaves_player_movement_alone()
     {
-        var scene = Build(Thinning());
+        var config = Thinning();
+        config.FarPoseRange = 0;
+        var scene = Build(config);
         using var world = scene.World;
         int far = Sent(world, scene.Far);
 
