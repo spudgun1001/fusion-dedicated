@@ -116,7 +116,7 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += id => _recentRemovals.Note(id);
 
         _removedThisLevel = new RecentRemovals(() => Clock(), TimeSpan.FromMinutes(30));
-        Entities.Removed += id => _removedThisLevel.Note(id);
+        Entities.Removed += NoteRemovedThisLevel;
 
         _catchup = new CatchupOutbox(() => Config.CatchupMessagesPerSecond, () => Clock(),
             (player, message, reliable) =>
@@ -1290,6 +1290,7 @@ public sealed class FusionServer : IDisposable
             var entity = Entities.Register(allocated, "", sender.SmallId, 0, 0, 0);
             entity.Discovered = true;
             entity.PositionKnown = false;
+            NoteScenePropId(allocated);
         }
         else
         {
@@ -2242,6 +2243,31 @@ public sealed class FusionServer : IDisposable
     /// spawns the item anyway once the download ends.
     /// </summary>
     private readonly RecentRemovals _removedThisLevel;
+
+    /// <summary>Live ids the server learned of as level objects, with no barcode. Locked, as removals come from any thread.</summary>
+    private readonly HashSet<ushort> _scenePropIds = new();
+
+    private void NoteScenePropId(ushort id)
+    {
+        lock (_scenePropIds)
+        {
+            _scenePropIds.Add(id);
+        }
+    }
+
+    /// <summary>A scene prop is left out, or a late data request for it would despawn part of the level.</summary>
+    private void NoteRemovedThisLevel(ushort id)
+    {
+        lock (_scenePropIds)
+        {
+            if (_scenePropIds.Remove(id))
+            {
+                return;
+            }
+        }
+
+        _removedThisLevel.Note(id);
+    }
 
     private void HandleDespawnRequest(ConnectedPlayer sender, byte[] message)
     {
@@ -3323,6 +3349,12 @@ public sealed class FusionServer : IDisposable
         // After Forget, which noted every entity on the old level as removed.
         _recentRemovals.Clear();
         _removedThisLevel.Clear();
+
+        lock (_scenePropIds)
+        {
+            _scenePropIds.Clear();
+        }
+
         _levelPropsRefused.Clear();
 
         lock (_cacheLock)
@@ -5042,6 +5074,11 @@ public sealed class FusionServer : IDisposable
             pose.Rotation,
             pose.Velocity.X, pose.Velocity.Y, pose.Velocity.Z,
             ownerDistance, Config.MaxEntitiesPerPlayer);
+
+        if (noted == PoseNoted.Discovered)
+        {
+            NoteScenePropId(vehicleId);
+        }
 
         // The pose is still relayed, so a real level prop keeps working for everybody else.
         if (noted == PoseNoted.OwnerAtCap && _levelPropsRefused.Add(sender.PlatformId))

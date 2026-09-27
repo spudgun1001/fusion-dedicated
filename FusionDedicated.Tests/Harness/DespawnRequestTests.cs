@@ -1,6 +1,7 @@
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
+using FusionDedicated.Tests.Protocol;
 
 namespace FusionDedicated.Tests.Harness;
 
@@ -214,5 +215,67 @@ public class DespawnRequestTests
 
         Assert.Equal(1, DataRequestsTo(world, joel, kanza, Crate, joelBefore));
         Assert.Equal(0, DespawnsTo(world, kanza, Crate, kanzaBefore));
+    }
+
+    /// <summary>Joel grabs a piece of the level, which the server learns of from a pose or an unqueue request.</summary>
+    private static ushort DiscoverSceneProp(World world, FakePlayer joel, bool byUnqueue)
+    {
+        if (!byUnqueue)
+        {
+            joel.Send(FusionProtocol.BuildEntityPoseUpdate(joel.SmallId, 355, new Vec3(9, 9, 9), default, default, default));
+            return 355;
+        }
+
+        var data = new OracleWriter();
+        data.Write(joel.SmallId);
+        data.Write((ushort)4242);
+
+        var message = new OracleWriter();
+        message.Write(FusionProtocol.TagEntityUnqueueRequest);
+        message.Write((byte)1);         // ToServer
+        message.Write((byte)0);         // Reliable
+        message.Write((byte?)joel.SmallId);
+        message.Write(data.ToArray());
+
+        joel.Send(message.ToArray());
+
+        return world.Server.Entities.Entities.Single(e => e.Discovered).Id;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_data_request_for_a_removed_scene_prop_is_still_passed_on(bool byUnqueue)
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        ushort door = DiscoverSceneProp(world, joel, byUnqueue);
+        Assert.Equal("", world.Server.Entities.Get(door)!.Barcode);
+
+        joel.Send(ClientMessages.Despawn(joel.SmallId, door));
+        world.Advance(TimeSpan.FromMinutes(2));
+
+        var (joelBefore, kanzaBefore) = LateSpawnAsks(world, joel, kanza, door);
+
+        Assert.Equal(0, DespawnsTo(world, kanza, door, kanzaBefore));
+        Assert.Equal(1, DataRequestsTo(world, joel, kanza, door, joelBefore));
+    }
+
+    [Fact]
+    public void A_crate_spawned_under_a_removed_scene_props_id_is_despawned_for_a_late_spawner()
+    {
+        var (world, joel, kanza) = CrateOwnedByJoel();
+        using var _ = world;
+
+        ushort door = DiscoverSceneProp(world, joel, byUnqueue: false);
+        joel.Send(ClientMessages.Despawn(joel.SmallId, door));
+        world.Spawn(joel, door, "Pack.Spawnable.Crate", 4, 5, 6);
+        joel.Send(ClientMessages.Despawn(joel.SmallId, door));
+        world.Advance(TimeSpan.FromMinutes(2));
+
+        var (_, kanzaBefore) = LateSpawnAsks(world, joel, kanza, door);
+
+        Assert.Equal(1, DespawnsTo(world, kanza, door, kanzaBefore));
     }
 }
