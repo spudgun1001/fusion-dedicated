@@ -761,6 +761,10 @@ found a holder, so treat it as untested rather than as a feature.
 - Entity IDs are a `ushort`. A busy server works through the range in roughly a week
   of continuous uptime and then reuses freed IDs. Culled entities are properly
   despawned on clients first, which is what makes reuse safe.
+- A player missing a weapon's mod downloads it before spawning the weapon, and Fusion
+  drops a despawn that lands during the download. When the late spawn asks the server
+  about it, the server answers with a despawn if it removed that item on this level in
+  the last 30 minutes.
 - Gamemodes are not implemented; the server presents itself as plain sandbox.
 - Player IDs 0–255 are reserved by clients for player rigs, so props are allocated
   from 256 upward. Allocating below that corrupts player entities on every client.
