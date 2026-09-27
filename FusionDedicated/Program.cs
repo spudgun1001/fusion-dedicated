@@ -60,6 +60,9 @@ public static class Program
 
         SteamNetworkingUtils.InitRelayNetworkAccess();
 
+        // Before any connection exists, so every player gets them.
+        string sendLimits = SteamSendLimits.Apply(config);
+
         // Callbacks must be pumped continuously or every await below never completes,
         // lobby creation especially. The main loop takes over afterwards.
         using var startupPump = new CancellationTokenSource();
@@ -86,6 +89,7 @@ public static class Program
         };
 
         server.Start();
+        server.Log("INFO", sendLimits);
 
         // Minute rows live next to the logs, so graphs cover days rather than only
         // the couple of hours the in-memory ring holds.

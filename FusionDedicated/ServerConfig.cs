@@ -506,10 +506,27 @@ public sealed class ServerConfig
 
     /// <summary>
     /// Bytes Steam has taken for a player and not yet put on the wire, at or above which they are
-    /// sent no more poses until it drains. Steam's send buffer holds 512 KB and refuses everything
+    /// sent no more poses until it drains. Steam's send buffer holds SendBufferSize and refuses everything
     /// once it is full. Zero or less sends poses whatever is waiting.
     /// </summary>
     public int CongestedPendingBytes { get; set; } = 131072;
+
+    /// <summary>
+    /// Bytes a second Steam sends to each player, where its own default is 256 KB. Steam does not
+    /// estimate bandwidth, so it sends at the minimum and the two are best kept equal. Zero keeps Steam's.
+    /// </summary>
+    public int SendRateMin { get; set; } = 1048576;
+
+    public int SendRateMax { get; set; } = 1048576;
+
+    /// <summary>Bytes Steam holds for one player before it refuses a send, where its own default is 512 KB. Zero keeps Steam's.</summary>
+    public int SendBufferSize { get; set; } = 2097152;
+
+    /// <summary>
+    /// Metres past which a player is not sent somebody's voice. Fusion mutes a voice past 33 m for a
+    /// 1.76 m avatar, further for a taller one. Zero sends every voice to everyone.
+    /// </summary>
+    public float VoiceRelayRange { get; set; } = 41f;
 
     // ---- panel ----
 

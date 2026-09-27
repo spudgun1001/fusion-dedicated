@@ -393,6 +393,7 @@ public sealed class FusionServer : IDisposable
         _flight.Forget(player.SmallId);
         _avatarStrikes.Forget(player.SmallId);
         _thinning.ForgetPlayer(player.SmallId);
+        _voiceProxies.Forget(player.SmallId);
         _retry.Forget(player.Connection.m_HSteamNetConnection);
         _congestionLog.Remove(player.SmallId);
         _refusals.Forget(player.SmallId);
@@ -859,6 +860,14 @@ public sealed class FusionServer : IDisposable
             case FusionProtocol.TagPlayerVoiceChat when sender != null:
                 if (Mutes.IsMuted(sender.PlatformId))
                 {
+                    return;
+                }
+
+                _voiceBySender[sender.DisplayName] = _voiceBySender.GetValueOrDefault(sender.DisplayName) + message.Length;
+
+                if (Config.VoiceRelayRange > 0 && ServerProtocol.ReadRoute(message).RelayType == 3)
+                {
+                    RelayVoice(sender, message);
                     return;
                 }
 
@@ -3271,6 +3280,7 @@ public sealed class FusionServer : IDisposable
         _grabs.Clear();
         _confirmations.Clear();
         _holdAnswers.Clear();
+        _voiceProxies.Clear();
 
         // Seats an entity the server never knew was refused for are not covered by Forget.
         _seatRefusals.Clear();
@@ -5043,6 +5053,33 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>Passes a voice packet on to the players close enough to hear it, or to everyone while it feeds a radio or phone.</summary>
+    private void RelayVoice(ConnectedPlayer sender, byte[] message)
+    {
+        var stamped = ServerProtocol.StampSender(message, sender.SmallId);
+        bool reliable = ServerProtocol.ReadRoute(message).Channel != 1;
+        bool everywhere = _voiceProxies.Feeds(sender.SmallId);
+
+        foreach (var player in Players.Players)
+        {
+            if (player.SmallId == sender.SmallId
+                || !(everywhere || VoiceReach.Reaches(sender, player, Config.VoiceRelayRange)))
+            {
+                continue;
+            }
+
+            if (SendTo(player.Connection, stamped, reliable))
+            {
+                player.BytesOut += stamped.Length;
+            }
+        }
+    }
+
+    private readonly VoiceProxyInputs _voiceProxies = new();
+
+    /// <summary>Voice bytes each player sent since the last health line, so an open mic shows up.</summary>
+    private readonly Dictionary<string, long> _voiceBySender = new();
+
     /// <summary>
     /// Follows what a player holds, reading only, so the grab carries on to the other
     /// clients as usual. Grabbing anything but an entity empties that hand.
@@ -5587,6 +5624,9 @@ public sealed class FusionServer : IDisposable
     {
         uint handle = connection.m_HSteamNetConnection;
 
+        // Every voice proxy toggle a client is sent passes here, whoever wrote it.
+        _voiceProxies.Note(message);
+
         // Poses are a large share of the outbound and they heal themselves, so a player whose send
         // buffer is filling up gets none of them until it drains and the reliable traffic gets through.
         if (!reliable && IsPose(message) && _congested.Contains(handle))
@@ -5851,6 +5891,16 @@ public sealed class FusionServer : IDisposable
         }
 
         Array.Clear(_sentByTag);
+
+        var talkers = _voiceBySender.Where(v => v.Value >= 10_000).OrderByDescending(v => v.Value).Take(5)
+            .Select(v => $"{v.Key} {v.Value / 1000} KB").ToList();
+
+        if (talkers.Count > 0)
+        {
+            Log("INFO", $"Voice by sender in the last minute: {string.Join(", ", talkers)}", console: false);
+        }
+
+        _voiceBySender.Clear();
 
         if (_magazinesCulled + _gadgetsCulled > 0)
         {

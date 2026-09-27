@@ -150,6 +150,9 @@ public static class ClientMessages
         return message.ToArray();
     }
 
+    public static byte[] ModuleToOthers(byte player, long handler, byte[] handlerPayload)
+        => Module(player, handler, handlerPayload, ToOtherClients);
+
     private static byte[] Module(byte player, long handler, byte[] handlerPayload, byte relayType)
     {
         var body = new FusionNetWriter(handlerPayload.Length + ModuleProtocol.HandlerTagBytes);

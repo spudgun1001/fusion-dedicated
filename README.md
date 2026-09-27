@@ -485,12 +485,29 @@ for a catch-up message twice.
 
 A player with `CongestedPendingBytes` (128 KB) or more still buffered on their connection
 is sent no poses until that comes down, which leaves the line to the reliable traffic. The
-measure is what Steam has taken and not yet put on the wire, which is what its 512 KB send
+measure is what Steam has taken and not yet put on the wire, which is what its send
 buffer counts, rather than everything in flight. Poses are a large share of the outbound
 and the next one replaces the one that was skipped, so props and players catch themselves
 up. Set it to 0 to send poses whatever is waiting. The log file names each player this
 happens to, at most once a minute each, and sums up the retries, the drops and the held
 back poses with what they weighed.
+
+Steam sends to each player at 256 KB/s and holds 512 KB for them unless it is told
+otherwise, and on a busy evening every player sat at that rate with over half a megabyte
+waiting and two seconds of queue. The server sets `SendRateMin` and `SendRateMax` (1 MB/s
+each) and `SendBufferSize` (2 MB) for every connection at startup and logs them as
+`Steam send limits: ...`. Steam does not estimate bandwidth yet and sends at the minimum,
+so raise both together. Set any of them to 0 to keep Steam's own value. They are read once
+at startup, so a change needs a restart.
+
+Voice was three quarters of everything the server sent, because every word went to every
+player. Fusion mutes a voice past about 33 m, head to head, for a 1.76 m avatar, and
+further for a taller one. So a voice goes only to players within `VoiceRelayRange` (41 m)
+of the speaker, grown the same way for a tall avatar. A player whose voice feeds a radio,
+a phone call or a megaphone is heard by everybody, as is a player the server has no
+position for yet, and anybody loading. Set it to 0 to send every voice to everyone. Once
+a minute the log file names the five players who sent the most voice, over 10 KB each, as
+`Voice by sender in the last minute: ...`, so an open mic shows up.
 
 `CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
@@ -636,6 +653,9 @@ gitignored.
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
 | `SendRetryQueue` | reliable messages held for one player when Steam refuses a send (256 by default, 0 drops a refused send) |
 | `CongestedPendingBytes` | bytes Steam still has unsent for a player, at or above which they are sent no poses (131072 by default, 0 sends poses whatever is waiting) |
+| `SendRateMin` / `SendRateMax` | bytes a second Steam sends to each player, keep them equal (1048576 by default, 0 keeps Steam's 256 KB) |
+| `SendBufferSize` | bytes Steam holds for one player before it refuses a send (2097152 by default, 0 keeps Steam's 512 KB) |
+| `VoiceRelayRange` | metres from a speaker past which a player is not sent their voice (41 by default, 0 sends every voice to everyone) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 

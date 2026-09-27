@@ -33,6 +33,10 @@ public static class AvatarStatsCheck
 
     public static string? Problem(ReadOnlySpan<byte> stats, ServerConfig limits) => Check(stats, limits).Problem;
 
+    /// <summary>The avatar's height, or zero for a block that is not a whole one.</summary>
+    public static float HeightOf(ReadOnlySpan<byte> stats)
+        => stats.Length == FusionProtocol.AvatarStatsSize ? Read(stats, Height) : 0f;
+
     public static AvatarStatsVerdict Check(ReadOnlySpan<byte> stats, ServerConfig limits)
     {
         if (stats.Length != FusionProtocol.AvatarStatsSize)
