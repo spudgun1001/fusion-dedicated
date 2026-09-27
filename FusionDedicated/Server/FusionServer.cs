@@ -1096,10 +1096,26 @@ public sealed class FusionServer : IDisposable
             joinStats = clamped;
         }
 
+        string joinName = request.Metadata.GetValueOrDefault("Username", "");
+        var joinRank = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
+
+        // Everybody here loads the avatar a player joins in, so it gets the same checks as a swap.
+        string joinAvatar = request.AvatarBarcode ?? "";
+        var avatarBlock = _blocklist.Check(joinAvatar, joinRank);
+        var pluginAvatar = avatarBlock.Blocked
+            ? null
+            : Plugins?.Avatar.Raise(new Plugins.AvatarEvent(platformId, joinName, joinRank, joinAvatar));
+
+        if (avatarBlock.Blocked || pluginAvatar is { Allowed: false })
+        {
+            string why = avatarBlock.Blocked ? $"the {avatarBlock.Layer} blocklist: {avatarBlock.Reason}" : $"a plugin: {pluginAvatar!.Reason}";
+            Reject($"Change your avatar: {joinAvatar} is not allowed here",
+                $"{joinName} joined wearing '{joinAvatar}', refused by {why}");
+            return;
+        }
+
         // Before a slot is given, so a plugin refusing costs nothing.
-        var pluginJoin = Plugins?.Joining.Raise(new Plugins.JoinEvent(
-            platformId, request.Metadata.GetValueOrDefault("Username", ""),
-            Ranks?.Get(platformId) ?? Config.GetPermission(platformId)));
+        var pluginJoin = Plugins?.Joining.Raise(new Plugins.JoinEvent(platformId, joinName, joinRank));
 
         if (pluginJoin is { Allowed: false })
         {
