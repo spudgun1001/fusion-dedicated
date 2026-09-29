@@ -32,6 +32,8 @@ public class PluginHttpStarvationTests
             ThreadPool.QueueUserWorkItem(_ => { Interlocked.Increment(ref running); release.Wait(); finished.Signal(); });
         }
 
+        bool done = false;
+
         try
         {
             SpinWait.SpinUntil(() => Volatile.Read(ref running) >= workers, 2000);
@@ -48,9 +50,16 @@ public class PluginHttpStarvationTests
             // An item still waiting on a disposed event would throw on a pool thread and end the test host,
             // so the events are only disposed once every item has finished. On a timeout the GC has them.
             release.Set();
-            Assert.True(finished.Wait(TimeSpan.FromSeconds(30)), "the thread pool never ran every queued item");
-            release.Dispose();
-            finished.Dispose();
+            done = finished.Wait(TimeSpan.FromSeconds(30));
+
+            if (done)
+            {
+                release.Dispose();
+                finished.Dispose();
+            }
         }
+
+        // After the finally, so a failure above is reported rather than replaced.
+        Assert.True(done, "the thread pool never ran every queued item");
     }
 }
