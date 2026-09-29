@@ -61,7 +61,7 @@ public class PluginHttpLoopbackTests
         try
         {
             using var stalled = new TcpClient();
-            stalled.Connect(IPAddress.Loopback, port);
+            stalled.Connect("localhost", port);
             var stream = stalled.GetStream();
             stream.ReadTimeout = 5000;
 
