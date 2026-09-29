@@ -52,7 +52,7 @@ public sealed class PluginHost
 
     public PluginHttp Http
     {
-        get => _http ??= new PluginHttp(_health, _log);
+        get => LazyInitializer.EnsureInitialized(ref _http, () => new PluginHttp(_health, _log));
         init => _http = value;
     }
 

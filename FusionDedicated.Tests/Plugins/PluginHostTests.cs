@@ -261,6 +261,27 @@ public class PluginHostTests : IDisposable
     }
 
     [Fact]
+    public void Concurrent_first_reads_of_the_route_registry_get_the_same_one()
+    {
+        const int Threads = 8;
+
+        for (int round = 0; round < 200; round++)
+        {
+            var host = Host(Events());
+            var seen = new PluginHttp[Threads];
+            using var start = new Barrier(Threads);
+
+            Parallel.For(0, Threads, new ParallelOptions { MaxDegreeOfParallelism = Threads }, i =>
+            {
+                start.SignalAndWait();
+                seen[i] = host.Http;
+            });
+
+            Assert.All(seen, h => Assert.Same(seen[0], h));
+        }
+    }
+
+    [Fact]
     public void A_route_registered_before_start_throws_is_taken_away()
     {
         var http = new PluginHttp(_health, (_, _) => { });
