@@ -28,6 +28,25 @@ public class PluginBusTests
     }
 
     [Fact]
+    public void A_disabled_plugin_offers_nothing()
+    {
+        var bus = Bus();
+        bus.Offer("labrp", "charge", _ => BusReply.Yes());
+
+        Assert.True(bus.Offers("labrp", "charge"));
+
+        for (int i = 0; i < PluginHealth.FailuresBeforeDisable; i++) _health.NoteFailure("labrp");
+
+        Assert.False(bus.Offers("labrp", "charge"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Asking_no_plugin_is_answered_rather_than_thrown(string? plugin)
+        => Assert.False(Bus().Ask("stocks", plugin!, "balance").Offered);
+
+    [Fact]
     public void A_healthy_plugin_answers()
     {
         var bus = Bus();

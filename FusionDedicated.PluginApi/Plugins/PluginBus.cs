@@ -61,6 +61,11 @@ public sealed class PluginBus
 
     public bool Offers(string plugin, string verb)
     {
+        if (string.IsNullOrEmpty(plugin) || _health.IsDisabled(plugin))
+        {
+            return false;
+        }
+
         lock (_lock)
         {
             return _offers.ContainsKey((plugin, Tidy(verb)));
@@ -81,7 +86,7 @@ public sealed class PluginBus
     /// <summary>Asks a named plugin for something. A disabled plugin offers nothing.</summary>
     public BusReply Ask(string from, string plugin, string verb, IReadOnlyDictionary<string, string>? args = null)
     {
-        if (_health.IsDisabled(plugin))
+        if (string.IsNullOrEmpty(plugin) || _health.IsDisabled(plugin))
         {
             return BusReply.Unoffered;
         }
