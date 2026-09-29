@@ -45,7 +45,7 @@ public class PluginTimerTests
 
         context.Every(TimeSpan.FromSeconds(1), () => ran.Set());
 
-        Assert.True(ran.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(ran.Wait(TimeSpan.FromSeconds(10)));
         context.StopTimers();
     }
 
@@ -62,10 +62,9 @@ public class PluginTimerTests
                 "Method not found: 'Void FusionDedicated.Plugins.PluginStore.Save()'.");
         });
 
-        Assert.True(ran.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(ran.Wait(TimeSpan.FromSeconds(10)));
 
-        // Give the catch a moment to write its line.
-        Thread.Sleep(200);
+        // StopTimers waits for the running job, so the catch has written its line.
         context.StopTimers();
 
         Assert.Contains(log, l => l.StartsWith("WARN") && l.Contains("threw and was skipped"));
@@ -77,17 +76,22 @@ public class PluginTimerTests
         // A payday that fails once should not stop every payday after it.
         var (context, _) = Build();
         int runs = 0;
+        using var twice = new ManualResetEventSlim();
 
         context.Every(TimeSpan.FromSeconds(1), () =>
         {
-            Interlocked.Increment(ref runs);
+            if (Interlocked.Increment(ref runs) == 2)
+            {
+                twice.Set();
+            }
+
             throw new InvalidOperationException("no");
         });
 
-        Thread.Sleep(TimeSpan.FromSeconds(2.5));
+        bool ranTwice = twice.Wait(TimeSpan.FromSeconds(10));
         context.StopTimers();
 
-        Assert.True(runs >= 2, $"ran {runs} times");
+        Assert.True(ranTwice, $"ran {Volatile.Read(ref runs)} times");
     }
 
     [Fact]
@@ -97,16 +101,21 @@ public class PluginTimerTests
         // the process rather than throwing.
         var (context, _) = Build();
         int runs = 0;
+        using var ran = new ManualResetEventSlim();
 
-        context.Every(TimeSpan.FromSeconds(1), () => Interlocked.Increment(ref runs));
+        context.Every(TimeSpan.FromSeconds(1), () =>
+        {
+            Interlocked.Increment(ref runs);
+            ran.Set();
+        });
 
-        Thread.Sleep(TimeSpan.FromSeconds(1.5));
+        Assert.True(ran.Wait(TimeSpan.FromSeconds(10)));
         context.StopTimers();
 
-        int after = runs;
+        int after = Volatile.Read(ref runs);
         Thread.Sleep(TimeSpan.FromSeconds(1.5));
 
-        Assert.Equal(after, runs);
+        Assert.Equal(after, Volatile.Read(ref runs));
     }
 
     [Fact]
@@ -126,12 +135,21 @@ public class PluginTimerTests
         // plugin asking for milliseconds would be a busy loop on the server.
         var (context, _) = Build();
         int runs = 0;
+        using var ran = new ManualResetEventSlim();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
 
-        context.Every(TimeSpan.FromMilliseconds(1), () => Interlocked.Increment(ref runs));
+        context.Every(TimeSpan.FromMilliseconds(1), () =>
+        {
+            Interlocked.Increment(ref runs);
+            ran.Set();
+        });
 
-        Thread.Sleep(TimeSpan.FromSeconds(1.5));
+        Assert.True(ran.Wait(TimeSpan.FromSeconds(10)));
+        Thread.Sleep(TimeSpan.FromSeconds(0.5));
         context.StopTimers();
 
-        Assert.InRange(runs, 1, 3);
+        // At one a second it runs at most once per second waited, with room for
+        // rounding and a late callback. A 1 ms period would run hundreds of times.
+        Assert.InRange(Volatile.Read(ref runs), 1, (int)clock.Elapsed.TotalSeconds + 2);
     }
 }
