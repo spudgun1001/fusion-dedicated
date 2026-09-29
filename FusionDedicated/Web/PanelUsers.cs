@@ -174,6 +174,12 @@ public sealed class PanelUsers
 
         lock (_lock)
         {
+            // Removed or changed while the hash ran, so it is not remembered.
+            if (!_accounts.TryGetValue(name, out var current) || current.Hash != account.Hash)
+            {
+                return PanelPermissions.ParseRole(account.Role);
+            }
+
             if (_verified.Count >= RememberCap && !_verified.ContainsKey(name))
             {
                 _verified.Remove(_verified.MinBy(e => e.Value.At).Key);

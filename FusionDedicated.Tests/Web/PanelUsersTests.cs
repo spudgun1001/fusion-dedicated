@@ -226,6 +226,64 @@ public class PanelUsersTests : IDisposable
     }
 
     [Fact]
+    public void An_account_removed_during_a_sign_in_is_not_remembered()
+    {
+        // Clock runs after the account lookup and before the store, so removing
+        // here lands in the gap a real Remove from another thread could hit.
+        PanelUsers? users = null;
+        bool removeNow = false;
+        users = new PanelUsers(Path_)
+        {
+            Clock = () =>
+            {
+                if (removeNow) { users!.Remove("badger"); }
+                return DateTime.UtcNow;
+            },
+        };
+        users.Set("badger", "hunter2", PanelRole.Owner);
+
+        removeNow = true;
+        users.Authenticate("badger", "hunter2");
+
+        Assert.False(users.Remembers("badger"));
+    }
+
+    [Fact]
+    public void A_password_changed_during_a_sign_in_is_not_remembered()
+    {
+        PanelUsers? users = null;
+        bool changeNow = false;
+        users = new PanelUsers(Path_)
+        {
+            Clock = () =>
+            {
+                if (changeNow) { changeNow = false; users!.Set("badger", "fresh", PanelRole.Owner); }
+                return DateTime.UtcNow;
+            },
+        };
+        users.Set("badger", "hunter2", PanelRole.Owner);
+
+        changeNow = true;
+        users.Authenticate("badger", "hunter2");
+
+        Assert.False(users.Remembers("badger"));
+    }
+
+    [Fact]
+    public void A_wrong_guess_keeps_the_right_password_remembered()
+    {
+        var users = new PanelUsers(Path_);
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+
+        Assert.Null(users.Authenticate("badger", "hunter3"));
+        int after = users.Derivations;
+
+        Assert.Equal(PanelRole.Owner, users.Authenticate("badger", "hunter2"));
+        Assert.Equal(after, users.Derivations);
+    }
+
+    [Fact]
     public void An_expired_entry_is_dropped_when_found()
     {
         var now = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
