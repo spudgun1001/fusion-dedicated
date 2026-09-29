@@ -78,9 +78,14 @@ public sealed class PluginBus
         }
     }
 
-    /// <summary>Asks a named plugin for something.</summary>
+    /// <summary>Asks a named plugin for something. A disabled plugin offers nothing.</summary>
     public BusReply Ask(string from, string plugin, string verb, IReadOnlyDictionary<string, string>? args = null)
     {
+        if (_health.IsDisabled(plugin))
+        {
+            return BusReply.Unoffered;
+        }
+
         Func<BusRequest, BusReply>? handler;
 
         lock (_lock)
