@@ -33,6 +33,10 @@ public sealed class PluginHttp
 
     public void Handle(string plugin, string path, PanelRole role, Func<PluginHttpRequest, PluginHttpReply> handler)
     {
+        if (string.IsNullOrWhiteSpace(plugin)) throw new ArgumentException("A route needs a plugin name", nameof(plugin));
+        if (path == null) throw new ArgumentException("A route needs a path", nameof(path));
+        if (handler == null) throw new ArgumentException("A route needs a handler", nameof(handler));
+
         lock (_lock)
         {
             _routes[Key(plugin, path)] = (role, handler);
@@ -88,5 +92,5 @@ public sealed class PluginHttp
         }
     }
 
-    private static string Key(string plugin, string path) => plugin + KeySeparator + path.Trim('/');
+    private static string Key(string plugin, string path) => plugin + KeySeparator + (path ?? "").Trim('/');
 }

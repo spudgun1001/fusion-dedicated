@@ -65,6 +65,31 @@ public class PluginHttpTests
         Assert.Equal(PanelRole.Owner, http.RoleFor("other", "me"));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData(null)]
+    public void Handle_refuses_a_blank_plugin_name(string? plugin)
+        => Assert.Throws<ArgumentException>(() => Http().Handle(plugin!, "me", PanelRole.Banker, _ => PluginHttpReply.Ok("{}")));
+
+    [Fact]
+    public void Handle_refuses_a_null_path()
+        => Assert.Throws<ArgumentException>(() => Http().Handle("discord", null!, PanelRole.Banker, _ => PluginHttpReply.Ok("{}")));
+
+    [Fact]
+    public void Handle_refuses_a_null_handler()
+        => Assert.Throws<ArgumentException>(() => Http().Handle("discord", "me", PanelRole.Banker, null!));
+
+    [Fact]
+    public void A_null_path_is_looked_up_as_the_empty_route()
+    {
+        var http = Http();
+        http.Handle("discord", "", PanelRole.Banker, _ => PluginHttpReply.Ok("{}"));
+
+        Assert.Equal(PanelRole.Banker, http.RoleFor("discord", null!));
+        Assert.Equal(200, http.Invoke("discord", null!, Request("")).Status);
+    }
+
     [Fact]
     public void An_error_reply_escapes_its_message()
         => Assert.Equal("{\"error\":\"say \\u0022hi\\u0022\"}", PluginHttpReply.Error(400, "say \"hi\"").Json);
