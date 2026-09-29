@@ -31,6 +31,10 @@ public sealed class PluginHttp
         _log = log;
     }
 
+    /// <summary>
+    /// Handlers run on the panel thread rather than the game loop, so a plugin must lock its own state.
+    /// A handler must never wait on the game loop, which could be waiting on that same lock.
+    /// </summary>
     public void Handle(string plugin, string path, PanelRole role, Func<PluginHttpRequest, PluginHttpReply> handler)
     {
         if (string.IsNullOrWhiteSpace(plugin)) throw new ArgumentException("A route needs a plugin name", nameof(plugin));
