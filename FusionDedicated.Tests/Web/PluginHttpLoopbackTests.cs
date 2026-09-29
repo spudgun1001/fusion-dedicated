@@ -7,7 +7,8 @@ using FusionDedicated.Web;
 
 namespace FusionDedicated.Tests.Web;
 
-/// <summary>The real panel on a loopback port, with a caller that promises a body and stalls.</summary>
+/// <summary>The real panel on a loopback port, with a caller that promises a body and stalls. Run alone so its timing is its own.</summary>
+[Collection(RunsAlone.Name)]
 public class PluginHttpLoopbackTests
 {
     private const string Password = "pw";
@@ -21,21 +22,40 @@ public class PluginHttpLoopbackTests
         return port;
     }
 
+    /// <summary>A port can be taken between probing it and binding it, so a failed bind tries another.</summary>
+    private static Dashboard StartPanel(World world, ServerConfig config, PluginHttp http)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            config.DashboardPort = FreePort();
+
+            // The lobby is only read by /api/state.
+            var dashboard = new Dashboard(world.Server, config, null!) { PluginHttp = http, PluginBodyLimit = TimeSpan.FromMilliseconds(300) };
+
+            try
+            {
+                dashboard.Start();
+                return dashboard;
+            }
+            catch (HttpListenerException) when (attempt < 5)
+            {
+            }
+        }
+    }
+
     private static string Auth => Convert.ToBase64String(Encoding.ASCII.GetBytes("admin:" + Password));
 
     [Fact]
     public void A_stalled_body_is_dropped_and_the_next_request_is_answered()
     {
-        int port = FreePort();
-        var config = new ServerConfig { CullOrphanedEntities = false, DashboardHost = "localhost", DashboardPort = port, DashboardPassword = Password };
+        var config = new ServerConfig { CullOrphanedEntities = false, DashboardHost = "localhost", DashboardPassword = Password };
         using var world = new World(config);
 
         var http = new PluginHttp(new PluginHealth(), (_, _) => { });
         http.Handle("discord", "me", PanelRole.Viewer, r => PluginHttpReply.Ok("{\"body\":" + System.Text.Json.JsonSerializer.Serialize(r.Body) + "}"));
 
-        // The lobby is only read by /api/state.
-        var dashboard = new Dashboard(world.Server, config, null!) { PluginHttp = http, PluginBodyLimit = TimeSpan.FromMilliseconds(300) };
-        dashboard.Start();
+        var dashboard = StartPanel(world, config, http);
+        int port = config.DashboardPort;
         Assert.True(dashboard.IsListening);
 
         try

@@ -4,11 +4,15 @@ using FusionDedicated.Web;
 
 namespace FusionDedicated.Tests.Web;
 
-[CollectionDefinition(nameof(PluginHttpStarvationTests), DisableParallelization = true)]
-public class PluginHttpStarvationCollection;
+/// <summary>Tests that must not share the machine with any other test.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public class RunsAlone
+{
+    public const string Name = "Runs alone";
+}
 
 /// <summary>Run alone, since it ties up every thread pool thread for a moment.</summary>
-[Collection(nameof(PluginHttpStarvationTests))]
+[Collection(RunsAlone.Name)]
 public class PluginHttpStarvationTests
 {
     [Fact]
