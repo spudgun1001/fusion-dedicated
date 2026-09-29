@@ -47,9 +47,10 @@ public static class PluginHttpGate
         }
 
         // The panel answers one request at a time, so a caller that stalls mid-body must not hold it.
-        var read = Task.Run(() => Read(body));
+        // Its own thread, so a busy thread pool cannot make a body that already arrived look stalled.
+        var read = Task.Factory.StartNew(() => Read(body), TaskCreationOptions.LongRunning);
 
-        if (Task.WhenAny(read, Task.Delay(readLimit)).GetAwaiter().GetResult() != read)
+        if (Task.WaitAny(new Task[] { read }, readLimit) < 0)
         {
             return new PluginHttpGateReply(PluginHttpReply.Error(408, "Too slow"), true);
         }
