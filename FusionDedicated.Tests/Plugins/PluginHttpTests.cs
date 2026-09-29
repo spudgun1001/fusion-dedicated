@@ -50,6 +50,7 @@ public class PluginHttpTests
         for (int i = 0; i < PluginHealth.FailuresBeforeDisable; i++) _health.NoteFailure("discord");
 
         Assert.Null(http.RoleFor("discord", "me"));
+        Assert.Equal(404, http.Invoke("discord", "me", Request("me")).Status);
     }
 
     [Fact]

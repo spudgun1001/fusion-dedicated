@@ -43,24 +43,11 @@ public sealed class PluginHttp
         }
     }
 
-    public PanelRole? RoleFor(string plugin, string path)
-    {
-        if (_health.IsDisabled(plugin)) return null;
-
-        lock (_lock)
-        {
-            return _routes.TryGetValue(Key(plugin, path), out var route) ? route.Role : null;
-        }
-    }
+    public PanelRole? RoleFor(string plugin, string path) => Find(plugin, path)?.Role;
 
     public PluginHttpReply Invoke(string plugin, string path, PluginHttpRequest request)
     {
-        Func<PluginHttpRequest, PluginHttpReply>? handler = null;
-
-        lock (_lock)
-        {
-            if (!_health.IsDisabled(plugin) && _routes.TryGetValue(Key(plugin, path), out var route)) handler = route.Handler;
-        }
+        var handler = Find(plugin, path)?.Handler;
 
         if (handler == null) return PluginHttpReply.Error(404, "No such route");
 
@@ -89,6 +76,16 @@ public sealed class PluginHttp
             {
                 _routes.Remove(key);
             }
+        }
+    }
+
+    private (PanelRole Role, Func<PluginHttpRequest, PluginHttpReply> Handler)? Find(string plugin, string path)
+    {
+        if (_health.IsDisabled(plugin)) return null;
+
+        lock (_lock)
+        {
+            return _routes.TryGetValue(Key(plugin, path), out var route) ? route : null;
         }
     }
 
