@@ -208,6 +208,38 @@ public class PluginHttpRouteTests
     }
 
     [Fact]
+    public void Multibyte_text_over_the_cap_in_bytes_but_under_it_in_chars_gives_413()
+    {
+        var http = Registry();
+        bool called = false;
+        http.Handle("discord", "me", PanelRole.Viewer, _ => { called = true; return PluginHttpReply.Ok("{}"); });
+
+        // Three bytes each, so this is about 16 KB of bytes from about 5.5 K chars.
+        string text = new string('€', PluginHttpGate.MaxBody / 3 + 1);
+        Assert.True(text.Length <= PluginHttpGate.MaxBody);
+        var body = new MemoryStream(Encoding.UTF8.GetBytes(text));
+
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, -1, body, Limit);
+
+        Assert.Equal(413, reply.Status);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public void Multibyte_text_under_the_cap_in_bytes_arrives_decoded()
+    {
+        var http = Registry();
+        string received = "";
+        http.Handle("discord", "me", PanelRole.Viewer, req => { received = req.Body; return PluginHttpReply.Ok("{}"); });
+
+        string text = new string('€', PluginHttpGate.MaxBody / 3);
+        var body = new MemoryStream(Encoding.UTF8.GetBytes(text));
+
+        Assert.Equal(200, PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, -1, body, Limit).Status);
+        Assert.Equal(text, received);
+    }
+
+    [Fact]
     public void Exactly_the_cap_is_accepted()
     {
         var http = Registry();

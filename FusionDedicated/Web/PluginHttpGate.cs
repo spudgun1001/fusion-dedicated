@@ -62,13 +62,12 @@ public static class PluginHttpGate
         return http.Invoke(plugin, route, new PluginHttpRequest(method, route, query, text, actor));
     }
 
-    /// <summary>The body, or null when it is over the cap.</summary>
+    /// <summary>The body, or null when it is over the cap in bytes.</summary>
     private static string? Read(Stream body)
     {
-        using var reader = new StreamReader(body, Encoding.UTF8);
-        var buffer = new char[MaxBody + 1];
-        int read = reader.ReadBlock(buffer, 0, buffer.Length);
+        var buffer = new byte[MaxBody + 1];
+        int read = body.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
 
-        return read > MaxBody ? null : new string(buffer, 0, read);
+        return read > MaxBody ? null : Encoding.UTF8.GetString(buffer, 0, read);
     }
 }
