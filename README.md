@@ -618,6 +618,9 @@ bot signed in as a banker.
 
 A service panel role can call plugin routes and nothing else, for bots.
 
+Plugin routes read bodies with a time limit and a byte cap, and a disabled plugin no
+longer answers the bus.
+
 Ready-made plugins and the API to build your own are at
 [fusion-server-mods](https://github.com/spudgun1001/fusion-server-mods).
 
