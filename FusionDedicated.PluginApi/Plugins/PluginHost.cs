@@ -48,6 +48,14 @@ public sealed class PluginHost
     private readonly IPluginActions _actions;
     private readonly Action<string, string> _log;
 
+    private PluginHttp? _http;
+
+    public PluginHttp Http
+    {
+        get => _http ??= new PluginHttp(_health, _log);
+        init => _http = value;
+    }
+
     private readonly List<LoadedPlugin> _loaded = new();
     private readonly object _lock = new();
 
@@ -297,7 +305,10 @@ public sealed class PluginHost
         store.Load();
 
         var pluginContext = new PluginContext(
-            manifest.Name, _events, store, _panel, _modules, _rpc, _bus, _world, _actions, _players, _log);
+            manifest.Name, _events, store, _panel, _modules, _rpc, _bus, _world, _actions, _players, _log)
+        {
+            Http = Http,
+        };
 
         try
         {
@@ -312,6 +323,7 @@ public sealed class PluginHost
             _modules.RemoveAll(manifest.Name);
             _rpc.RemoveAll(manifest.Name);
             _bus.RemoveAll(manifest.Name);
+            Http.RemoveAll(manifest.Name);
             _log("ERROR", $"Plugin '{manifest.Name}' threw while starting and was not loaded: {e.Message}");
             pluginContext.StopTimers();
             context?.Unload();
@@ -367,6 +379,7 @@ public sealed class PluginHost
         _modules.RemoveAll(plugin.Name);
         _rpc.RemoveAll(plugin.Name);
         _bus.RemoveAll(plugin.Name);
+        Http.RemoveAll(plugin.Name);
         _health.Forget(plugin.Name);
 
         // Everything from here has to happen even if one part of it fails. An

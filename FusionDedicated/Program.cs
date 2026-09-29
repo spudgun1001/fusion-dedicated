@@ -272,6 +272,8 @@ public static class Program
         var pluginPanel = new PluginPanel(pluginHealth,
             (level, message) => server.Log(level, message));
 
+        var pluginHttp = new PluginHttp(pluginHealth, (level, message) => server.Log(level, message));
+
         server.ModuleInspector.Enabled = config.ModuleInspection;
 
         var pluginModules = new PluginModules(pluginHealth,
@@ -326,7 +328,7 @@ public static class Program
             () => server.Players.Players
                 .Select(PluginPlayers.Snapshot)
                 .ToList(),
-            (level, message) => server.Log(level, message));
+            (level, message) => server.Log(level, message)) { Http = pluginHttp };
 
         var commands = new CommandProcessor(new ServerCommandTarget(server, plugins));
 
@@ -382,6 +384,7 @@ public static class Program
             // walk over empty channels, and the panel shows no plugin tabs.
             server.Plugins = pluginEvents;
             dashboard.PluginPanel = pluginPanel;
+            dashboard.PluginHttp = pluginHttp;
             dashboard.PluginHost = plugins;
             server.PluginModules = pluginModules;
 

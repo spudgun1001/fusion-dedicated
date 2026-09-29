@@ -7,6 +7,9 @@ namespace FusionDedicated.Web;
 /// </summary>
 public static class PanelPermissions
 {
+    /// <summary>Plugin routes, whose role each route sets itself and <see cref="MayCall"/> checks.</summary>
+    public const string PluginHttpPrefix = "/api/plugins/http/";
+
     private static readonly Dictionary<string, PanelRole> Required = new(StringComparer.Ordinal)
     {
         ["/"] = PanelRole.Viewer,
@@ -65,6 +68,11 @@ public static class PanelPermissions
     {
         string route = path.Split('?')[0];
 
+        if (route.StartsWith(PluginHttpPrefix, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
         if (!Required.ContainsKey(route))
         {
             return false;
@@ -76,6 +84,17 @@ public static class PanelPermissions
         }
 
         return role >= Required[route];
+    }
+
+    /// <summary>Whether an account may call a plugin route. A banker route also admits owners.</summary>
+    public static bool MayCall(PanelRole actor, PanelRole required)
+    {
+        if (required == PanelRole.Banker)
+        {
+            return actor is PanelRole.Banker or PanelRole.Owner;
+        }
+
+        return actor != PanelRole.Banker && actor >= required;
     }
 
     /// <summary>

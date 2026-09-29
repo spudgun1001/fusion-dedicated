@@ -242,4 +242,26 @@ public class PluginHostTests : IDisposable
 
         Assert.False(_health.IsDisabled("police"));
     }
+
+    private sealed class Router : IFusionPlugin
+    {
+        public void Start(PluginContext context)
+            => context.Http.Handle(context.Name, "me", FusionDedicated.Web.PanelRole.Banker, _ => PluginHttpReply.Ok("{}"));
+
+        public void Shutdown() { }
+    }
+
+    [Fact]
+    public void A_plugins_routes_are_given_through_the_host_and_removed_on_unload()
+    {
+        var http = new PluginHttp(_health, (_, _) => { });
+        var host = new PluginHost(_dir, _dir + "-data", Events(), _health, _panel, _modules, new NoActions(),
+            () => Array.Empty<PluginPlayer>(), (_, _) => { }) { Http = http };
+
+        host.LoadFromInstance("discord", new Router());
+        Assert.NotNull(http.RoleFor("discord", "me"));
+
+        host.Unload("discord");
+        Assert.Null(http.RoleFor("discord", "me"));
+    }
 }
