@@ -245,10 +245,30 @@ public class PluginHostTests : IDisposable
 
     private sealed class Router : IFusionPlugin
     {
+        public bool ThrowAfterRouting;
+
         public void Start(PluginContext context)
-            => context.Http.Handle(context.Name, "me", FusionDedicated.Web.PanelRole.Banker, _ => PluginHttpReply.Ok("{}"));
+        {
+            context.Http.Handle(context.Name, "me", FusionDedicated.Web.PanelRole.Banker, _ => PluginHttpReply.Ok("{}"));
+
+            if (ThrowAfterRouting)
+            {
+                throw new InvalidOperationException("boom");
+            }
+        }
 
         public void Shutdown() { }
+    }
+
+    [Fact]
+    public void A_route_registered_before_start_throws_is_taken_away()
+    {
+        var http = new PluginHttp(_health, (_, _) => { });
+        var host = new PluginHost(_dir, _dir + "-data", Events(), _health, _panel, _modules, new NoActions(),
+            () => Array.Empty<PluginPlayer>(), (_, _) => { }) { Http = http };
+
+        Assert.False(host.LoadFromInstance("discord", new Router { ThrowAfterRouting = true }));
+        Assert.Null(http.RoleFor("discord", "me"));
     }
 
     [Fact]
