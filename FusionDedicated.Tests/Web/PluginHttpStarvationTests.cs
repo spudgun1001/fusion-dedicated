@@ -18,12 +18,14 @@ public class PluginHttpStarvationTests
         http.Handle("discord", "me", PanelRole.Viewer, _ => PluginHttpReply.Ok("{}"));
 
         ThreadPool.GetMinThreads(out int workers, out _);
+        int queued = workers + 4;
         using var release = new ManualResetEventSlim();
+        using var finished = new CountdownEvent(queued);
         int running = 0;
 
-        for (int i = 0; i < workers + 4; i++)
+        for (int i = 0; i < queued; i++)
         {
-            ThreadPool.QueueUserWorkItem(_ => { Interlocked.Increment(ref running); release.Wait(); });
+            ThreadPool.QueueUserWorkItem(_ => { Interlocked.Increment(ref running); release.Wait(); finished.Signal(); });
         }
 
         try
@@ -39,7 +41,9 @@ public class PluginHttpStarvationTests
         }
         finally
         {
+            // An item still waiting on a disposed event would throw on a pool thread and end the test host.
             release.Set();
+            finished.Wait();
         }
     }
 }
