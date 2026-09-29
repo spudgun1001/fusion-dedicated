@@ -193,4 +193,49 @@ public class PanelUsersTests : IDisposable
         Assert.Equal(PanelRole.Owner, users.Authenticate("badger", "hunter2"));
         Assert.Equal(after + 1, users.Derivations);
     }
+
+    [Fact]
+    public void A_clock_moved_backwards_hashes_again()
+    {
+        var now = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+        var users = new PanelUsers(Path_) { Clock = () => now };
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+        int after = users.Derivations;
+
+        now = now.AddHours(-1);
+
+        Assert.Equal(PanelRole.Owner, users.Authenticate("badger", "hunter2"));
+        Assert.Equal(after + 1, users.Derivations);
+    }
+
+    [Fact]
+    public void Removing_or_changing_an_account_forgets_its_password()
+    {
+        var users = new PanelUsers(Path_);
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+        Assert.True(users.Remembers("badger"));
+
+        users.Set("badger", "fresh", PanelRole.Owner);
+        Assert.False(users.Remembers("badger"));
+
+        users.Authenticate("badger", "fresh");
+        users.Remove("badger");
+        Assert.False(users.Remembers("badger"));
+    }
+
+    [Fact]
+    public void An_expired_entry_is_dropped_when_found()
+    {
+        var now = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+        var users = new PanelUsers(Path_) { Clock = () => now };
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+
+        now = now.AddMinutes(6);
+        users.Authenticate("badger", "wrong");
+
+        Assert.False(users.Remembers("badger"));
+    }
 }

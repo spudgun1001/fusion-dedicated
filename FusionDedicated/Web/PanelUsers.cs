@@ -57,10 +57,15 @@ public sealed class PanelUsers
 
     public PanelUsers(string path) => _path = path;
 
-    public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+    internal Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
 
     /// <summary>How many times Authenticate ran the slow hash. Tests read it.</summary>
     internal int Derivations;
+
+    internal bool Remembers(string name)
+    {
+        lock (_lock) { return _verified.ContainsKey(name); }
+    }
 
     public IReadOnlyDictionary<string, PanelAccount> Accounts
     {
@@ -94,6 +99,7 @@ public sealed class PanelUsers
             }
 
             _accounts[name] = account;
+            _verified.Remove(name);
         }
     }
 
@@ -101,6 +107,7 @@ public sealed class PanelUsers
     {
         lock (_lock)
         {
+            _verified.Remove(name);
             return _accounts.Remove(name);
         }
     }
@@ -141,12 +148,19 @@ public sealed class PanelUsers
 
         lock (_lock)
         {
-            if (_verified.TryGetValue(name, out var seen)
-                && seen.StoredHash == account.Hash
-                && now - seen.At < RememberFor
-                && CryptographicOperations.FixedTimeEquals(passwordSha, seen.PasswordSha))
+            if (_verified.TryGetValue(name, out var seen))
             {
-                return PanelPermissions.ParseRole(account.Role);
+                // A clock moved backwards gives a negative age, which must not count as fresh.
+                TimeSpan age = now - seen.At;
+
+                if (seen.StoredHash != account.Hash || age < TimeSpan.Zero || age >= RememberFor)
+                {
+                    _verified.Remove(name);
+                }
+                else if (CryptographicOperations.FixedTimeEquals(passwordSha, seen.PasswordSha))
+                {
+                    return PanelPermissions.ParseRole(account.Role);
+                }
             }
         }
 
@@ -199,6 +213,7 @@ public sealed class PanelUsers
             lock (_lock)
             {
                 _accounts = new Dictionary<string, PanelAccount>(parsed, StringComparer.OrdinalIgnoreCase);
+                _verified.Clear();
             }
         }
         catch (Exception e) when (e is JsonException or IOException
