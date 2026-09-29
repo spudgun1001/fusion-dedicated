@@ -42,6 +42,37 @@ public class PluginHttpTests
         Assert.Contains(_log, l => l.Contains("discord"));
     }
 
+    [Theory]
+    [InlineData(99, "{}")]
+    [InlineData(600, "{}")]
+    [InlineData(0, "{}")]
+    [InlineData(200, null)]
+    public void A_bad_reply_answers_500_and_counts_against_the_plugin(int status, string? json)
+    {
+        var http = Http();
+        http.Handle("discord", "bad", PanelRole.Banker, _ => new PluginHttpReply(status, json!));
+
+        for (int i = 0; i < PluginHealth.FailuresBeforeDisable; i++)
+        {
+            var reply = http.Invoke("discord", "bad", Request("bad"));
+            Assert.Equal(500, reply.Status);
+            Assert.Equal("{\"error\":\"The plugin failed\"}", reply.Json);
+        }
+
+        Assert.True(_health.IsDisabled("discord"));
+    }
+
+    [Theory]
+    [InlineData(100)]
+    [InlineData(599)]
+    public void A_reply_at_the_edge_of_the_status_range_passes_through(int status)
+    {
+        var http = Http();
+        http.Handle("discord", "edge", PanelRole.Banker, _ => new PluginHttpReply(status, "{}"));
+
+        Assert.Equal(status, http.Invoke("discord", "edge", Request("edge")).Status);
+    }
+
     [Fact]
     public void A_disabled_plugin_has_no_routes()
     {

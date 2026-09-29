@@ -53,7 +53,15 @@ public sealed class PluginHttp
 
         try
         {
-            return handler(request);
+            var reply = handler(request);
+
+            // Thrown so a bad reply is counted the same as a throw.
+            if (reply.Status is < 100 or > 599 || reply.Json == null)
+            {
+                throw new InvalidOperationException($"it gave a bad reply (status {reply.Status}, json {(reply.Json == null ? "null" : "set")})");
+            }
+
+            return reply;
         }
         catch (Exception e)
         {
