@@ -121,6 +121,9 @@ public sealed class PluginContext
     /// </summary>
     public PluginBus Bus { get; }
 
+    /// <summary>JSON routes this plugin answers for panel accounts, such as a bot signed in as a banker.</summary>
+    public PluginHttp Http { get; init; } = new(new PluginHealth(), (_, _) => { });
+
     /// <summary>
     /// What is in the world, to read: where a prop is, and whether it has been
     /// kept. A kept prop comes back after a restart at the same place under a new
