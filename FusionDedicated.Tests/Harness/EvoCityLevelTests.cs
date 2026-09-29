@@ -831,6 +831,21 @@ public class EvoCityPhoneCallTests
             v => !v.Bool);
     }
 
+    [Fact]
+    public void A_mute_index_bool_on_a_phone_that_was_not_kept_is_relayed()
+    {
+        // Unknown until it says what it is, it could be a door, which uses the same indices.
+        using var rig = Rig();
+        var joel = Arrive(rig, Joel, "Joel");
+        var dennis = Arrive(rig, Dennis, "Dennis");
+
+        string phone = PhoneAt(0);
+
+        dennis.Send(LevelRpc.Bool(dennis.SmallId, phone, RingMutedVariable, false));
+
+        Assert.Contains(LevelRpc.Heard(rig.World, joel, phone, RingMutedVariable, RpcKind.Bool), v => !v.Bool);
+    }
+
     // ---- two phones stay in step ----
 
     [Fact]
