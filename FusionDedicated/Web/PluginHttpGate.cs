@@ -69,6 +69,9 @@ public static class PluginHttpGate
         var buffer = new byte[MaxBody + 1];
         int read = body.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
 
-        return read > MaxBody ? null : Encoding.UTF8.GetString(buffer, 0, read);
+        if (read > MaxBody) return null;
+
+        var text = buffer.AsSpan(0, read);
+        return Encoding.UTF8.GetString(text.StartsWith(Encoding.UTF8.Preamble) ? text[Encoding.UTF8.Preamble.Length..] : text);
     }
 }

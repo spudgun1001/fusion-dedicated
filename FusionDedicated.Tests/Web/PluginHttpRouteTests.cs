@@ -240,6 +240,20 @@ public class PluginHttpRouteTests
     }
 
     [Fact]
+    public void A_leading_utf8_bom_is_skipped()
+    {
+        var http = Registry();
+        string received = "";
+        http.Handle("discord", "me", PanelRole.Viewer, req => { received = req.Body; return PluginHttpReply.Ok("{}"); });
+
+        var body = new MemoryStream(new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Encoding.UTF8.GetBytes("{\"a\":\"b\"}")).ToArray());
+
+        PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, -1, body, Limit);
+
+        Assert.Equal("{\"a\":\"b\"}", received);
+    }
+
+    [Fact]
     public void Exactly_the_cap_is_accepted()
     {
         var http = Registry();
