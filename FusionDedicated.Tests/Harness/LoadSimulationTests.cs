@@ -1,6 +1,7 @@
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
+using FusionDedicated.Tests.Web;
 using Xunit.Abstractions;
 
 namespace FusionDedicated.Tests.Harness;
@@ -12,7 +13,9 @@ namespace FusionDedicated.Tests.Harness;
 /// measured, so a change can be compared against the run before it rather than
 /// against a memory of one. The assertions are on the shape of the curve, not on a
 /// millisecond count, because the number moves with the machine and the shape does not.
+/// Run alone, so other test classes do not land GC pauses and disk stalls in its timings.
 /// </summary>
+[Collection(RunsAlone.Name)]
 public class LoadSimulationTests
 {
     private readonly ITestOutputHelper _out;
