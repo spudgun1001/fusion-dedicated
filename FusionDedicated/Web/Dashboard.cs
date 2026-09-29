@@ -42,6 +42,9 @@ public sealed class Dashboard
     /// <summary>Routes offered by plugins, when a host is running.</summary>
     public Plugins.PluginHttp? PluginHttp { get; set; }
 
+    /// <summary>How long a plugin route caller has to send its body.</summary>
+    public TimeSpan PluginBodyLimit { get; init; } = TimeSpan.FromSeconds(5);
+
     private string ActorFor(HttpListenerContext context)
     {
         var parsed = DashboardAuth.TryParseBasic(context.Request.Headers["Authorization"]);
@@ -375,7 +378,7 @@ public sealed class Dashboard
         var values = query.AllKeys.Where(k => k != null).ToDictionary(k => k!, k => query[k] ?? "");
 
         var reply = PluginHttpGate.Handle(PluginHttp, _actingRole, _acting, context.Request.HttpMethod, path,
-            values, context.Request.ContentLength64, context.Request.InputStream, TimeSpan.FromSeconds(5));
+            values, context.Request.ContentLength64, context.Request.InputStream, PluginBodyLimit);
 
         if (reply.Abort)
         {
