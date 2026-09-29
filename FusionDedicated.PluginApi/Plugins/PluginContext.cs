@@ -217,12 +217,32 @@ public sealed class PluginContext
             _timers.Clear();
         }
 
+        var giveUpAt = DateTime.UtcNow + (waitFor ?? TimeSpan.FromSeconds(5));
+        var queued = new List<WaitHandle>();
+
         foreach (var timer in timers)
         {
-            try { timer.Dispose(); } catch { }
+            // Plain Dispose lets a callback already queued run after this returns.
+            // The handle is left to the GC, because the timer may still signal it
+            // after a wait gives up.
+            var done = new ManualResetEvent(false);
+
+            try
+            {
+                if (timer.Dispose(done))
+                {
+                    queued.Add(done);
+                }
+            }
+            catch { }
         }
 
-        var giveUpAt = DateTime.UtcNow + (waitFor ?? TimeSpan.FromSeconds(5));
+        // Bounded, because a job that calls this waits on its own callback.
+        foreach (var done in queued)
+        {
+            TimeSpan left = giveUpAt - DateTime.UtcNow;
+            done.WaitOne(left > TimeSpan.Zero ? left : TimeSpan.Zero);
+        }
 
         while (Volatile.Read(ref _running) > 0 && DateTime.UtcNow < giveUpAt)
         {

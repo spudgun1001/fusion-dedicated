@@ -119,6 +119,23 @@ public class PluginTimerTests
     }
 
     [Fact]
+    public void A_job_that_stops_its_own_timers_does_not_hang()
+    {
+        // The job cannot finish until StopTimers returns, so waiting for it
+        // would wait on itself. The bound is what lets it through.
+        var (context, _) = Build();
+        using var stopped = new ManualResetEventSlim();
+
+        context.Every(TimeSpan.FromSeconds(1), () =>
+        {
+            context.StopTimers(TimeSpan.FromMilliseconds(200));
+            stopped.Set();
+        });
+
+        Assert.True(stopped.Wait(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
     public void Stopping_twice_is_harmless()
     {
         var (context, _) = Build();
