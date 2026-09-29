@@ -24,6 +24,7 @@ public static class PanelPermissions
         ["/api/bannote"] = PanelRole.Moderator,
         ["/api/unban"] = PanelRole.Moderator,
         ["/api/mute"] = PanelRole.Moderator,
+        ["/api/unmute"] = PanelRole.Moderator,
         ["/api/purge"] = PanelRole.Moderator,
         ["/api/permission"] = PanelRole.Moderator,
         ["/api/level"] = PanelRole.Moderator,

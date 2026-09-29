@@ -23,6 +23,7 @@ public class PanelRoleTests
     [InlineData("/api/ban")]
     [InlineData("/api/unban")]
     [InlineData("/api/mute")]
+    [InlineData("/api/unmute")]
     [InlineData("/api/purge")]
     [InlineData("/api/permission")]
     [InlineData("/api/level")]
