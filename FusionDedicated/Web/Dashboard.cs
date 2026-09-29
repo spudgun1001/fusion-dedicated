@@ -42,8 +42,6 @@ public sealed class Dashboard
     /// <summary>Routes offered by plugins, when a host is running.</summary>
     public Plugins.PluginHttp? PluginHttp { get; set; }
 
-    private const int MaxPluginBody = 16 * 1024;
-
     private string ActorFor(HttpListenerContext context)
     {
         var parsed = DashboardAuth.TryParseBasic(context.Request.Headers["Authorization"]);
@@ -179,7 +177,7 @@ public sealed class Dashboard
         _acting = ActorFor(context);
         _actingRole = role.Value;
 
-        if (path.StartsWith("/api/plugins/http/", StringComparison.Ordinal))
+        if (path.StartsWith(PanelPermissions.PluginHttpPrefix, StringComparison.Ordinal))
         {
             HandlePluginHttp(context, path, query);
             return;
@@ -374,50 +372,10 @@ public sealed class Dashboard
 
     private void HandlePluginHttp(HttpListenerContext context, string path, NameValueCollection query)
     {
-        string rest = path["/api/plugins/http/".Length..];
-        int slash = rest.IndexOf('/');
-        string plugin = slash > 0 ? rest[..slash] : rest;
-        string route = slash > 0 ? rest[(slash + 1)..] : "";
-
-        if (PluginHttp?.RoleFor(plugin, route) is not { } required)
-        {
-            context.Response.StatusCode = 404;
-            ServeJson(context, new { error = "No such route" });
-            return;
-        }
-
-        if (!PanelPermissions.MayCall(_actingRole, required))
-        {
-            context.Response.StatusCode = 403;
-            ServeJson(context, new { error = "not allowed" });
-            return;
-        }
-
-        if (context.Request.ContentLength64 > MaxPluginBody)
-        {
-            context.Response.StatusCode = 413;
-            ServeJson(context, new { error = "Too big" });
-            return;
-        }
-
-        string body;
-        using (var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
-        {
-            var buffer = new char[MaxPluginBody + 1];
-            int read = reader.ReadBlock(buffer, 0, buffer.Length);
-            if (read > MaxPluginBody)
-            {
-                context.Response.StatusCode = 413;
-                ServeJson(context, new { error = "Too big" });
-                return;
-            }
-
-            body = new string(buffer, 0, read);
-        }
-
         var values = query.AllKeys.Where(k => k != null).ToDictionary(k => k!, k => query[k] ?? "");
-        var reply = PluginHttp.Invoke(plugin, route,
-            new Plugins.PluginHttpRequest(context.Request.HttpMethod, route, values, body, _acting));
+
+        var reply = PluginHttpGate.Handle(PluginHttp, _actingRole, _acting, context.Request.HttpMethod, path,
+            values, context.Request.ContentLength64, context.Request.InputStream);
 
         context.Response.StatusCode = reply.Status;
         Write(context, "application/json", reply.Json);
