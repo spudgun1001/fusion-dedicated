@@ -124,4 +124,73 @@ public class PanelUsersTests : IDisposable
 
         Assert.Null(users.Authenticate("badger", ""));
     }
+
+    [Fact]
+    public void A_second_sign_in_with_the_same_password_skips_the_hash()
+    {
+        var users = new PanelUsers(Path_);
+        users.Set("badger", "hunter2", PanelRole.Moderator);
+
+        users.Authenticate("badger", "hunter2");
+        int after = users.Derivations;
+
+        Assert.Equal(PanelRole.Moderator, users.Authenticate("badger", "hunter2"));
+        Assert.Equal(after, users.Derivations);
+    }
+
+    [Fact]
+    public void A_wrong_password_is_never_remembered()
+    {
+        var users = new PanelUsers(Path_);
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+
+        Assert.Null(users.Authenticate("badger", "hunter3"));
+        int after = users.Derivations;
+        Assert.Null(users.Authenticate("badger", "hunter3"));
+        Assert.Equal(after + 1, users.Derivations);
+    }
+
+    [Fact]
+    public void A_changed_password_refuses_the_remembered_old_one()
+    {
+        var users = new PanelUsers(Path_);
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+
+        users.Set("badger", "fresh", PanelRole.Owner);
+
+        Assert.Null(users.Authenticate("badger", "hunter2"));
+        Assert.Equal(PanelRole.Owner, users.Authenticate("badger", "fresh"));
+    }
+
+    [Fact]
+    public void A_removed_account_is_refused_even_when_remembered()
+    {
+        var users = new PanelUsers(Path_);
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+
+        users.Remove("badger");
+
+        Assert.Null(users.Authenticate("badger", "hunter2"));
+    }
+
+    [Fact]
+    public void A_remembered_password_is_hashed_again_after_five_minutes()
+    {
+        var now = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+        var users = new PanelUsers(Path_) { Clock = () => now };
+        users.Set("badger", "hunter2", PanelRole.Owner);
+        users.Authenticate("badger", "hunter2");
+        int after = users.Derivations;
+
+        now = now.AddMinutes(4);
+        users.Authenticate("badger", "hunter2");
+        Assert.Equal(after, users.Derivations);
+
+        now = now.AddMinutes(1).AddSeconds(1);
+        Assert.Equal(PanelRole.Owner, users.Authenticate("badger", "hunter2"));
+        Assert.Equal(after + 1, users.Derivations);
+    }
 }

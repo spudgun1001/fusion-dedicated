@@ -47,7 +47,20 @@ public sealed class PanelUsers
     private Dictionary<string, PanelAccount> _accounts =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // A bot polling with Basic auth would otherwise pay for PBKDF2 on every
+    // request. Keyed on the stored hash too, so a new password drops the entry.
+    private static readonly TimeSpan RememberFor = TimeSpan.FromMinutes(5);
+    private const int RememberCap = 64;
+
+    private readonly Dictionary<string, (string StoredHash, byte[] PasswordSha, DateTime At)> _verified =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public PanelUsers(string path) => _path = path;
+
+    public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
+    /// <summary>How many times Authenticate ran the slow hash. Tests read it.</summary>
+    internal int Derivations;
 
     public IReadOnlyDictionary<string, PanelAccount> Accounts
     {
@@ -123,11 +136,39 @@ public sealed class PanelUsers
             return null;
         }
 
+        byte[] passwordSha = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+        DateTime now = Clock();
+
+        lock (_lock)
+        {
+            if (_verified.TryGetValue(name, out var seen)
+                && seen.StoredHash == account.Hash
+                && now - seen.At < RememberFor
+                && CryptographicOperations.FixedTimeEquals(passwordSha, seen.PasswordSha))
+            {
+                return PanelPermissions.ParseRole(account.Role);
+            }
+        }
+
+        Interlocked.Increment(ref Derivations);
         byte[] actual = Derive(password, salt, account.Iterations);
 
-        return CryptographicOperations.FixedTimeEquals(actual, expected)
-            ? PanelPermissions.ParseRole(account.Role)
-            : null;
+        if (!CryptographicOperations.FixedTimeEquals(actual, expected))
+        {
+            return null;
+        }
+
+        lock (_lock)
+        {
+            if (_verified.Count >= RememberCap && !_verified.ContainsKey(name))
+            {
+                _verified.Remove(_verified.MinBy(e => e.Value.At).Key);
+            }
+
+            _verified[name] = (account.Hash, passwordSha, now);
+        }
+
+        return PanelPermissions.ParseRole(account.Role);
     }
 
     private static byte[] Derive(string password, byte[] salt, int iterations)

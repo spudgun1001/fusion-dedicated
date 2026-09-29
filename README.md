@@ -621,6 +621,9 @@ A service panel role can call plugin routes and nothing else, for bots.
 Plugin routes read bodies with a time limit and a byte cap, and a disabled plugin no
 longer answers the bus.
 
+The panel remembers a verified password for five minutes, so a bot polling a route
+does not re-hash it every time.
+
 Ready-made plugins and the API to build your own are at
 [fusion-server-mods](https://github.com/spudgun1001/fusion-server-mods).
 
