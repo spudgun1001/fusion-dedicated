@@ -27,7 +27,7 @@ public class SouthsideClubTests
     private const ulong Dennis = 76561198000000002;
     private const ulong Tony = 76561198000000003;
 
-    private const string Song = "https://example.com/club/track.mp4";
+    private const string Song = "https://files.catbox.moe/track.mp4";
 
     private static readonly string Deck = LevelRpc.Hash(0xC1DB0001);
     private static readonly string DeckItself = LevelRpc.Hash(DeckEntityHash);
@@ -156,9 +156,9 @@ public class SouthsideClubTests
         joel.Grab(DeckEntity);
 
         // Fusion replays Joel's menu tap in every game, and each pastes its own clipboard.
-        MenuTap(dennis, "https://example.com/dennis.mp4");
+        MenuTap(dennis, "https://files.catbox.moe/dennis.mp4");
         MenuTap(joel, Song);
-        MenuTap(tony, "https://example.com/tony.mp4");
+        MenuTap(tony, "https://files.catbox.moe/tony.mp4");
 
         Assert.All(new[] { joel, dennis, tony }, p => Assert.Equal(new[] { Song }, Heard(rig, p)));
     }
@@ -185,16 +185,9 @@ public class SouthsideClubTests
     [InlineData(250, 600)]
     [InlineData(60, 0)]
     [InlineData(250, 0)]
-    [InlineData(60, -1)]
-    [InlineData(250, -1)]
-    public void A_url_too_long_to_keep_or_not_https_is_refused(int budget, int length)
+    public void A_url_too_long_to_keep_or_not_http_is_refused(int budget, int length)
     {
-        string url = length switch
-        {
-            > 0 => "https://example.com/" + new string('a', length - 20),
-            0 => "file:///C:/Users/joel/track.mp4",
-            _ => "http://example.com/club/track.mp4",
-        };
+        string url = length > 0 ? "https://example.com/" + new string('a', length - 20) : "file:///C:/Users/joel/track.mp4";
 
         using var rig = Rig(budget);
         var joel = Arrive(rig, Joel, "Joel");
@@ -223,7 +216,7 @@ public class SouthsideClubTests
         dennis.Grab(OtherProp);
 
         dennis.Send(EntityInt(dennis, OtherProp, DeckEntityAnnounce));
-        MenuTap(dennis, "https://example.com/forged.mp4");
+        MenuTap(dennis, "https://files.catbox.moe/forged.mp4");
 
         Assert.Empty(Heard(rig, joel));
         Assert.Empty(Heard(rig, dennis));
