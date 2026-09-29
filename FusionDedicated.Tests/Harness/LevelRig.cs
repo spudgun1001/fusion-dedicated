@@ -113,6 +113,8 @@ public sealed class LevelRig : IDisposable
 
     public IReadOnlyList<string> Loaded => _host.Loaded.Select(p => p.Name + " " + p.Manifest.Version).ToList();
 
+    public IFusionPlugin Plugin(string name) => _host.Loaded.First(p => p.Name == name).Instance;
+
     /// <summary>Every server log line, which is where a plugin says what it did.</summary>
     public IReadOnlyList<string> Log => Server.RecentLog(2000).Select(e => e.Message).ToList();
 

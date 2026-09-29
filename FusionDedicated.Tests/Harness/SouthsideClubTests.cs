@@ -45,8 +45,17 @@ public class SouthsideClubTests
 
         Assert.Equal(plugins.Length, rig.Started);
 
+        // The club checks a pasted song's file on a worker thread; here it runs inline and reads nothing from the network.
+        var club = rig.Plugin("club");
+        Set(club, "Background", (Action<Action>)(work => work()));
+        Set(club, "FetchStart", (Func<string, byte[]?>)(_ => null));
+
         return rig;
     }
+
+    private static void Set(object plugin, string property, object value)
+        => plugin.GetType().GetField($"<{property}>k__BackingField",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(plugin, value);
 
     /// <summary>Joins, stands, and has the level say where its deck is, as every game does when the level starts.</summary>
     private static FakePlayer Arrive(LevelRig rig, ulong platformId, string name)
@@ -176,9 +185,16 @@ public class SouthsideClubTests
     [InlineData(250, 600)]
     [InlineData(60, 0)]
     [InlineData(250, 0)]
-    public void A_url_too_long_to_keep_or_not_http_is_refused(int budget, int length)
+    [InlineData(60, -1)]
+    [InlineData(250, -1)]
+    public void A_url_too_long_to_keep_or_not_https_is_refused(int budget, int length)
     {
-        string url = length > 0 ? "https://example.com/" + new string('a', length - 20) : "file:///C:/Users/joel/track.mp4";
+        string url = length switch
+        {
+            > 0 => "https://example.com/" + new string('a', length - 20),
+            0 => "file:///C:/Users/joel/track.mp4",
+            _ => "http://example.com/club/track.mp4",
+        };
 
         using var rig = Rig(budget);
         var joel = Arrive(rig, Joel, "Joel");
