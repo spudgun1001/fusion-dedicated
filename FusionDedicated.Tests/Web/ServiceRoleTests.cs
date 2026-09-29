@@ -55,7 +55,7 @@ public class ServiceRoleTests
         http.Handle("discord", "me", PanelRole.Banker, _ => { called = true; return PluginHttpReply.Ok("{}"); });
 
         var reply = PluginHttpGate.Handle(http, PanelRole.Service, "bot", "GET", "/api/plugins/http/discord/me",
-            new Dictionary<string, string>(), 0, new MemoryStream());
+            new Dictionary<string, string>(), 0, new MemoryStream(), TimeSpan.FromSeconds(5));
 
         Assert.Equal(200, reply.Status);
         Assert.True(called);

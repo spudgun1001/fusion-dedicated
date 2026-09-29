@@ -43,12 +43,14 @@ public class PluginHttpRouteTests
 
     private static readonly Dictionary<string, string> NoQuery = new();
 
+    private static readonly TimeSpan Limit = TimeSpan.FromSeconds(5);
+
     private static PluginHttp Registry() => new(new PluginHealth(), (_, _) => { });
 
     [Fact]
     public void A_null_registry_gives_404()
     {
-        var reply = PluginHttpGate.Handle(null, PanelRole.Owner, "acting", "GET", Path, NoQuery, 0, new MemoryStream());
+        var reply = PluginHttpGate.Handle(null, PanelRole.Owner, "acting", "GET", Path, NoQuery, 0, new MemoryStream(), Limit);
 
         Assert.Equal(404, reply.Status);
         Assert.Contains("No such route", reply.Json);
@@ -57,7 +59,7 @@ public class PluginHttpRouteTests
     [Fact]
     public void An_unknown_route_gives_404()
     {
-        var reply = PluginHttpGate.Handle(Registry(), PanelRole.Owner, "acting", "GET", Path, NoQuery, 0, new MemoryStream());
+        var reply = PluginHttpGate.Handle(Registry(), PanelRole.Owner, "acting", "GET", Path, NoQuery, 0, new MemoryStream(), Limit);
 
         Assert.Equal(404, reply.Status);
         Assert.Contains("No such route", reply.Json);
@@ -72,7 +74,7 @@ public class PluginHttpRouteTests
         bool called = false;
         http.Handle("discord", "me", PanelRole.Banker, _ => { called = true; return PluginHttpReply.Ok("{}"); });
 
-        var reply = PluginHttpGate.Handle(http, role, "acting", "GET", Path, NoQuery, 0, new MemoryStream());
+        var reply = PluginHttpGate.Handle(http, role, "acting", "GET", Path, NoQuery, 0, new MemoryStream(), Limit);
 
         Assert.Equal(403, reply.Status);
         Assert.Contains("not allowed", reply.Json);
@@ -91,7 +93,7 @@ public class PluginHttpRouteTests
         var query = new Dictionary<string, string> { ["id"] = "42" };
         var body = new MemoryStream(Encoding.UTF8.GetBytes("hello"));
 
-        PluginHttpGate.Handle(http, role, "player:1", "POST", Path, query, 5, body);
+        PluginHttpGate.Handle(http, role, "player:1", "POST", Path, query, 5, body, Limit);
 
         Assert.NotNull(seen);
         Assert.Equal("player:1", seen!.Actor);
@@ -107,7 +109,7 @@ public class PluginHttpRouteTests
         var http = Registry();
         http.Handle("discord", "me", PanelRole.Viewer, _ => new PluginHttpReply(429, "{\"error\":\"slow down\"}"));
 
-        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "GET", Path, NoQuery, 0, new MemoryStream());
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "GET", Path, NoQuery, 0, new MemoryStream(), Limit);
 
         Assert.Equal(429, reply.Status);
         Assert.Equal("{\"error\":\"slow down\"}", reply.Json);
@@ -127,6 +129,57 @@ public class PluginHttpRouteTests
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
+    /// <summary>A caller that promised a body and never sends it.</summary>
+    private sealed class StalledStream : Stream
+    {
+        public readonly ManualResetEventSlim Release = new();
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) { Release.Wait(); return 0; }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void A_stalled_body_gives_408_and_asks_for_an_abort_without_running_the_handler()
+    {
+        var http = Registry();
+        bool called = false;
+        http.Handle("discord", "me", PanelRole.Viewer, _ => { called = true; return PluginHttpReply.Ok("{}"); });
+        var body = new StalledStream();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery,
+            PluginHttpGate.MaxBody, body, TimeSpan.FromMilliseconds(200));
+
+        clock.Stop();
+        body.Release.Set();
+
+        Assert.Equal(408, reply.Status);
+        Assert.Equal("{\"error\":\"Too slow\"}", reply.Json);
+        Assert.True(reply.Abort);
+        Assert.False(called);
+        Assert.InRange(clock.ElapsedMilliseconds, 150, 2000);
+    }
+
+    [Fact]
+    public void An_ordinary_reply_does_not_ask_for_an_abort()
+    {
+        var http = Registry();
+        http.Handle("discord", "me", PanelRole.Viewer, _ => new PluginHttpReply(408, "{}"));
+
+        Assert.False(PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "GET", Path, NoQuery, 0, new MemoryStream(), Limit).Abort);
+    }
+
+    [Fact]
+    public void The_panel_aborts_a_connection_the_gate_gave_up_on()
+        => Assert.Contains("context.Response.Abort()", DashboardSource.Text());
+
     [Fact]
     public void A_content_length_over_the_cap_gives_413_without_reading()
     {
@@ -135,7 +188,7 @@ public class PluginHttpRouteTests
         http.Handle("discord", "me", PanelRole.Viewer, _ => { called = true; return PluginHttpReply.Ok("{}"); });
 
         var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery,
-            PluginHttpGate.MaxBody + 1, new ThrowingStream());
+            PluginHttpGate.MaxBody + 1, new ThrowingStream(), Limit);
 
         Assert.Equal(413, reply.Status);
         Assert.False(called);
@@ -149,7 +202,7 @@ public class PluginHttpRouteTests
 
         var body = new MemoryStream(Encoding.UTF8.GetBytes(new string('a', PluginHttpGate.MaxBody + 1)));
 
-        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, -1, body);
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, -1, body, Limit);
 
         Assert.Equal(413, reply.Status);
     }
@@ -164,7 +217,7 @@ public class PluginHttpRouteTests
         string text = new string('a', PluginHttpGate.MaxBody);
         var body = new MemoryStream(Encoding.UTF8.GetBytes(text));
 
-        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, text.Length, body);
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, text.Length, body, Limit);
 
         Assert.Equal(200, reply.Status);
         Assert.Equal(text, received);

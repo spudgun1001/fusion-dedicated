@@ -3,6 +3,16 @@ using FusionDedicated.Plugins;
 
 namespace FusionDedicated.Web;
 
+/// <summary>The gate's answer. Abort means the caller stalled, so the panel drops the connection rather than answering.</summary>
+public readonly record struct PluginHttpGateReply(PluginHttpReply Reply, bool Abort)
+{
+    public int Status => Reply.Status;
+
+    public string Json => Reply.Json;
+
+    public static implicit operator PluginHttpGateReply(PluginHttpReply reply) => new(reply, false);
+}
+
 /// <summary>
 /// The decisions behind a plugin HTTP route: which plugin and route a path names,
 /// whether the caller may reach it, and the body size cap. Kept apart from
@@ -13,8 +23,8 @@ public static class PluginHttpGate
 {
     public const int MaxBody = 16 * 1024;
 
-    public static PluginHttpReply Handle(PluginHttp? http, PanelRole role, string actor, string method, string path,
-        IReadOnlyDictionary<string, string> query, long contentLength, Stream body)
+    public static PluginHttpGateReply Handle(PluginHttp? http, PanelRole role, string actor, string method, string path,
+        IReadOnlyDictionary<string, string> query, long contentLength, Stream body, TimeSpan readLimit)
     {
         string rest = path[PanelPermissions.PluginHttpPrefix.Length..];
         int slash = rest.IndexOf('/');
@@ -36,20 +46,29 @@ public static class PluginHttpGate
             return PluginHttpReply.Error(413, "Too big");
         }
 
-        string text;
-        using (var reader = new StreamReader(body, Encoding.UTF8))
+        // The panel answers one request at a time, so a caller that stalls mid-body must not hold it.
+        var read = Task.Run(() => Read(body));
+
+        if (Task.WhenAny(read, Task.Delay(readLimit)).GetAwaiter().GetResult() != read)
         {
-            var buffer = new char[MaxBody + 1];
-            int read = reader.ReadBlock(buffer, 0, buffer.Length);
+            return new PluginHttpGateReply(PluginHttpReply.Error(408, "Too slow"), true);
+        }
 
-            if (read > MaxBody)
-            {
-                return PluginHttpReply.Error(413, "Too big");
-            }
-
-            text = new string(buffer, 0, read);
+        if (read.GetAwaiter().GetResult() is not { } text)
+        {
+            return PluginHttpReply.Error(413, "Too big");
         }
 
         return http.Invoke(plugin, route, new PluginHttpRequest(method, route, query, text, actor));
+    }
+
+    /// <summary>The body, or null when it is over the cap.</summary>
+    private static string? Read(Stream body)
+    {
+        using var reader = new StreamReader(body, Encoding.UTF8);
+        var buffer = new char[MaxBody + 1];
+        int read = reader.ReadBlock(buffer, 0, buffer.Length);
+
+        return read > MaxBody ? null : new string(buffer, 0, read);
     }
 }

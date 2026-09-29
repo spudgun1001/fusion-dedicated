@@ -375,7 +375,14 @@ public sealed class Dashboard
         var values = query.AllKeys.Where(k => k != null).ToDictionary(k => k!, k => query[k] ?? "");
 
         var reply = PluginHttpGate.Handle(PluginHttp, _actingRole, _acting, context.Request.HttpMethod, path,
-            values, context.Request.ContentLength64, context.Request.InputStream);
+            values, context.Request.ContentLength64, context.Request.InputStream, TimeSpan.FromSeconds(5));
+
+        if (reply.Abort)
+        {
+            // Also ends the read still waiting on the stalled body.
+            context.Response.Abort();
+            return;
+        }
 
         context.Response.StatusCode = reply.Status;
         Write(context, "application/json", reply.Json);
