@@ -616,6 +616,8 @@ start, once, and the old file is left alone.
 Plugins can answer JSON routes under /api/plugins/http for a panel role, such as a
 bot signed in as a banker.
 
+A service panel role can call plugin routes and nothing else, for bots.
+
 Ready-made plugins and the API to build your own are at
 [fusion-server-mods](https://github.com/spudgun1001/fusion-server-mods).
 
