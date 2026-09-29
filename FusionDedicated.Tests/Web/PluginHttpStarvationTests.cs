@@ -23,8 +23,8 @@ public class PluginHttpStarvationTests
 
         ThreadPool.GetMinThreads(out int workers, out _);
         int queued = workers + 4;
-        using var release = new ManualResetEventSlim();
-        using var finished = new CountdownEvent(queued);
+        var release = new ManualResetEventSlim();
+        var finished = new CountdownEvent(queued);
         int running = 0;
 
         for (int i = 0; i < queued; i++)
@@ -45,9 +45,12 @@ public class PluginHttpStarvationTests
         }
         finally
         {
-            // An item still waiting on a disposed event would throw on a pool thread and end the test host.
+            // An item still waiting on a disposed event would throw on a pool thread and end the test host,
+            // so the events are only disposed once every item has finished. On a timeout the GC has them.
             release.Set();
-            finished.Wait();
+            Assert.True(finished.Wait(TimeSpan.FromSeconds(30)), "the thread pool never ran every queued item");
+            release.Dispose();
+            finished.Dispose();
         }
     }
 }
