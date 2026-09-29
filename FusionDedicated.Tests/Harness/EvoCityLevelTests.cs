@@ -483,7 +483,7 @@ public class EvoCityPhoneCallTests
 
     private static string PhoneAt(int i) => LevelRpc.Hash((uint)(0x2000 + i));
 
-    private static LevelRig Rig()
+    private static LevelRig Rig(IReadOnlyDictionary<string, string>? saved = null)
     {
         Assert.True(PluginSource.Repository != null,
             "The fusion-server-mods checkout was not found. Set FUSION_SERVER_MODS to it.");
@@ -493,7 +493,7 @@ public class EvoCityPhoneCallTests
 
         var rig = new LevelRig(
             new ServerConfig { CullOrphanedEntities = false, RpcMessagesPerSecond = 250 },
-            new[] { "phones" });
+            new[] { "phones" }, saved);
 
         Assert.Equal(1, rig.Started);
 
@@ -813,11 +813,13 @@ public class EvoCityPhoneCallTests
     }
 
     [Fact]
-    public void A_mute_flag_sent_before_the_phone_is_adopted_never_reaches_anybody_else()
+    public void A_mute_flag_sent_before_a_kept_phone_is_adopted_never_reaches_anybody_else()
     {
         // A joining client sends what its own copy holds, and a fresh copy holds
-        // "not muted". It can arrive before the phone has said what it is.
-        using var rig = Rig();
+        // "not muted". It can arrive before the phone has said what it is. Since phones
+        // 1.8.1 only a phone known by its place is guarded then, as doors use these indices.
+        var kept = new { exchange = new { Places = new Dictionary<string, int> { [LevelRpc.Path(PhoneAt(0), 0)] = 417 } } };
+        using var rig = Rig(new Dictionary<string, string> { ["phones"] = JsonSerializer.Serialize(kept) });
         var joel = Arrive(rig, Joel, "Joel");
         var dennis = Arrive(rig, Dennis, "Dennis");
 
