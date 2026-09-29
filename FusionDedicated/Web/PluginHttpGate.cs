@@ -1,9 +1,10 @@
+using System.Net;
 using System.Text;
 using FusionDedicated.Plugins;
 
 namespace FusionDedicated.Web;
 
-/// <summary>The gate's answer. Abort means the caller stalled, so the panel drops the connection rather than answering.</summary>
+/// <summary>The gate's answer. Abort means the caller stalled, sent less than its Content-Length or went away mid-body, so the panel drops the connection.</summary>
 public readonly record struct PluginHttpGateReply(PluginHttpReply Reply, bool Abort)
 {
     public int Status => Reply.Status;
@@ -53,6 +54,12 @@ public static class PluginHttpGate
         if (Task.WaitAny(new Task[] { read }, readLimit) < 0)
         {
             return new PluginHttpGateReply(PluginHttpReply.Error(408, "Too slow"), true);
+        }
+
+        // The caller went away mid-body, which is theirs to explain, not an error here.
+        if (read.Exception?.InnerException is IOException or HttpListenerException)
+        {
+            return new PluginHttpGateReply(PluginHttpReply.Error(400, "Caller went away"), true);
         }
 
         var (text, cutShort) = read.GetAwaiter().GetResult();

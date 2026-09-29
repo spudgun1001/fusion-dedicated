@@ -115,7 +115,7 @@ public class PluginHttpRouteTests
         Assert.Equal("{\"error\":\"slow down\"}", reply.Json);
     }
 
-    private sealed class ThrowingStream : Stream
+    private sealed class ThrowingStream(Exception? error = null) : Stream
     {
         public override bool CanRead => true;
         public override bool CanSeek => false;
@@ -123,7 +123,7 @@ public class PluginHttpRouteTests
         public override long Length => throw new NotSupportedException();
         public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
         public override void Flush() { }
-        public override int Read(byte[] buffer, int offset, int count) => throw new InvalidOperationException("the body must not be read");
+        public override int Read(byte[] buffer, int offset, int count) => throw error ?? new InvalidOperationException("the body must not be read");
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
@@ -202,6 +202,32 @@ public class PluginHttpRouteTests
 
         Assert.True(reply.Abort);
         Assert.False(called);
+    }
+
+    public static TheoryData<Exception> CallerWentAway => new() { new IOException("reset"), new System.Net.HttpListenerException(400) };
+
+    [Theory]
+    [MemberData(nameof(CallerWentAway))]
+    public void A_caller_that_disconnects_mid_body_asks_for_an_abort_without_running_the_handler(Exception error)
+    {
+        var http = Registry();
+        bool called = false;
+        http.Handle("discord", "me", PanelRole.Viewer, _ => { called = true; return PluginHttpReply.Ok("{}"); });
+
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, 16000, new ThrowingStream(error), Limit);
+
+        Assert.True(reply.Abort);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public void Any_other_read_failure_still_propagates()
+    {
+        var http = Registry();
+        http.Handle("discord", "me", PanelRole.Viewer, _ => PluginHttpReply.Ok("{}"));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery, 16000, new ThrowingStream(), Limit));
     }
 
     [Fact]

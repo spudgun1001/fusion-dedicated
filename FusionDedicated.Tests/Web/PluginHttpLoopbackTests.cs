@@ -93,7 +93,7 @@ public class PluginHttpLoopbackTests
             Assert.True(answer == "" || answer.StartsWith("HTTP/1.1 408 ", StringComparison.Ordinal), answer);
             Assert.DoesNotContain("body", answer);
             Assert.Empty(bodies);
-            Assert.InRange(clock.ElapsedMilliseconds, 0, 3000);
+            Assert.InRange(clock.ElapsedMilliseconds, 200, 3000);
 
             using var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Auth);
