@@ -73,7 +73,7 @@ public static class PanelPermissions
             return true;
         }
 
-        if (!Required.ContainsKey(route))
+        if (role == PanelRole.Service || !Required.ContainsKey(route))
         {
             return false;
         }
@@ -86,9 +86,14 @@ public static class PanelPermissions
         return role >= Required[route];
     }
 
-    /// <summary>Whether an account may call a plugin route. A banker route also admits owners.</summary>
+    /// <summary>Whether an account may call a plugin route. A banker route also admits owners and service accounts.</summary>
     public static bool MayCall(PanelRole actor, PanelRole required)
     {
+        if (actor == PanelRole.Service)
+        {
+            return required == PanelRole.Banker;
+        }
+
         if (required == PanelRole.Banker)
         {
             return actor is PanelRole.Banker or PanelRole.Owner;
@@ -106,6 +111,11 @@ public static class PanelPermissions
     /// </summary>
     public static bool CanSee(PanelRole actor, PanelRole required)
     {
+        if (actor == PanelRole.Service)
+        {
+            return false;
+        }
+
         if (actor == PanelRole.Banker)
         {
             return required == PanelRole.Banker;
@@ -125,6 +135,7 @@ public static class PanelPermissions
             "owner" => PanelRole.Owner,
             "moderator" => PanelRole.Moderator,
             "banker" => PanelRole.Banker,
+            "service" => PanelRole.Service,
             _ => PanelRole.Viewer,
         };
     }

@@ -22,4 +22,10 @@ public enum PanelRole
     /// under a plugin compiled against them.
     /// </summary>
     Banker = 3,
+
+    /// <summary>
+    /// A bot's account. It can call plugin routes marked Banker, and nothing else.
+    /// Off the ladder like a banker, so every check names it.
+    /// </summary>
+    Service = 4,
 }
