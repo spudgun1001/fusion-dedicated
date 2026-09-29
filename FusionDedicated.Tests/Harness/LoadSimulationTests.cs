@@ -246,11 +246,11 @@ public class LoadSimulationTests
     [Fact]
     public void A_full_cache_makes_every_prop_data_request_cost_more()
     {
-        var samples = new List<LoadSample>();
+        using var emptyRig = new LoadRig();
+        using var fullRig = new LoadRig();
 
-        foreach (bool full in new[] { false, true })
+        Action Requests(LoadRig rig, bool full)
         {
-            using var rig = new LoadRig();
             rig.Fill(10);
 
             if (full)
@@ -262,19 +262,41 @@ public class LoadSimulationTests
             var joiner = rig.Join(99);
             var requests = joiner.DataRequests(props, rig.Players[0].SmallId).ToList();
 
-            samples.Add(rig.Measure(full ? "1000 requests, cache full" : "1000 requests, cache empty",
-                () => joiner.SendMany(requests)));
+            return () => joiner.SendMany(requests);
         }
 
-        Print("What a full RPC variable cache costs a joiner", samples);
+        var askEmpty = Requests(emptyRig, false);
+        var askFull = Requests(fullRig, true);
+
+        // The first round pays for the JIT, which would land on whichever went first.
+        askEmpty();
+        askFull();
+
+        // One sample is a few ms and mostly flushed log writes, so a single GC pause or
+        // disk stall from a parallel test moved it several times over. Take the median of
+        // interleaved rounds so one bad round cannot decide it.
+        var empty = new List<LoadSample>();
+        var full = new List<LoadSample>();
+
+        for (var i = 0; i < 9; i++)
+        {
+            empty.Add(emptyRig.Measure("1000 requests, cache empty", askEmpty));
+            full.Add(fullRig.Measure("1000 requests, cache full", askFull));
+        }
+
+        Print("What a full RPC variable cache costs a joiner", empty.Concat(full));
+
+        static double Median(List<LoadSample> samples)
+            => samples.Select(s => s.Milliseconds).Order().ElementAt(samples.Count / 2);
 
         // A prop's own variables are what a request is answered with, and no prop has
-        // thousands. Looking them up must not cost what the whole cache holds.
-        double ratio = samples[1].Milliseconds / Math.Max(0.01, samples[0].Milliseconds);
+        // thousands. Walking the whole cache per request measured 6.6x to 9.4x and a
+        // lookup by prop about 1x, so 2.5x sits well clear of both.
+        double ratio = Median(full) / Math.Max(0.01, Median(empty));
 
-        _out.WriteLine($"a full cache costs {ratio:F1}x an empty one");
+        _out.WriteLine($"a full cache costs {ratio:F1}x an empty one (median of {full.Count})");
 
-        Assert.True(ratio < 4,
+        Assert.True(ratio < 2.5,
             $"a full cache made each data request {ratio:F1}x dearer, which is the cache being walked per request");
     }
 
