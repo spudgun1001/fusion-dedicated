@@ -52,7 +52,12 @@ public class PluginHttpLoopbackTests
         using var world = new World(config);
 
         var http = new PluginHttp(new PluginHealth(), (_, _) => { });
-        http.Handle("discord", "me", PanelRole.Viewer, r => PluginHttpReply.Ok("{\"body\":" + System.Text.Json.JsonSerializer.Serialize(r.Body) + "}"));
+        var bodies = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        http.Handle("discord", "me", PanelRole.Viewer, r =>
+        {
+            bodies.Enqueue(r.Body);
+            return PluginHttpReply.Ok("{\"body\":" + System.Text.Json.JsonSerializer.Serialize(r.Body) + "}");
+        });
 
         var dashboard = StartPanel(world, config, http);
         int port = config.DashboardPort;
@@ -84,8 +89,11 @@ public class PluginHttpLoopbackTests
             }
             clock.Stop();
 
-            Assert.Equal("", answer);
-            Assert.InRange(clock.ElapsedMilliseconds, 200, 3000);
+            // Windows drops it with nothing sent. Linux's managed listener writes the status line as it aborts.
+            Assert.True(answer == "" || answer.StartsWith("HTTP/1.1 408 ", StringComparison.Ordinal), answer);
+            Assert.DoesNotContain("body", answer);
+            Assert.Empty(bodies);
+            Assert.InRange(clock.ElapsedMilliseconds, 0, 3000);
 
             using var client = new HttpClient();
             client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Auth);

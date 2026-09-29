@@ -48,14 +48,21 @@ public static class PluginHttpGate
 
         // The panel answers one request at a time, so a caller that stalls mid-body must not hold it.
         // Its own thread, so a busy thread pool cannot make a body that already arrived look stalled.
-        var read = Task.Factory.StartNew(() => Read(body), TaskCreationOptions.LongRunning);
+        var read = Task.Factory.StartNew(() => Read(body, contentLength), TaskCreationOptions.LongRunning);
 
         if (Task.WaitAny(new Task[] { read }, readLimit) < 0)
         {
             return new PluginHttpGateReply(PluginHttpReply.Error(408, "Too slow"), true);
         }
 
-        if (read.GetAwaiter().GetResult() is not { } text)
+        var (text, cutShort) = read.GetAwaiter().GetResult();
+
+        if (cutShort)
+        {
+            return new PluginHttpGateReply(PluginHttpReply.Error(400, "Body cut short"), true);
+        }
+
+        if (text is null)
         {
             return PluginHttpReply.Error(413, "Too big");
         }
@@ -63,15 +70,16 @@ public static class PluginHttpGate
         return http.Invoke(plugin, route, new PluginHttpRequest(method, route, query, text, actor));
     }
 
-    /// <summary>The body, or null when it is over the cap in bytes.</summary>
-    private static string? Read(Stream body)
+    /// <summary>The body, or null when it is over the cap in bytes. Cut short when it ended before its declared length.</summary>
+    private static (string? Text, bool CutShort) Read(Stream body, long contentLength)
     {
         var buffer = new byte[MaxBody + 1];
         int read = body.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
 
-        if (read > MaxBody) return null;
+        if (read > MaxBody) return (null, false);
+        if (read < contentLength) return (null, true);
 
         var text = buffer.AsSpan(0, read);
-        return Encoding.UTF8.GetString(text.StartsWith(Encoding.UTF8.Preamble) ? text[Encoding.UTF8.Preamble.Length..] : text);
+        return (Encoding.UTF8.GetString(text.StartsWith(Encoding.UTF8.Preamble) ? text[Encoding.UTF8.Preamble.Length..] : text), false);
     }
 }

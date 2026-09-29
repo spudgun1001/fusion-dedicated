@@ -180,6 +180,44 @@ public class PluginHttpRouteTests
     public void The_panel_aborts_a_connection_the_gate_gave_up_on()
         => Assert.Contains("context.Response.Abort()", DashboardSource.Text());
 
+    /// <summary>Linux's managed listener writes the status line when it aborts, so it must be the gate's status and not the default 200.</summary>
+    [Fact]
+    public void The_panel_sets_the_gates_status_before_an_abort()
+    {
+        string source = DashboardSource.Text();
+
+        Assert.InRange(source.IndexOf("context.Response.StatusCode = reply.Status;", StringComparison.Ordinal),
+            0, source.IndexOf("context.Response.Abort()", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_body_cut_short_of_its_content_length_asks_for_an_abort_without_running_the_handler()
+    {
+        var http = Registry();
+        bool called = false;
+        http.Handle("discord", "me", PanelRole.Viewer, _ => { called = true; return PluginHttpReply.Ok("{}"); });
+
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery,
+            16000, new MemoryStream(Encoding.UTF8.GetBytes("{\"a\":")), Limit);
+
+        Assert.True(reply.Abort);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public void A_body_of_exactly_its_content_length_reaches_the_handler()
+    {
+        var http = Registry();
+        string received = "";
+        http.Handle("discord", "me", PanelRole.Viewer, req => { received = req.Body; return PluginHttpReply.Ok("{}"); });
+
+        var reply = PluginHttpGate.Handle(http, PanelRole.Viewer, "acting", "POST", Path, NoQuery,
+            7, new MemoryStream(Encoding.UTF8.GetBytes("{\"a\":1}")), Limit);
+
+        Assert.Equal(200, reply.Status);
+        Assert.Equal("{\"a\":1}", received);
+    }
+
     [Fact]
     public void A_content_length_over_the_cap_gives_413_without_reading()
     {

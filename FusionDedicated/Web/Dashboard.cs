@@ -380,6 +380,9 @@ public sealed class Dashboard
         var reply = PluginHttpGate.Handle(PluginHttp, _actingRole, _acting, context.Request.HttpMethod, path,
             values, context.Request.ContentLength64, context.Request.InputStream, PluginBodyLimit);
 
+        // Before an abort too, since Linux's managed listener writes the status line as it aborts.
+        context.Response.StatusCode = reply.Status;
+
         if (reply.Abort)
         {
             // Also ends the read still waiting on the stalled body.
@@ -387,7 +390,6 @@ public sealed class Dashboard
             return;
         }
 
-        context.Response.StatusCode = reply.Status;
         Write(context, "application/json", reply.Json);
     }
 
