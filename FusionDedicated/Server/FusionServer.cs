@@ -4095,6 +4095,12 @@ public sealed class FusionServer : IDisposable
     /// <summary>Which gun each magazine is in, so a newcomer can be told.</summary>
     private readonly Dictionary<ushort, ushort> _loaded = new();
 
+    /// <summary>When each magazine went in, so one that moved since is not taken for a used-up shell.</summary>
+    private readonly Dictionary<ushort, DateTime> _loadedAt = new();
+
+    /// <summary>A pose this soon after an insert can be the in-hand one sent just before it.</summary>
+    private static readonly TimeSpan InsertPoseGrace = TimeSpan.FromSeconds(1);
+
     /// <summary>A magazine each for a great many guns.</summary>
     private const int MaxSlotsTracked = 2048;
 
@@ -4306,6 +4312,7 @@ public sealed class FusionServer : IDisposable
         {
             _slotted.ForgetEntity(entityId);
             _holsterAwaitingPose.Remove(entityId);
+            _loadedAt.Remove(entityId);
 
             foreach (ushort magazine in _loaded
                          .Where(m => m.Key == entityId || m.Value == entityId)
@@ -4313,6 +4320,7 @@ public sealed class FusionServer : IDisposable
                          .ToList())
             {
                 _loaded.Remove(magazine);
+                _loadedAt.Remove(magazine);
                 Entities.SetAttached(magazine, false);
             }
         }
@@ -4365,6 +4373,7 @@ public sealed class FusionServer : IDisposable
                 lock (_cacheLock)
                 {
                     _loaded.Remove(magazine);
+                    _loadedAt.Remove(magazine);
                 }
 
                 continue;
@@ -4481,29 +4490,40 @@ public sealed class FusionServer : IDisposable
             case ModuleProtocol.AttachmentKind.Attach:
                 Entities.SetAttached(change.Entity, true);
 
-                List<ushort> consumed;
+                List<(ushort Id, DateTime InsertedAt)> replaced;
+                var now = Clock();
 
                 lock (_cacheLock)
                 {
-                    // A gun holds one magazine. A shell cleared on insert sends no eject, so the next insert means it was used up.
-                    consumed = _loaded.Where(m => m.Value == change.Holder && m.Key != change.Entity)
-                        .Select(m => m.Key).ToList();
+                    replaced = _loaded.Where(m => m.Value == change.Holder && m.Key != change.Entity)
+                        .Select(m => (m.Key, _loadedAt.GetValueOrDefault(m.Key, DateTime.MinValue))).ToList();
 
-                    foreach (ushort previous in consumed)
+                    foreach (var (previous, _) in replaced)
                     {
                         _loaded.Remove(previous);
+                        _loadedAt.Remove(previous);
                     }
 
                     if (_loaded.Count < MaxSlotsTracked)
                     {
                         _loaded[change.Entity] = change.Holder;
+                        _loadedAt[change.Entity] = now;
                     }
                 }
 
+                // A gun holds one magazine. A shell cleared on insert sends no eject and no pose after it, so the
+                // next insert means it was used up. One that moved since was ejected where the server never saw it.
                 // Outside the lock, so the registry's lock is never taken inside this one.
-                foreach (ushort previous in consumed)
+                foreach (var (previous, insertedAt) in replaced)
                 {
-                    Entities.Remove(previous);
+                    if (Entities.Get(previous) is { } magazine && magazine.LastUpdate <= insertedAt + InsertPoseGrace)
+                    {
+                        Entities.Remove(previous);
+                    }
+                    else
+                    {
+                        Entities.SetAttached(previous, false);
+                    }
                 }
 
                 return;
@@ -4514,6 +4534,7 @@ public sealed class FusionServer : IDisposable
                 lock (_cacheLock)
                 {
                     _loaded.Remove(change.Entity);
+                    _loadedAt.Remove(change.Entity);
                 }
 
                 return;

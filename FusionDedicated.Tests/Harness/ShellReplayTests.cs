@@ -58,6 +58,29 @@ public class ShellReplayTests
     }
 
     [Fact]
+    public void A_magazine_that_moved_after_its_insert_is_kept_when_the_next_one_goes_in()
+    {
+        var (world, joel) = Build();
+        using var _ = world;
+        world.Spawn(joel, 301, "Pack.Spawnable.MagPistol", 0, 0, 0);
+        world.Spawn(joel, 302, "Pack.Spawnable.MagPistol", 0, 0, 0);
+
+        joel.Send(ClientMessages.MagazineInsert(joel.SmallId, 301, Shotgun));
+        world.Advance(TimeSpan.FromSeconds(5));
+
+        // Its eject never reached the server, but it moved, so it is lying somewhere rather than used up.
+        joel.Send(FusionProtocol.BuildEntityPoseUpdate(joel.SmallId, 301, new Vec3(1, 0, 0), default, default, default));
+        joel.Send(ClientMessages.MagazineInsert(joel.SmallId, 302, Shotgun));
+
+        var kept = world.Server.Entities.Get(301);
+        Assert.NotNull(kept);
+        Assert.False(kept.Attached);
+
+        var late = Joiner(world);
+        Assert.Equal(new ushort[] { 302 }, MagazinesInsertedFor(world, late));
+    }
+
+    [Fact]
     public void A_pistol_magazine_is_still_replayed_after_an_eject_and_reload()
     {
         var (world, joel) = Build();
