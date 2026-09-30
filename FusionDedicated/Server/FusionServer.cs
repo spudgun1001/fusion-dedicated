@@ -414,6 +414,8 @@ public sealed class FusionServer : IDisposable
         // person with a different set of mods and has never been asked anything.
         _askedFor.RemoveWhere(a => a.Holder == player.SmallId);
 
+        var carried = _grabs.All().Where(h => h.Player == player.SmallId).Select(h => h.EntityId).ToList();
+
         // The next player given this small id starts with empty hands, and nobody is holding them.
         _grabs.ForgetPlayer(player.SmallId);
         _grabs.ForgetEntity(player.SmallId);
@@ -433,6 +435,8 @@ public sealed class FusionServer : IDisposable
         {
             Entities.SetAttached(weapon, false);
         }
+
+        DespawnCarried(player, carried.Concat(unholstered));
 
         foreach (var (barcode, holders) in _barcodeHolders.ToList())
         {
@@ -495,6 +499,43 @@ public sealed class FusionServer : IDisposable
         }
 
         PushSettings();
+    }
+
+    /// <summary>
+    /// Removes what a leaver held or holstered, and the magazines in it, or every screen keeps its own copy
+    /// wherever it fell. Anything they did not own, and anything somebody else still holds or rides, stays.
+    /// </summary>
+    private void DespawnCarried(ConnectedPlayer leaver, IEnumerable<ushort> carried)
+    {
+        var guns = carried.Distinct()
+            .Where(id => Entities.Get(id) is { Removable: true, Discovered: false, Synthetic: false } entity
+                         && entity.OwnerSmallId == leaver.SmallId
+                         && _grabs.HoldersOf(id).Count == 0
+                         && !_seats.RidersOf(id).Any())
+            .ToList();
+
+        List<ushort> magazines;
+
+        lock (_cacheLock)
+        {
+            magazines = _loaded.Where(m => guns.Contains(m.Value)).Select(m => m.Key).ToList();
+        }
+
+        var removed = new List<ushort>();
+
+        foreach (ushort id in guns.Concat(magazines))
+        {
+            if (Entities.Get(id) is not { Removable: true } entity || !Entities.Remove(id))
+            {
+                continue;
+            }
+
+            removed.Add(id);
+            Log("INFO", $"Despawned {entity.ShortName} (entity {id}), which {leaver.DisplayName} carried when they left",
+                console: false);
+        }
+
+        DespawnOnClients(removed);
     }
 
     /// <summary>
