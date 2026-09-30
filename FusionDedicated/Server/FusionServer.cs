@@ -4559,6 +4559,10 @@ public sealed class FusionServer : IDisposable
                 {
                     _loaded.Remove(change.Entity);
                     _loadedAt.Remove(change.Entity);
+
+                    // A clear-on-insert port never sends an eject, so a gun named in one does not use shells up.
+                    // MagazineEjectData is player, magazine, gun, hand.
+                    _clearOnInsert.Remove(System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(payload.AsSpan(3, 2)));
                 }
 
                 return;

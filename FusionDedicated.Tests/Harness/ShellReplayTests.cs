@@ -61,6 +61,29 @@ public class ShellReplayTests
     }
 
     [Fact]
+    public void An_eject_from_a_gun_taken_for_a_shotgun_puts_its_magazines_back_on_the_books()
+    {
+        var (world, joel) = Build();
+        using var _ = world;
+
+        foreach (ushort magazine in new ushort[] { 301, 302, 303 })
+        {
+            world.Spawn(joel, magazine, "Pack.Spawnable.MagPistol", 0, 0, 0);
+        }
+
+        // Two inserts with no eject between look like a shotgun, but a clear-on-insert port never sends an eject.
+        joel.Send(ClientMessages.MagazineInsert(joel.SmallId, 301, Shotgun));
+        joel.Send(ClientMessages.MagazineInsert(joel.SmallId, 302, Shotgun));
+        joel.Send(ClientMessages.MagazineEject(joel.SmallId, 302, Shotgun));
+        joel.Send(ClientMessages.MagazineInsert(joel.SmallId, 303, Shotgun));
+
+        var late = Joiner(world);
+
+        Assert.NotNull(world.Server.Entities.Get(303));
+        Assert.Equal(new ushort[] { 303 }, MagazinesInsertedFor(world, late));
+    }
+
+    [Fact]
     public void A_magazine_that_moved_after_its_insert_is_kept_when_the_next_one_goes_in()
     {
         var (world, joel) = Build();
