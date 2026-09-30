@@ -215,6 +215,15 @@ public sealed class FakePlayer
         }
     }
 
+    /// <summary>Finishes the spawns this game was slow to build, and asks about each as a real client does.</summary>
+    public void BuildSpawns()
+    {
+        View.BuildSpawns();
+        DeliverDataRequests();
+        _world.Server.Receive();
+        _world.Sync();
+    }
+
     public void FinishLoading()
     {
         View.MarkLoaded();

@@ -101,7 +101,10 @@ public class HolsterLogGlueTests
 
     [Fact]
     public void Every_holster_sent_to_somebody_joining_is_logged()
-        => Assert.Contains("HolsterLog.Resent(", FusionServerSource.Method("private int SendAttachments("));
+    {
+        Assert.Contains("EnqueueHolster(", FusionServerSource.Method("private int SendAttachments("));
+        Assert.Contains("HolsterLog.Resent(", FusionServerSource.Method("private void EnqueueHolster("));
+    }
 
     [Fact]
     public void A_removed_prop_is_taken_off_the_holster_and_magazine_books()

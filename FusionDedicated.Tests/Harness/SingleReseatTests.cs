@@ -5,7 +5,8 @@ namespace FusionDedicated.Tests.Harness;
 
 /// <summary>
 /// Holsters and magazines were re-seated two or four times a join, 40 to 59 each time.
-/// One pass now, once the game has loaded.
+/// One pass now, once the game has loaded. The holstered gun is also told once more,
+/// when the newcomer builds it and asks about it.
 /// </summary>
 public class SingleReseatTests
 {
@@ -49,7 +50,7 @@ public class SingleReseatTests
         newbie.FinishLoading();
         Wait(world, 30);
 
-        Assert.Equal(2, Reseats(world, newbie));
+        Assert.Equal(3, Reseats(world, newbie));
     }
 
     [Fact]
@@ -77,6 +78,6 @@ public class SingleReseatTests
         newbie.FinishLoading();
         Wait(world, 30);
 
-        Assert.Equal(4, Reseats(world, newbie));
+        Assert.Equal(5, Reseats(world, newbie));
     }
 }

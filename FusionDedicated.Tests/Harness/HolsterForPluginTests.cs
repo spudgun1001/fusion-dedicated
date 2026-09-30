@@ -1,3 +1,5 @@
+using BonelabServerBrowser.Fusion;
+
 namespace FusionDedicated.Tests.Harness;
 
 public class HolsterForPluginTests
@@ -40,6 +42,47 @@ public class HolsterForPluginTests
         world.Advance(TimeSpan.FromSeconds(10));
 
         Assert.Equal(id, late.View.Slots[((ushort)kanza.SmallId, (byte)1)]);
+    }
+
+    [Fact]
+    public void A_player_who_builds_a_plugin_holstered_gun_late_still_sees_it_in_the_buyers_slot()
+    {
+        using var world = new World();
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+        var kanza = world.Join(KanzaId, "Kanza");
+        kanza.FinishLoading();
+        joel.View.BuildsSpawnsLate = true;
+
+        ushort id = world.Server.SpawnForPlayer("Pack.Spawnable.Pistol", 0f, 1f, 0f, Array.Empty<byte>(), KanzaId);
+        world.Sync();
+        world.Server.HolsterForPlugin(id, KanzaId, 3);
+        world.Sync();
+        world.Advance(TimeSpan.FromSeconds(10));
+
+        joel.BuildSpawns();
+
+        Assert.Equal(id, joel.View.Slots[((ushort)kanza.SmallId, (byte)3)]);
+    }
+
+    [Fact]
+    public void A_buyer_who_builds_the_gun_late_gets_it_holstered()
+    {
+        using var world = new World();
+        var kanza = world.Join(KanzaId, "Kanza");
+        kanza.FinishLoading();
+        kanza.View.BuildsSpawnsLate = true;
+
+        ushort id = world.Server.SpawnForPlayer("Pack.Spawnable.Pistol", 0f, 1f, 0f, Array.Empty<byte>(), KanzaId);
+        world.Sync();
+        world.Server.HolsterForPlugin(id, KanzaId, 3);
+        world.Sync();
+        world.Advance(TimeSpan.FromSeconds(10));
+
+        kanza.BuildSpawns();
+        kanza.Send(FusionProtocol.BuildEntityPoseUpdate(kanza.SmallId, id, new Vec3(0, 0.5f, 0), default, default, default));
+
+        Assert.Equal(id, kanza.View.Slots[((ushort)kanza.SmallId, (byte)3)]);
     }
 
     [Fact]

@@ -30,8 +30,12 @@ public sealed class ClientView
     private readonly List<byte[]> _heldForLoading = new();
     private readonly List<(ushort Entity, byte Owner)> _pendingDataRequests = new();
     private readonly HashSet<byte> _rigsBeingBuilt = new();
+    private readonly List<ViewEntity> _spawnsBeingBuilt = new();
 
     public ClientView(byte smallId) => SmallId = smallId;
+
+    /// <summary>Spawns wait for BuildSpawns, as on a slow machine or one downloading the pallet.</summary>
+    public bool BuildsSpawnsLate { get; set; }
 
     public byte SmallId { get; }
 
@@ -197,11 +201,35 @@ public sealed class ClientView
             return;
         }
 
-        Entities[spawn.EntityId] = new ViewEntity { Id = spawn.EntityId, Barcode = spawn.Barcode ?? "", Owner = spawn.OwnerId };
+        var entity = new ViewEntity { Id = spawn.EntityId, Barcode = spawn.Barcode ?? "", Owner = spawn.OwnerId };
 
-        if (spawn.OwnerId != SmallId)
+        if (BuildsSpawnsLate)
         {
-            _pendingDataRequests.Add((spawn.EntityId, spawn.OwnerId));
+            _spawnsBeingBuilt.Add(entity);
+            return;
+        }
+
+        Built(entity);
+    }
+
+    /// <summary>Finishes the spawns held back by BuildsSpawnsLate, with the owner the spawn named.</summary>
+    public void BuildSpawns()
+    {
+        foreach (var entity in _spawnsBeingBuilt)
+        {
+            Built(entity);
+        }
+
+        _spawnsBeingBuilt.Clear();
+    }
+
+    private void Built(ViewEntity entity)
+    {
+        Entities[entity.Id] = entity;
+
+        if (entity.Owner != SmallId)
+        {
+            _pendingDataRequests.Add((entity.Id, entity.Owner!.Value));
         }
     }
 
@@ -394,6 +422,12 @@ public sealed class ClientView
 
         if (change.Kind == ModuleProtocol.AttachmentKind.SlotInsert)
         {
+            // InventorySlotInsertMessage drops an insert for a weapon this game has not built yet.
+            if (!Entities.ContainsKey(change.Entity))
+            {
+                return;
+            }
+
             foreach (var key in Slots.Where(s => s.Value == change.Entity).Select(s => s.Key).ToList())
             {
                 Slots.Remove(key);

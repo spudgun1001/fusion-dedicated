@@ -3231,6 +3231,7 @@ public sealed class FusionServer : IDisposable
         lock (_cacheLock)
         {
             _slotted.Insert(player.SmallId, slotIndex, entityId);
+            _holsterAwaitingPose[entityId] = player.SmallId;
         }
 
         _grabs.ReleaseEntity(player.SmallId, entityId);
@@ -4004,6 +4005,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly HolsterSlots _slotted = new();
 
+    /// <summary>Plugin holsters whose holder has not sent a pose for the item yet, by entity, then the holder.</summary>
+    private readonly Dictionary<ushort, byte> _holsterAwaitingPose = new();
+
     /// <summary>What each player has just drawn or already respawned once, so a copy is told from a loot drop.</summary>
     private readonly HolsterDuplicates _dupes = new();
 
@@ -4220,6 +4224,7 @@ public sealed class FusionServer : IDisposable
         lock (_cacheLock)
         {
             _slotted.ForgetEntity(entityId);
+            _holsterAwaitingPose.Remove(entityId);
 
             foreach (ushort magazine in _loaded
                          .Where(m => m.Key == entityId || m.Value == entityId)
@@ -4323,33 +4328,54 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            _catchup.Enqueue(player, () =>
-            {
-                bool stillSlotted;
-
-                lock (_cacheLock)
-                {
-                    stillSlotted = _slotted.Find(weapon) is { } found && found.Slot == slot && found.Index == index;
-                }
-
-                if (!stillSlotted || Entities.Get(weapon) == null || !WorldCatchup.ShouldReseat(_grabs.HoldersOf(weapon)))
-                {
-                    return null;
-                }
-
-                Log("INFO", HolsterLog.Resent(Entities.Get(weapon)?.ShortName ?? "an untracked item", weapon,
-                        HolsterLog.SlotOwner(slot, smallId => Players.Get(smallId)?.DisplayName), index, player.DisplayName),
-                    console: false);
-
-                return ModuleProtocol.WriteModuleToClients(
-                    ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
-                    ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index));
-            }, reliable: true);
-
+            EnqueueHolster(player, slot, index, weapon);
             sent++;
         }
 
         return sent;
+    }
+
+    /// <summary>Queues a slot insert for one player, sent only if the weapon is still in that slot and nobody holds it.</summary>
+    private void EnqueueHolster(ConnectedPlayer player, ushort slot, byte index, ushort weapon)
+    {
+        _catchup.Enqueue(player, () =>
+        {
+            bool stillSlotted;
+
+            lock (_cacheLock)
+            {
+                stillSlotted = _slotted.Find(weapon) is { } found && found.Slot == slot && found.Index == index;
+            }
+
+            if (!stillSlotted || Entities.Get(weapon) == null || !WorldCatchup.ShouldReseat(_grabs.HoldersOf(weapon)))
+            {
+                return null;
+            }
+
+            Log("INFO", HolsterLog.Resent(Entities.Get(weapon)?.ShortName ?? "an untracked item", weapon,
+                    HolsterLog.SlotOwner(slot, smallId => Players.Get(smallId)?.DisplayName), index, player.DisplayName),
+                console: false);
+
+            return ModuleProtocol.WriteModuleToClients(
+                ModuleProtocol.InventorySlotInsertTag, PlayerRegistry.ServerSmallId,
+                ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index));
+        }, reliable: true);
+    }
+
+    /// <summary>Tells a player which slot an entity is in, for a game that has just built it.</summary>
+    private void ReplayHolster(ConnectedPlayer player, ushort weapon)
+    {
+        (ushort Slot, byte Index)? slotted;
+
+        lock (_cacheLock)
+        {
+            slotted = _slotted.Find(weapon);
+        }
+
+        if (slotted is { } found)
+        {
+            EnqueueHolster(player, found.Slot, found.Index, weapon);
+        }
     }
 
     /// <summary>
@@ -5010,6 +5036,20 @@ public sealed class FusionServer : IDisposable
     {
         ushort vehicleId = pose.EntityId;
 
+        // The buyer never asks about its own spawn, and its first pose for it is the sign it has built it.
+        bool holsterDue;
+
+        lock (_cacheLock)
+        {
+            holsterDue = _holsterAwaitingPose.TryGetValue(vehicleId, out byte holder) && holder == sender.SmallId
+                         && _holsterAwaitingPose.Remove(vehicleId);
+        }
+
+        if (holsterDue)
+        {
+            ReplayHolster(sender, vehicleId);
+        }
+
         // A vehicle follows whoever is in its driver seat, which is the client
         // Fusion's AtvExtender has simulating it. This runs before the pose below
         // is judged, so a driver who has just sat down owns the vehicle before
@@ -5318,6 +5358,9 @@ public sealed class FusionServer : IDisposable
         ReplayVariables(sender, request.EntityId);
         ReplaySeats(sender, request.EntityId);
         ReplayGrabs(sender, request.EntityId);
+
+        // A game drops a slot insert for a gun it has not built, and it asks this once it has.
+        ReplayHolster(sender, request.EntityId);
     }
 
     // ---- vehicle seats ----

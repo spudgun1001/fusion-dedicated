@@ -104,6 +104,7 @@ public class ClientViewTests
     public void A_slot_insert_holsters_the_item_and_a_drop_takes_it_out()
     {
         var view = Loaded();
+        view.Receive(Spawn(500, 3));
         view.Receive(ClientMessages.SlotInsert(3, slot: 3, weapon: 500, index: 0));
 
         Assert.Equal((ushort)500, view.Slots[((ushort)3, (byte)0)]);
@@ -117,11 +118,28 @@ public class ClientViewTests
     public void An_item_is_in_one_slot_at_a_time()
     {
         var view = Loaded();
+        view.Receive(Spawn(500, 3));
         view.Receive(ClientMessages.SlotInsert(3, slot: 3, weapon: 500, index: 0));
         view.Receive(ClientMessages.SlotInsert(4, slot: 4, weapon: 500, index: 0));
 
         Assert.False(view.Slots.ContainsKey(((ushort)3, (byte)0)));
         Assert.Equal((ushort)500, view.Slots[((ushort)4, (byte)0)]);
+    }
+
+    [Fact]
+    public void A_slot_insert_for_an_item_not_built_yet_is_dropped()
+    {
+        var view = Loaded();
+        view.BuildsSpawnsLate = true;
+        view.Receive(Spawn(500, 3));
+        view.Receive(ClientMessages.SlotInsert(3, slot: 3, weapon: 500, index: 0));
+
+        Assert.Empty(view.Slots);
+
+        view.BuildSpawns();
+
+        Assert.True(view.Entities.ContainsKey(500));
+        Assert.Equal(((ushort)500, (byte)3), view.TakeDataRequests().Single());
     }
 
     [Fact]

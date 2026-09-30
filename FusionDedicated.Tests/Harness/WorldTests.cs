@@ -150,7 +150,7 @@ public class WorldTests
         joel.FinishLoading();
         var kanza = world.Join(76561198000000002, "Kanza");
         kanza.FinishLoading();
-        world.Server.Entities.Register(301, "Pack.Spawnable.Gun", joel.SmallId, 0, 0, 0);
+        world.Spawn(joel, 301, "Pack.Spawnable.Gun", 0, 0, 0);
 
         joel.Send(ClientMessages.SlotInsert(joel.SmallId, joel.SmallId, 301, 0));
 
