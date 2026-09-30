@@ -4525,7 +4525,7 @@ public sealed class FusionServer : IDisposable
                 {
                     if (Entities.Get(previous) is { } magazine && magazine.LastUpdate <= insertedAt + InsertPoseGrace)
                     {
-                        Entities.Remove(previous);
+                        _shellsUsedUp += Entities.Remove(previous) ? 1 : 0;
                         usesUpShells = true;
                     }
                     else
@@ -4544,7 +4544,7 @@ public sealed class FusionServer : IDisposable
                         _loadedAt.Remove(change.Entity);
                     }
 
-                    Entities.Remove(change.Entity);
+                    _shellsUsedUp += Entities.Remove(change.Entity) ? 1 : 0;
                 }
 
                 return;
@@ -6220,13 +6220,15 @@ public sealed class FusionServer : IDisposable
 
         _voiceBySender.Clear();
 
-        if (_magazinesCulled + _gadgetsCulled > 0)
+        if (_magazinesCulled + _gadgetsCulled + _shellsUsedUp > 0)
         {
-            Log("INFO", $"Culled in the last minute: {_magazinesCulled} magazine(s), {_gadgetsCulled} gadget(s)", console: false);
+            Log("INFO", $"Culled in the last minute: {_magazinesCulled} magazine(s), {_gadgetsCulled} gadget(s), " +
+                        $"{_shellsUsedUp} used shell(s)", console: false);
         }
 
         _magazinesCulled = 0;
         _gadgetsCulled = 0;
+        _shellsUsedUp = 0;
 
         if (_catchupClaimsDropped > 0)
         {
@@ -6238,6 +6240,7 @@ public sealed class FusionServer : IDisposable
 
     private int _magazinesCulled;
     private int _gadgetsCulled;
+    private int _shellsUsedUp;
     private int _catchupClaimsDropped;
 
     /// <summary>Bytes sent per message tag since the last health line, to show where the bandwidth goes.</summary>

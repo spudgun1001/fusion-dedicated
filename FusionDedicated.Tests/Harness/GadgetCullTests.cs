@@ -102,7 +102,7 @@ public class GadgetCullTests
     }
 
     [Fact]
-    public void The_minute_log_counts_culled_magazines_and_gadgets()
+    public void The_minute_log_counts_culled_magazines_gadgets_and_used_shells()
     {
         var (world, kanza) = Build();
         using var _ = world;
@@ -110,10 +110,21 @@ public class GadgetCullTests
         world.Spawn(kanza, 300, Nimbus, 0, 0, 0);
         world.Spawn(kanza, 301, "Rexmeck.WeaponPackLT.Spawnable.Magglock17gen5", 0, 0, 0);
         world.Tick();
+
+        world.Spawn(kanza, 302, "Pack.Spawnable.Mossberg", 0, 0, 0);
+        world.Spawn(kanza, 303, "Pack.Spawnable.Mag12Gauge", 0, 0, 0);
+        world.Spawn(kanza, 304, "Pack.Spawnable.Mag12Gauge", 0, 0, 0);
+        kanza.Send(ClientMessages.MagazineInsert(kanza.SmallId, 303, 302));
+        kanza.Send(ClientMessages.MagazineInsert(kanza.SmallId, 304, 302));
         Wait(world, 181);
         Wait(world, 60);
 
-        Assert.Contains(world.Server.RecentLog(2000),
-            e => e.Message == "Culled in the last minute: 1 magazine(s), 1 gadget(s)");
+        // The shells are counted in the minute they were loaded, before the clocks run out.
+        Assert.Equal(new[]
+            {
+                "Culled in the last minute: 0 magazine(s), 0 gadget(s), 2 used shell(s)",
+                "Culled in the last minute: 1 magazine(s), 1 gadget(s), 0 used shell(s)",
+            },
+            world.Server.RecentLog(2000).Select(e => e.Message).Where(m => m.StartsWith("Culled in the last minute")));
     }
 }
