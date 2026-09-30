@@ -65,6 +65,17 @@ public static class ClientMessages
     public static byte[] MagazineInsert(byte player, ushort magazine, ushort gun)
         => Module(player, ModuleProtocol.MagazineInsertTag, ModuleProtocol.WriteMagazineInsert(magazine, gun), ToOtherClients);
 
+    public static byte[] MagazineEject(byte player, ushort magazine, ushort gun, byte hand = 2)
+    {
+        var payload = new FusionNetWriter(8);
+        payload.Write(player);
+        payload.WriteUInt16(magazine);
+        payload.WriteUInt16(gun);
+        payload.Write(hand);
+
+        return Module(player, ModuleProtocol.MagazineEjectTag, payload.ToArray(), ToOtherClients);
+    }
+
     public static byte[] SlotInsert(byte player, ushort slot, ushort weapon, byte index)
         => Module(player, ModuleProtocol.InventorySlotInsertTag, ModuleProtocol.WriteInventorySlotInsert(slot, weapon, index), ToOtherClients);
 

@@ -4441,20 +4441,29 @@ public sealed class FusionServer : IDisposable
             case ModuleProtocol.AttachmentKind.Attach:
                 Entities.SetAttached(change.Entity, true);
 
+                List<ushort> consumed;
+
                 lock (_cacheLock)
                 {
-                    // A gun holds one magazine. A round cleared on insert sends no eject, so the next insert ends it.
-                    foreach (ushort previous in _loaded.Where(m => m.Value == change.Holder && m.Key != change.Entity)
-                                 .Select(m => m.Key).ToList())
+                    // A gun holds one magazine. A shell cleared on insert sends no eject, so the next insert means it was used up.
+                    consumed = _loaded.Where(m => m.Value == change.Holder && m.Key != change.Entity)
+                        .Select(m => m.Key).ToList();
+
+                    foreach (ushort previous in consumed)
                     {
                         _loaded.Remove(previous);
-                        Entities.SetAttached(previous, false);
                     }
 
                     if (_loaded.Count < MaxSlotsTracked)
                     {
                         _loaded[change.Entity] = change.Holder;
                     }
+                }
+
+                // Outside the lock, so the registry's lock is never taken inside this one.
+                foreach (ushort previous in consumed)
+                {
+                    Entities.Remove(previous);
                 }
 
                 return;
