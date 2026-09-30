@@ -4086,6 +4086,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Barcodes that have been in a body slot this run, which is how a held item is known to be a gun.</summary>
     private readonly HashSet<string> _holsteredBarcodes = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>How long after the holder's first pose their plugin holster is sent again.</summary>
+    private static readonly TimeSpan HolderPoseReplayDelay = TimeSpan.FromSeconds(1);
+
     /// <summary>Plugin holsters whose holder has not sent a pose for the item yet, by entity, then the holder.</summary>
     private readonly Dictionary<ushort, byte> _holsterAwaitingPose = new();
 
@@ -4607,6 +4610,7 @@ public sealed class FusionServer : IDisposable
                     if (dropped is { } weapon)
                     {
                         Entities.SetAttached(weapon, false);
+                        _holsterAwaitingPose.Remove(weapon);
                     }
                 }
 
@@ -5183,9 +5187,16 @@ public sealed class FusionServer : IDisposable
                          && _holsterAwaitingPose.Remove(vehicleId);
         }
 
+        // Later, so a draw this unreliable pose overtook has landed and the replay finds the slot empty.
         if (holsterDue)
         {
-            ReplayHolster(sender, vehicleId);
+            Defer(HolderPoseReplayDelay, () =>
+            {
+                if (Players.Get(sender.SmallId) == sender)
+                {
+                    ReplayHolster(sender, vehicleId);
+                }
+            });
         }
 
         // A vehicle follows whoever is in its driver seat, which is the client
@@ -5398,11 +5409,22 @@ public sealed class FusionServer : IDisposable
         // grab with no sender in it reaches nobody live and is dropped by a joiner too.
         bool addressed = !ReferenceEquals(stamped, message);
 
-        ushort? letGo = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed && addressed
-                        && WorldCatchup.KnownGrabTarget(grab.EntityId, sender.SmallId,
-                            id => Entities.Get(id) != null, id => Players.Get(id) != null)
+        bool grabbed = grab.Group == FusionProtocol.GrabGroupEntity && grab.IsGrabbed && addressed
+                       && WorldCatchup.KnownGrabTarget(grab.EntityId, sender.SmallId,
+                           id => Entities.Get(id) != null, id => Players.Get(id) != null);
+
+        ushort? letGo = grabbed
             ? _grabs.Grab(sender.SmallId, grab.Hand, grab.EntityId, stamped)
             : _grabs.Release(sender.SmallId, grab.Hand);
+
+        // A gun in a hand has left its slot, so the holder's first pose must not put it back.
+        if (grabbed)
+        {
+            lock (_cacheLock)
+            {
+                _holsterAwaitingPose.Remove(grab.EntityId);
+            }
+        }
 
         if (letGo is { } released)
         {
