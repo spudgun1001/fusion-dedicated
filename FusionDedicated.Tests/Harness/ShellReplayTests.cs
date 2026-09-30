@@ -37,12 +37,13 @@ public class ShellReplayTests
             .ToList();
 
     [Fact]
-    public void A_shotgun_loaded_with_three_shells_is_replayed_to_a_joiner_with_at_most_the_last()
+    public void A_shotgun_loaded_with_three_shells_is_replayed_to_a_joiner_with_none_of_them()
     {
         var (world, joel) = Build();
         using var _ = world;
+        var shells = new ushort[] { 301, 302, 303 };
 
-        foreach (ushort shell in new ushort[] { 301, 302, 303 })
+        foreach (ushort shell in shells)
         {
             world.Spawn(joel, shell, "Pack.Spawnable.Mag12Gauge", 0, 0, 0);
             joel.Send(ClientMessages.MagazineInsert(joel.SmallId, shell, Shotgun));
@@ -50,11 +51,13 @@ public class ShellReplayTests
 
         var late = Joiner(world);
 
-        Assert.False(late.View.Entities.ContainsKey(301), "a consumed shell was spawned for the joiner");
-        Assert.False(late.View.Entities.ContainsKey(302), "a consumed shell was spawned for the joiner");
-        Assert.All(MagazinesInsertedFor(world, late), magazine => Assert.Equal((ushort)303, magazine));
-        Assert.Null(world.Server.Entities.Get(301));
-        Assert.Null(world.Server.Entities.Get(302));
+        foreach (ushort shell in shells)
+        {
+            Assert.False(late.View.Entities.ContainsKey(shell), $"used shell {shell} was spawned for the joiner");
+            Assert.Null(world.Server.Entities.Get(shell));
+        }
+
+        Assert.Empty(MagazinesInsertedFor(world, late));
     }
 
     [Fact]

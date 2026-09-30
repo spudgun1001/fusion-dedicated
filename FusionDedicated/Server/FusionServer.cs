@@ -4098,6 +4098,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>When each magazine went in, so one that moved since is not taken for a used-up shell.</summary>
     private readonly Dictionary<ushort, DateTime> _loadedAt = new();
 
+    /// <summary>Guns seen using a shell up on insert, by entity, so a misread stays with one gun.</summary>
+    private readonly HashSet<ushort> _clearOnInsert = new();
+
     /// <summary>A pose this soon after an insert can be the in-hand one sent just before it.</summary>
     private static readonly TimeSpan InsertPoseGrace = TimeSpan.FromSeconds(1);
 
@@ -4313,6 +4316,7 @@ public sealed class FusionServer : IDisposable
             _slotted.ForgetEntity(entityId);
             _holsterAwaitingPose.Remove(entityId);
             _loadedAt.Remove(entityId);
+            _clearOnInsert.Remove(entityId);
 
             foreach (ushort magazine in _loaded
                          .Where(m => m.Key == entityId || m.Value == entityId)
@@ -4491,10 +4495,13 @@ public sealed class FusionServer : IDisposable
                 Entities.SetAttached(change.Entity, true);
 
                 List<(ushort Id, DateTime InsertedAt)> replaced;
+                bool usesUpShells;
                 var now = Clock();
 
                 lock (_cacheLock)
                 {
+                    usesUpShells = _clearOnInsert.Contains(change.Holder);
+
                     replaced = _loaded.Where(m => m.Value == change.Holder && m.Key != change.Entity)
                         .Select(m => (m.Key, _loadedAt.GetValueOrDefault(m.Key, DateTime.MinValue))).ToList();
 
@@ -4504,7 +4511,7 @@ public sealed class FusionServer : IDisposable
                         _loadedAt.Remove(previous);
                     }
 
-                    if (_loaded.Count < MaxSlotsTracked)
+                    if (!usesUpShells && _loaded.Count < MaxSlotsTracked)
                     {
                         _loaded[change.Entity] = change.Holder;
                         _loadedAt[change.Entity] = now;
@@ -4519,11 +4526,25 @@ public sealed class FusionServer : IDisposable
                     if (Entities.Get(previous) is { } magazine && magazine.LastUpdate <= insertedAt + InsertPoseGrace)
                     {
                         Entities.Remove(previous);
+                        usesUpShells = true;
                     }
                     else
                     {
                         Entities.SetAttached(previous, false);
                     }
+                }
+
+                // Once a gun has used a shell up, every shell loaded into it is used up too, the last one included.
+                if (usesUpShells)
+                {
+                    lock (_cacheLock)
+                    {
+                        _clearOnInsert.Add(change.Holder);
+                        _loaded.Remove(change.Entity);
+                        _loadedAt.Remove(change.Entity);
+                    }
+
+                    Entities.Remove(change.Entity);
                 }
 
                 return;

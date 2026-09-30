@@ -78,9 +78,9 @@ public class LooseMagazineCullTests
     }
 
     [Fact]
-    public void A_round_replaced_by_the_next_one_in_the_same_gun_goes()
+    public void Rounds_used_up_by_the_same_gun_all_go()
     {
-        // Shells and rounds are cleared on insert, so no eject ever arrives for them.
+        // Shells and rounds are cleared on insert, so no eject ever arrives for them, and the second shows the gun eats them.
         var (world, kanza) = Build();
         using var _ = world;
 
@@ -92,7 +92,7 @@ public class LooseMagazineCullTests
         Idle(world);
 
         Assert.Null(world.Server.Entities.Get(300));
-        Assert.NotNull(world.Server.Entities.Get(301));
+        Assert.Null(world.Server.Entities.Get(301));
     }
 
     [Fact]
