@@ -96,6 +96,46 @@ public class LeaveHandoffTests
         Assert.NotNull(world.Server.Entities.Get(FirstCrate));
     }
 
+    private const string Pistol = "Pack.Spawnable.Pistol";
+
+    /// <summary>The leaver holds a second pistol of that model with nothing in it, so only the earlier holster shows it is a gun.</summary>
+    private static void AssertHeldPistolLeavesWith(World world, FakePlayer leaver, FakePlayer holder, FakePlayer rider)
+    {
+        const ushort Held = 513;
+        world.Spawn(leaver, Held, Pistol, 0, 0, 0);
+        leaver.Send(FusionProtocol.BuildGrab(leaver.SmallId, FusionProtocol.Handedness.LEFT, 0, Held));
+
+        world.Leave(leaver, "left");
+
+        Assert.Null(world.Server.Entities.Get(Held));
+        Assert.False(holder.View.Entities.ContainsKey(Held), "the held pistol is still on the holder's screen");
+        Assert.False(rider.View.Entities.ContainsKey(Held), "the held pistol is still on the rider's screen");
+    }
+
+    [Fact]
+    public void A_held_gun_whose_model_has_been_holstered_leaves_with_them()
+    {
+        var (world, leaver, holder, rider) = BusyLeaver();
+        using var _w = world;
+        world.Spawn(holder, 512, Pistol, 0, 0, 0);
+        holder.Send(ClientMessages.SlotInsert(holder.SmallId, holder.SmallId, 512, 1));
+
+        AssertHeldPistolLeavesWith(world, leaver, holder, rider);
+    }
+
+    [Fact]
+    public void A_held_gun_whose_model_a_plugin_holstered_leaves_with_them()
+    {
+        var (world, leaver, holder, rider) = BusyLeaver();
+        using var _w = world;
+        ushort bought = world.Server.SpawnForPlayer(Pistol, 0f, 1f, 0f, Array.Empty<byte>(), 76561198000000002);
+        world.Sync();
+        Assert.True(world.Server.HolsterForPlugin(bought, 76561198000000002, 1));
+        world.Sync();
+
+        AssertHeldPistolLeavesWith(world, leaver, holder, rider);
+    }
+
     [Fact]
     public void Something_the_leaver_held_but_did_not_own_stays()
     {
