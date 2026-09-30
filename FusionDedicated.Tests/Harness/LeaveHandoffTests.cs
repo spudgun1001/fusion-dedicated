@@ -69,19 +69,23 @@ public class LeaveHandoffTests
     [Fact]
     public void A_leavers_held_and_holstered_guns_and_their_magazines_leave_with_them()
     {
-        const ushort Held = 502, Holstered = 503, Magazine = 504;
+        const ushort Held = 502, Holstered = 503, Magazine = 504, HeldMagazine = 510;
         var (world, leaver, holder, rider) = BusyLeaver();
         using var _w = world;
-        world.Spawn(leaver, Held, "Pack.Spawnable.Pistol", 0, 0, 0);
+        world.Spawn(leaver, Held, "Pack.Spawnable.Rifle", 0, 0, 0);
+        world.Spawn(leaver, HeldMagazine, "Pack.Spawnable.MagazineRifle", 0, 0, 0);
         world.Spawn(leaver, Holstered, "Pack.Spawnable.Pistol", 0, 0, 0);
         world.Spawn(leaver, Magazine, "Pack.Spawnable.MagazinePistol", 0, 0, 0);
+
+        // A magazine in it is what shows the held rifle is a gun.
+        leaver.Send(ClientMessages.MagazineInsert(leaver.SmallId, HeldMagazine, Held));
         leaver.Send(FusionProtocol.BuildGrab(leaver.SmallId, FusionProtocol.Handedness.LEFT, 0, Held));
         leaver.Send(ClientMessages.SlotInsert(leaver.SmallId, leaver.SmallId, Holstered, 1));
         leaver.Send(ClientMessages.MagazineInsert(leaver.SmallId, Magazine, Holstered));
 
         world.Leave(leaver, "left");
 
-        foreach (ushort id in new[] { Held, Holstered, Magazine })
+        foreach (ushort id in new[] { Held, HeldMagazine, Holstered, Magazine })
         {
             Assert.Null(world.Server.Entities.Get(id));
             Assert.False(holder.View.Entities.ContainsKey(id), $"entity {id} is still on the holder's screen");
@@ -95,16 +99,66 @@ public class LeaveHandoffTests
     [Fact]
     public void Something_the_leaver_held_but_did_not_own_stays()
     {
-        const ushort HoldersRifle = 505;
+        const ushort HoldersRifle = 505, RifleMagazine = 511;
         var (world, leaver, holder, _) = BusyLeaver();
         using var _w = world;
         world.Spawn(holder, HoldersRifle, "Pack.Spawnable.Rifle", 0, 0, 0);
+        world.Spawn(holder, RifleMagazine, "Pack.Spawnable.MagazineRifle", 0, 0, 0);
+        holder.Send(ClientMessages.MagazineInsert(holder.SmallId, RifleMagazine, HoldersRifle));
         leaver.Send(FusionProtocol.BuildGrab(leaver.SmallId, FusionProtocol.Handedness.LEFT, 0, HoldersRifle));
 
         world.Leave(leaver, "left");
 
         Assert.Equal(holder.SmallId, world.Server.Entities.Get(HoldersRifle)!.OwnerSmallId);
         Assert.True(holder.View.Entities.ContainsKey(HoldersRifle));
+    }
+
+    [Fact]
+    public void A_vehicle_the_leaver_drove_alone_is_not_despawned()
+    {
+        const ushort Car = 506;
+        var (world, leaver, holder, _) = BusyLeaver();
+        using var _w = world;
+        world.Spawn(leaver, Car, "BaBaCorp.AssortedAutomobiles.Spawnable.Sedan", 0, 0, 0);
+        leaver.Send(FusionProtocol.BuildSeat(leaver.SmallId, Car, 0, true));
+        leaver.Send(FusionProtocol.BuildGrab(leaver.SmallId, FusionProtocol.Handedness.LEFT, 0, Car));
+
+        world.Leave(leaver, "left");
+
+        Assert.Null(world.Server.Entities.Get(Car)!.OwnerSmallId);
+        Assert.True(holder.View.Entities.ContainsKey(Car));
+    }
+
+    [Fact]
+    public void A_crate_the_leaver_held_is_left_unowned_not_despawned()
+    {
+        var (world, leaver, holder, _) = BusyLeaver();
+        using var _w = world;
+        world.Spawn(leaver, 507, "Pack.Spawnable.Crate", 0, 0, 0);
+        leaver.Send(FusionProtocol.BuildGrab(leaver.SmallId, FusionProtocol.Handedness.LEFT, 0, 507));
+
+        world.Leave(leaver, "left");
+
+        Assert.Null(world.Server.Entities.Get(507)!.OwnerSmallId);
+        Assert.True(holder.View.Entities.ContainsKey(507));
+    }
+
+    [Fact]
+    public void Something_anybody_sat_in_is_not_despawned_even_with_a_magazine_in_it()
+    {
+        const ushort Turret = 508, Belt = 509;
+        var (world, leaver, holder, _) = BusyLeaver();
+        using var _w = world;
+        world.Spawn(leaver, Turret, "Pack.Spawnable.SeatedTurret", 0, 0, 0);
+        world.Spawn(leaver, Belt, "Pack.Spawnable.TurretBelt", 0, 0, 0);
+        leaver.Send(ClientMessages.MagazineInsert(leaver.SmallId, Belt, Turret));
+        leaver.Send(FusionProtocol.BuildSeat(leaver.SmallId, Turret, 0, true));
+        leaver.Send(FusionProtocol.BuildGrab(leaver.SmallId, FusionProtocol.Handedness.LEFT, 0, Turret));
+
+        world.Leave(leaver, "left");
+
+        Assert.NotNull(world.Server.Entities.Get(Turret));
+        Assert.True(holder.View.Entities.ContainsKey(Turret));
     }
 
     [Fact]

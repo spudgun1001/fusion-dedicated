@@ -89,6 +89,13 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += id => _grabs.ForgetEntity(id);
 
         Entities.Removed += id => _seats.ForgetEntity(id);
+        Entities.Removed += id =>
+        {
+            lock (_seatLock)
+            {
+                _everSeated.Remove(id);
+            }
+        };
         Entities.Removed += ForgetAttachments;
 
         _seatRefusals = new SeatRefusals(() => Clock(), () => Config.SeatRefusalCooldownSeconds);
@@ -436,7 +443,7 @@ public sealed class FusionServer : IDisposable
             Entities.SetAttached(weapon, false);
         }
 
-        DespawnCarried(player, carried.Concat(unholstered));
+        DespawnCarried(player, carried, unholstered);
 
         foreach (var (barcode, holders) in _barcodeHolders.ToList())
         {
@@ -502,16 +509,35 @@ public sealed class FusionServer : IDisposable
     }
 
     /// <summary>
-    /// Removes what a leaver held or holstered, and the magazines in it, or every screen keeps its own copy
-    /// wherever it fell. Anything they did not own, and anything somebody else still holds or rides, stays.
+    /// Removes the guns a leaver held or holstered, and the magazines in them, or every screen keeps its own copy
+    /// wherever it fell. A held item goes only once it is known to be a gun. Anything they did not own, anything
+    /// somebody else still holds, and anything anybody has sat in, stays.
     /// </summary>
-    private void DespawnCarried(ConnectedPlayer leaver, IEnumerable<ushort> carried)
+    private void DespawnCarried(ConnectedPlayer leaver, IReadOnlyList<ushort> held, IReadOnlyList<ushort> holstered)
     {
-        var guns = carried.Distinct()
+        bool KnownGun(ushort id)
+        {
+            string? barcode = Entities.Get(id)?.Barcode;
+
+            lock (_cacheLock)
+            {
+                return _loaded.ContainsValue(id) || (barcode != null && _holsteredBarcodes.Contains(barcode));
+            }
+        }
+
+        bool EverSeated(ushort id)
+        {
+            lock (_seatLock)
+            {
+                return _everSeated.Contains(id);
+            }
+        }
+
+        var guns = held.Where(KnownGun).Concat(holstered).Distinct()
             .Where(id => Entities.Get(id) is { Removable: true, Discovered: false, Synthetic: false } entity
                          && entity.OwnerSmallId == leaver.SmallId
                          && _grabs.HoldersOf(id).Count == 0
-                         && !_seats.RidersOf(id).Any())
+                         && !EverSeated(id))
             .ToList();
 
         List<ushort> magazines;
@@ -3272,6 +3298,7 @@ public sealed class FusionServer : IDisposable
         lock (_cacheLock)
         {
             _slotted.Insert(player.SmallId, slotIndex, entityId);
+            _holsteredBarcodes.Add(entity.Barcode);
             _holsterAwaitingPose[entityId] = player.SmallId;
         }
 
@@ -4056,6 +4083,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Which weapon is in which body slot, so a drop knows what left.</summary>
     private readonly HolsterSlots _slotted = new();
 
+    /// <summary>Barcodes that have been in a body slot this run, which is how a held item is known to be a gun.</summary>
+    private readonly HashSet<string> _holsteredBarcodes = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Plugin holsters whose holder has not sent a pose for the item yet, by entity, then the holder.</summary>
     private readonly Dictionary<ushort, byte> _holsterAwaitingPose = new();
 
@@ -4514,6 +4544,11 @@ public sealed class FusionServer : IDisposable
                 if (change.Slot == sender.SmallId && Entities.Get(change.Entity)?.Barcode is { } stowed)
                 {
                     _dupes.Holstered(sender.SmallId, stowed);
+
+                    lock (_cacheLock)
+                    {
+                        _holsteredBarcodes.Add(stowed);
+                    }
                 }
 
                 LogHolsterChange(sender, change, change.Entity);
@@ -4958,6 +4993,7 @@ public sealed class FusionServer : IDisposable
             ushort? before = _seats.SeatOf(rider)?.EntityId;
 
             _seats.Ingress(rider, entityId, index, now);
+            _everSeated.Add(entityId);
 
             SyncOccupied(before);
             SyncOccupied(entityId);
@@ -5433,6 +5469,9 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Around each seat change and its occupancy sync, since Kick can run Depart off the message loop.</summary>
     private readonly object _seatLock = new();
+
+    /// <summary>Everything somebody has sat in, so a leaver's car is never taken with them. Under the seat lock.</summary>
+    private readonly HashSet<ushort> _everSeated = new();
 
     /// <summary>Who a plugin has just refused a seat, so their game asking again is dropped quietly.</summary>
     private readonly SeatRefusals _seatRefusals;
