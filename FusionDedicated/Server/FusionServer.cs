@@ -4520,7 +4520,7 @@ public sealed class FusionServer : IDisposable
 
                 // A gun holds one magazine. A shell cleared on insert sends no eject and no pose after it, so the
                 // next insert means it was used up. One that moved since was ejected where the server never saw it.
-                // Outside the lock, so the registry's lock is never taken inside this one.
+                // Outside the lock, because removing it runs every Removed handler.
                 foreach (var (previous, insertedAt) in replaced)
                 {
                     if (Entities.Get(previous) is { } magazine && magazine.LastUpdate <= insertedAt + InsertPoseGrace)
