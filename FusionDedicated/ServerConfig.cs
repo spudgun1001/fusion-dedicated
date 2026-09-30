@@ -403,6 +403,12 @@ public sealed class ServerConfig
     /// </summary>
     public bool ClearDiscoveredEntities { get; set; }
 
+    /// <summary>
+    /// Whether the claim Fusion answers a joiner's magazine catch-up with is passed on. Off by default:
+    /// it loads the magazine with the owner's last picked cartridge, so a pistol showed shotgun shells.
+    /// </summary>
+    public bool RelayCatchupMagazineClaims { get; set; }
+
     // ---- crash protection ----
     // A dedicated server never simulates anything, so a spawn flood costs it almost
     // nothing, but every client has to instantiate each prop, and enough of them at

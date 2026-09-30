@@ -165,7 +165,18 @@ public static class ClientMessages
     public static byte[] ModuleToOthers(byte player, long handler, byte[] handlerPayload)
         => Module(player, handler, handlerPayload, ToOtherClients);
 
-    private static byte[] Module(byte player, long handler, byte[] handlerPayload, byte relayType)
+    /// <summary>A MagazineClaim: owner, magazine, hand. Sent to one player when a target is given, as Fusion answers a catch-up.</summary>
+    public static byte[] MagazineClaim(byte player, ushort magazine, byte hand, byte? target = null)
+    {
+        var payload = new FusionNetWriter(8);
+        payload.Write(player);
+        payload.WriteUInt16(magazine);
+        payload.Write(hand);
+
+        return Module(player, ModuleProtocol.MagazineClaimTag, payload.ToArray(), ToOtherClients, target);
+    }
+
+    private static byte[] Module(byte player, long handler, byte[] handlerPayload, byte relayType, byte? target = null)
     {
         var body = new FusionNetWriter(handlerPayload.Length + ModuleProtocol.HandlerTagBytes);
 
@@ -175,7 +186,20 @@ public static class ClientMessages
         body.WriteRaw(tag);
         body.WriteRaw(handlerPayload);
 
-        return Wrap(ModuleProtocol.TagModule, relayType, player, body.ToArray());
+        if (target is not { } to)
+        {
+            return Wrap(ModuleProtocol.TagModule, relayType, player, body.ToArray());
+        }
+
+        var message = new FusionNetWriter(handlerPayload.Length + 48);
+        message.Write(ModuleProtocol.TagModule);
+        message.Write((byte)4);     // ToTarget
+        message.Write(Reliable);
+        message.WriteNullable(to);
+        message.WriteNullable(player);
+        message.WriteBlock(body.ToArray());
+
+        return message.ToArray();
     }
 
     private static byte[] Wrap(byte tag, byte relayType, byte sender, byte[] payload)

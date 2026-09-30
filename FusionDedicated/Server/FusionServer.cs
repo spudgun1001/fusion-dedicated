@@ -3749,6 +3749,16 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        // Fusion answers a joiner's magazine catch-up with a claim to them alone and no hand, and the
+        // joiner loads the magazine with the owner's last picked cartridge. A live pouch claim names a hand.
+        if (handler == ModuleProtocol.MagazineClaimTag && !Config.RelayCatchupMagazineClaims
+            && ServerProtocol.ReadRoute(message).RelayType == 4
+            && ModuleProtocol.TryReadHandlerPayload(message) is { Length: >= 4 } claim && claim[3] == 0)
+        {
+            _catchupClaimsDropped++;
+            return;
+        }
+
         // Watched, not acted on: these still go on to everybody afterwards.
         NoteAttachment(sender, handler.Value, message);
 
@@ -6136,10 +6146,18 @@ public sealed class FusionServer : IDisposable
 
         _magazinesCulled = 0;
         _gadgetsCulled = 0;
+
+        if (_catchupClaimsDropped > 0)
+        {
+            Log("INFO", $"Dropped {_catchupClaimsDropped} catch-up magazine claim(s) in the last minute", console: false);
+        }
+
+        _catchupClaimsDropped = 0;
     }
 
     private int _magazinesCulled;
     private int _gadgetsCulled;
+    private int _catchupClaimsDropped;
 
     /// <summary>Bytes sent per message tag since the last health line, to show where the bandwidth goes.</summary>
     private readonly long[] _sentByTag = new long[256];

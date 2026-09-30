@@ -682,6 +682,7 @@ gitignored.
 | `VoiceRelayRange` | metres from a speaker past which a player is not sent their voice (41 by default, 0 sends every voice to everyone) |
 | `FarPoseRange` | metres from a player past which somebody gets fewer of their poses (80 by default, 0 sends all) |
 | `FarPoseDivisor` | those far players get one in this many poses (3 by default, 1 sends all) |
+| `RelayCatchupMagazineClaims` | passes on the magazine claim Fusion sends a joiner, which loads the magazine with the owner's last picked cartridge so a pistol can show shotgun shells (off by default; turn it on to get Fusion's own behaviour back) |
 | `DashboardHost` | `localhost` or `+`, see the warning above |
 | `LogDirectory` | append-only logs and `metrics.csv` for the graphs |
 
