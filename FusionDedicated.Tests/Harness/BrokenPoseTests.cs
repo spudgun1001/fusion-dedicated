@@ -75,4 +75,49 @@ public class BrokenPoseTests
         Assert.Equal(160f, world.Server.Players.Get(sender.SmallId)!.LastPosition.X, 1);
         Assert.Single(world.Server.RecentLog(200), l => l.Message.Contains("broken pose from Iceyy"));
     }
+
+    // The same night a gun drawn from a holster froze the players near it, sent as the gun's pose, not the player's.
+    private const ushort Gun = 489;
+
+    private static int GunPosesSeen(World world, FakePlayer watcher)
+        => world.Transport.SentTo(watcher.Connection)
+            .Count(s => FusionProtocol.TryReadEntityPose(s.Message) is { EntityId: Gun });
+
+    private static void SendGun(FakePlayer player, Vec3 position, Vec3 velocity)
+        => player.Send(FusionProtocol.BuildEntityPoseUpdate(player.SmallId, Gun, position, Quat.Identity, velocity, default));
+
+    public static IEnumerable<object[]> BrokenGun()
+    {
+        yield return new object[] { new Vec3(float.NaN, 1, 2), Vec3.Zero };
+        yield return new object[] { new Vec3(1, 1, 2), new Vec3(0, float.PositiveInfinity, 0) };
+    }
+
+    [Theory]
+    [MemberData(nameof(BrokenGun))]
+    public void A_broken_entity_pose_reaches_nobody(Vec3 position, Vec3 velocity)
+    {
+        var (world, sender, watcher) = Build();
+        using var _ = world;
+        world.Spawn(sender, Gun, "Rexmeck.WeaponPackLT.Spawnable.Glock17", 0, 0, 0);
+        SendGun(sender, new Vec3(1, 1, 2), Vec3.Zero);
+        int before = GunPosesSeen(world, watcher);
+
+        SendGun(sender, position, velocity);
+
+        Assert.Equal(before, GunPosesSeen(world, watcher));
+        Assert.Single(world.Server.RecentLog(200), l => l.Message.Contains("broken pose from Iceyy"));
+    }
+
+    [Fact]
+    public void A_good_entity_pose_still_reaches_everybody()
+    {
+        var (world, sender, watcher) = Build();
+        using var _ = world;
+        world.Spawn(sender, Gun, "Rexmeck.WeaponPackLT.Spawnable.Glock17", 0, 0, 0);
+        int before = GunPosesSeen(world, watcher);
+
+        SendGun(sender, new Vec3(1, 1, 2), new Vec3(0, 1, 0));
+
+        Assert.Equal(before + 1, GunPosesSeen(world, watcher));
+    }
 }

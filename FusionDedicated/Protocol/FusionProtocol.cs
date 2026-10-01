@@ -1205,6 +1205,47 @@ public static class FusionProtocol
     /// the catch-up sent the rotation a thing was spawned at, however it has been
     /// turned since.
     /// </returns>
+    /// <summary>
+    /// Why no working game could have sent this entity pose, or null. A body is 28 bytes, and only its
+    /// position, velocity and spin magnitudes are floats, so those are what can carry a NaN.
+    /// </summary>
+    public static string? EntityPoseProblem(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (reader.ReadByte() != TagEntityPoseUpdate)
+            {
+                return null;
+            }
+
+            ReadRouteAndSender(ref reader);
+            reader.ReadInt32();
+            reader.ReadUInt16();
+            byte bodies = reader.ReadByte();
+
+            for (int i = 0; i < bodies; i++)
+            {
+                var body = reader.ReadRaw(28);
+
+                foreach (int at in new[] { 6, 17, 24 })
+                {
+                    if (!float.IsFinite(System.Buffers.Binary.BinaryPrimitives.ReadSingleBigEndian(body[at..])))
+                    {
+                        return "a NaN or infinite number";
+                    }
+                }
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation)?
         TryReadEntityPose(ReadOnlySpan<byte> message)
     {

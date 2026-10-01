@@ -902,6 +902,12 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
             {
+                if (FusionProtocol.EntityPoseProblem(message) is { } problem)
+                {
+                    LogBrokenPose(sender, problem);
+                    return;
+                }
+
                 var pose = FusionProtocol.TryReadEntityPose(message);
 
                 if (pose is { } read)
@@ -5095,6 +5101,18 @@ public sealed class FusionServer : IDisposable
     /// Remembers where a player is standing. Teleporting needs it, and so does
     /// noticing a rider who left a seat without the server hearing.
     /// </summary>
+    private void LogBrokenPose(ConnectedPlayer sender, string problem)
+    {
+        DateTime now = Clock();
+        var last = _brokenPoseLog.TryGetValue(sender.SmallId, out var when) ? when : (DateTime?)null;
+
+        if (PoseLogThrottle.ShouldLog(last, now))
+        {
+            _brokenPoseLog[sender.SmallId] = now;
+            Log("WARN", $"Dropped a broken pose from {sender.DisplayName}: {problem}, which would crash the players near them");
+        }
+    }
+
     /// <summary>Tracks where a player is. False for a pose that is dropped rather than passed on.</summary>
     private bool TrackPlayerPose(ConnectedPlayer sender, byte[] message)
     {
@@ -5107,15 +5125,7 @@ public sealed class FusionServer : IDisposable
 
         if (pose.Value.Pose.Problem is { } problem)
         {
-            DateTime now = Clock();
-            var last = _brokenPoseLog.TryGetValue(sender.SmallId, out var when) ? when : (DateTime?)null;
-
-            if (PoseLogThrottle.ShouldLog(last, now))
-            {
-                _brokenPoseLog[sender.SmallId] = now;
-                Log("WARN", $"Dropped a broken pose from {sender.DisplayName}: {problem}, which would crash the players near them");
-            }
-
+            LogBrokenPose(sender, problem);
             return false;
         }
 
