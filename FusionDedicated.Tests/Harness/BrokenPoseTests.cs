@@ -120,4 +120,31 @@ public class BrokenPoseTests
 
         Assert.Equal(before + 1, GunPosesSeen(world, watcher));
     }
+
+    // On 1 Oct two players were dropped by their own game a minute after somebody joined, and nothing said why.
+    [Fact]
+    public void A_player_who_drops_is_shown_what_reached_them_last()
+    {
+        var (world, sender, watcher) = Build();
+        using var _ = world;
+        Send(sender, new FusionRigPose { PelvisPosition = new Vec3(160, 1, -130) });
+
+        world.Leave(watcher, "Closing Connection");
+
+        var line = Assert.Single(world.Server.RecentLog(200), l => l.Message.Contains("What reached Enzo"));
+        Assert.Contains($"tag {FusionProtocol.TagPlayerPoseUpdate}", line.Message);
+        Assert.Contains($"from player {sender.SmallId}", line.Message);
+    }
+
+    [Fact]
+    public void A_staff_kick_is_not_explained()
+    {
+        var (world, sender, watcher) = Build();
+        using var _ = world;
+        Send(sender, new FusionRigPose { PelvisPosition = new Vec3(160, 1, -130) });
+
+        world.Leave(watcher, "Kicked by Kanzaaa");
+
+        Assert.DoesNotContain(world.Server.RecentLog(200), l => l.Message.Contains("What reached"));
+    }
 }

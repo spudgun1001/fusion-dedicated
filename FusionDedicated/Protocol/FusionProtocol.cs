@@ -124,6 +124,21 @@ public static class FusionProtocol
     /// layout silently shifts every later field, which is what broke SpawnResponse
     /// parsing: real responses arrive as ToTarget, not ToClients.
     /// </summary>
+    /// <summary>Who a relayed message is from, or null for one the server wrote itself.</summary>
+    public static byte? SenderOf(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+            reader.ReadByte();
+            return ReadRouteAndSender(ref reader);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static byte? ReadRouteAndSender(ref FusionNetReader reader)
     {
         byte relayType = reader.ReadByte();

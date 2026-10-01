@@ -391,6 +391,15 @@ public sealed class FusionServer : IDisposable
     {
         Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}), {reason}");
 
+        // A drop nobody chose leaves only this to say what reached them last.
+        if ((reason == "Closing Connection" || IsFault(reason))
+            && _outbound.Summary(player.Connection.m_HSteamNetConnection, Clock(), NameOfTag) is { } reached)
+        {
+            Log("INFO", $"What reached {player.DisplayName} in their last {OutboundTrail.Window.TotalSeconds:0} s: {reached}");
+        }
+
+        _outbound.Forget(player.Connection.m_HSteamNetConnection);
+
         Plugins?.Left.Raise(new Plugins.LeaveEvent(player.PlatformId, player.DisplayName));
 
         NoteDeparture(player.DisplayName, reason);
@@ -4860,6 +4869,7 @@ public sealed class FusionServer : IDisposable
     /// <summary>Keeps the "Refused an ownership request" line from repeating every tick.</summary>
     private readonly Dictionary<byte, DateTime> _ownershipRefusalLog = new();
     private readonly Dictionary<byte, DateTime> _brokenPoseLog = new();
+    private readonly OutboundTrail _outbound = new();
 
     /// <summary>Keeps the line for a request refused because somebody sits in the vehicle to one per player.</summary>
     private readonly Dictionary<byte, DateTime> _seatRefusalLog = new();
@@ -5999,6 +6009,7 @@ public sealed class FusionServer : IDisposable
     public bool SendTo(HSteamNetConnection connection, byte[] message, bool reliable)
     {
         uint handle = connection.m_HSteamNetConnection;
+        _outbound.Note(handle, message, Clock());
 
         // Every voice proxy toggle a client is sent passes here, whoever wrote it.
         _voiceProxies.Note(message);
