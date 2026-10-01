@@ -409,6 +409,7 @@ public sealed class FusionServer : IDisposable
         _refusals.Forget(player.SmallId);
         _nicknames.Forget(player.SmallId);
         _ownershipRefusalLog.Remove(player.SmallId);
+        _brokenPoseLog.Remove(player.SmallId);
         _seatRefusalLog.Remove(player.SmallId);
         _holdRefusalLog.Remove(player.SmallId);
         _confirmations.ForgetPlayer(player.SmallId);
@@ -886,7 +887,10 @@ public sealed class FusionServer : IDisposable
                 return;
 
             case FusionProtocol.TagPlayerPoseUpdate when sender != null:
-                TrackPlayerPose(sender, message);
+                if (!TrackPlayerPose(sender, message))
+                {
+                    return;
+                }
 
                 if (Config.FarPoseRange > 0 && Config.FarPoseDivisor > 1 && ServerProtocol.ReadRoute(message).RelayType == 3)
                 {
@@ -4849,6 +4853,7 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Keeps the "Refused an ownership request" line from repeating every tick.</summary>
     private readonly Dictionary<byte, DateTime> _ownershipRefusalLog = new();
+    private readonly Dictionary<byte, DateTime> _brokenPoseLog = new();
 
     /// <summary>Keeps the line for a request refused because somebody sits in the vehicle to one per player.</summary>
     private readonly Dictionary<byte, DateTime> _seatRefusalLog = new();
@@ -5090,13 +5095,28 @@ public sealed class FusionServer : IDisposable
     /// Remembers where a player is standing. Teleporting needs it, and so does
     /// noticing a rider who left a seat without the server hearing.
     /// </summary>
-    private void TrackPlayerPose(ConnectedPlayer sender, byte[] message)
+    /// <summary>Tracks where a player is. False for a pose that is dropped rather than passed on.</summary>
+    private bool TrackPlayerPose(ConnectedPlayer sender, byte[] message)
     {
         var pose = FusionProtocol.TryReadPlayerPoseUpdate(message);
 
         if (pose == null)
         {
-            return;
+            return true;
+        }
+
+        if (pose.Value.Pose.Problem is { } problem)
+        {
+            DateTime now = Clock();
+            var last = _brokenPoseLog.TryGetValue(sender.SmallId, out var when) ? when : (DateTime?)null;
+
+            if (PoseLogThrottle.ShouldLog(last, now))
+            {
+                _brokenPoseLog[sender.SmallId] = now;
+                Log("WARN", $"Dropped a broken pose from {sender.DisplayName}: {problem}, which would crash the players near them");
+            }
+
+            return false;
         }
 
         sender.LastPosition = pose.Value.Pose.PelvisPosition;
@@ -5117,6 +5137,8 @@ public sealed class FusionServer : IDisposable
             Log("INFO", $"{sender.DisplayName} is more than 15 m from entity {seat.EntityId}, " +
                         $"taken out of seat {seat.Index}", console: false);
         }
+
+        return true;
     }
 
     /// <summary>

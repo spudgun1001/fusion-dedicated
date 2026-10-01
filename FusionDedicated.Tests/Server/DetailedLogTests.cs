@@ -32,7 +32,7 @@ public class DetailedLogTests
 
     [Fact]
     public void A_rider_taken_out_for_being_too_far_away_is_logged()
-        => LogsQuietly("private void TrackPlayerPose(", "taken out of seat");
+        => LogsQuietly("private bool TrackPlayerPose(", "taken out of seat");
 
     [Fact]
     public void A_seat_replay_is_logged()

@@ -66,7 +66,7 @@ public class SeatGlueTests
     [Fact]
     public void A_rider_far_from_their_seat_is_taken_out_of_it()
     {
-        string pose = FusionServerSource.Method("private void TrackPlayerPose(");
+        string pose = FusionServerSource.Method("private bool TrackPlayerPose(");
 
         Assert.Contains("SeatBook.IsStale(", pose);
         Assert.Contains("Egress(sender.SmallId);", pose);

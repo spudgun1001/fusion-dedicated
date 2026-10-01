@@ -100,6 +100,10 @@ public sealed class FusionRigPose
         return w.ToArray();
     }
 
+    /// <summary>Why no working game could have sent this pose, or null. A NaN or infinite value, or a rotation
+    /// of all zeros, turns the body to NaN in every game that draws it, and the physics takes theirs down too.</summary>
+    public string? Problem { get; private set; }
+
     public float CrouchTarget;
     public float FeetOffset;
     public float Health = 100f;
@@ -222,17 +226,27 @@ public sealed class FusionRigPose
     {
         var r = new FusionNetReader(payload);
         var pose = new FusionRigPose();
+        bool zeroRotation = false;
+
+        // A signed byte goes on the wire with 128 added, so a rotation of all zeros is four 0x80s.
+        Quat Rotation(ref FusionNetReader reader)
+        {
+            var raw = reader.ReadRaw(4);
+            zeroRotation |= raw.IndexOfAnyExcept((byte)128) < 0;
+            var own = new FusionNetReader(raw);
+            return ReadSmallQuaternion(ref own);
+        }
 
         for (var i = 0; i < 3; i++)
         {
             pose.TrackedPositions[i] = ReadShortVector3(ref r);
-            pose.TrackedRotations[i] = ReadSmallQuaternion(ref r);
+            pose.TrackedRotations[i] = Rotation(ref r);
         }
 
-        pose.Playspace = ReadSmallQuaternion(ref r);
+        pose.Playspace = Rotation(ref r);
 
         pose.PelvisPosition = ReadShortVector3(ref r);
-        pose.PelvisRotation = ReadSmallQuaternion(ref r);
+        pose.PelvisRotation = Rotation(ref r);
         pose.PelvisVelocity = ReadSmallVector3(ref r);
         pose.PelvisAngularVelocity = ReadSmallVector3(ref r);
 
@@ -244,6 +258,17 @@ public sealed class FusionRigPose
         pose.Health = r.ReadSingle();
         pose.MaxHealth = r.ReadSingle();
 
+        static bool Finite(Vec3 v) => float.IsFinite(v.X) && float.IsFinite(v.Y) && float.IsFinite(v.Z);
+
+        bool finite = pose.TrackedPositions.All(Finite)
+                      && Finite(pose.PelvisPosition) && Finite(pose.PelvisVelocity) && Finite(pose.PelvisAngularVelocity)
+                      && float.IsFinite(pose.CrouchTarget) && float.IsFinite(pose.FeetOffset)
+                      && float.IsFinite(pose.Health) && float.IsFinite(pose.MaxHealth)
+                      // A controller block ends with its thumbstick's magnitude.
+                      && float.IsFinite(System.Buffers.Binary.BinaryPrimitives.ReadSingleBigEndian(pose.LeftController.AsSpan(12)))
+                      && float.IsFinite(System.Buffers.Binary.BinaryPrimitives.ReadSingleBigEndian(pose.RightController.AsSpan(12)));
+
+        pose.Problem = zeroRotation ? "a rotation of all zeros" : finite ? null : "a NaN or infinite number";
         return pose;
     }
 
