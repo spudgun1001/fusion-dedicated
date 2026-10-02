@@ -153,6 +153,36 @@ public class FloodLimitTests
         Assert.Equal("SLZ.BONELAB.Content.Avatar.Swap1", world.Server.Players.GetByPlatformId(JoelId)!.AvatarBarcode);
     }
 
+    private static bool JoelKicked(World world)
+        => world.Server.Players.GetByPlatformId(JoelId) is not { Kicked: false };
+
+    // On 2 Oct a player swapped avatars 150 times a second, and the two a second let through
+    // made everyone near them reload the avatar over and over.
+    [Fact]
+    public void A_flood_of_avatar_swaps_gets_the_sender_kicked()
+    {
+        using var world = new World(Limits(avatars: 2));
+        var (joel, kanza) = Loaded(world);
+        int before = world.Transport.SentTo(kanza.Connection).Count;
+
+        joel.SendMany(Enumerable.Range(0, 100).Select(i => Avatar(joel, $"SLZ.BONELAB.Content.Avatar.Swap{i}")));
+
+        Assert.True(JoelKicked(world));
+        Assert.Contains(world.Server.RecentLog(2000), e => e.Message == "Kicked Joel: Flooding avatar swaps");
+        Assert.True(AvatarsTo(world, kanza, before) <= 2);
+    }
+
+    [Fact]
+    public void A_few_swaps_over_the_allowance_are_only_dropped()
+    {
+        using var world = new World(Limits(avatars: 2));
+        var (joel, _) = Loaded(world);
+
+        joel.SendMany(Enumerable.Range(0, 5).Select(i => Avatar(joel, $"SLZ.BONELAB.Content.Avatar.Swap{i}")));
+
+        Assert.False(JoelKicked(world));
+    }
+
     [Fact]
     public void Rpc_messages_over_the_allowance_are_dropped_and_not_passed_on()
     {
@@ -213,6 +243,19 @@ public class FloodLimitTests
 
         Assert.Single(world.Server.RecentLog(2000),
             e => e.Message == "Dropped 2 metadata messages from Joel in the last minute");
+    }
+
+    // A cheater who leaves before anyone looks can still be banned from the log.
+    [Fact]
+    public void Joining_and_leaving_log_the_players_steam_id()
+    {
+        using var world = new World(Limits());
+        var joel = world.Join(JoelId, "Joel");
+        world.Leave(joel, "Closing Connection");
+
+        var log = world.Server.RecentLog(2000);
+        Assert.Contains(log, e => e.Level == "JOIN" && e.Message.StartsWith($"Joel joined. Steam {JoelId}, SmallID "));
+        Assert.Contains(log, e => e.Level == "LEAVE" && e.Message.StartsWith($"Joel left (SmallID {joel.SmallId}, Steam {JoelId}), Closing Connection"));
     }
 
     [Fact]

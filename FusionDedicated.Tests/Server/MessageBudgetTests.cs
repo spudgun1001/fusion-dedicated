@@ -27,6 +27,19 @@ public class MessageBudgetTests
     }
 
     [Fact]
+    public void Dropped_counts_what_went_over_until_it_is_summed_up()
+    {
+        var budget = Budget(avatars: 2);
+        for (int i = 0; i < 5; i++) budget.Allow(1, MessageKind.Avatar, _t0);
+
+        Assert.Equal(3, budget.Dropped(1, MessageKind.Avatar));
+        Assert.Equal(0, budget.Dropped(2, MessageKind.Avatar));
+
+        budget.DueSummaries(_t0.AddMinutes(1));
+        Assert.Equal(0, budget.Dropped(1, MessageKind.Avatar));
+    }
+
+    [Fact]
     public void Ownership_requests_have_an_allowance_and_a_word_of_their_own()
     {
         var budget = new MessageBudget(new ServerConfig { OwnershipRequestsPerSecond = 1 });

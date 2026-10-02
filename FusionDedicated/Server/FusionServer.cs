@@ -389,7 +389,7 @@ public sealed class FusionServer : IDisposable
     /// </param>
     private void Depart(ConnectedPlayer player, string reason, string? announce = null)
     {
-        Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}), {reason}");
+        Log("LEAVE", $"{player.DisplayName} left (SmallID {player.SmallId}, Steam {player.PlatformId}), {reason}");
 
         // A drop nobody chose leaves only this to say what reached them last.
         if ((reason == "Closing Connection" || IsFault(reason))
@@ -724,6 +724,9 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>Avatar swaps dropped in a minute that get the sender kicked. Browsing avatars drops a few at most.</summary>
+    private const int AvatarFloodKick = 30;
+
     /// <summary>Bounds one tick at 2048 messages, leaving room for ticks and lobby updates.</summary>
     private const int MaxReceivePasses = 16;
 
@@ -999,6 +1002,12 @@ public sealed class FusionServer : IDisposable
                 // Before the gates and the plugins, so a swap over the allowance costs nothing.
                 if (!WithinBudget(sender, MessageKind.Avatar))
                 {
+                    // Even the swaps let through made everyone near a flooder reload their avatar.
+                    if (_budget.Dropped(sender.SmallId, MessageKind.Avatar) >= AvatarFloodKick)
+                    {
+                        Kick(sender.SmallId, "Flooding avatar swaps");
+                    }
+
                     return;
                 }
 
@@ -1259,7 +1268,7 @@ public sealed class FusionServer : IDisposable
 
         Players.Add(player);
 
-        Log("JOIN", $"{player.DisplayName} joined. SmallID {player.SmallId}, " +
+        Log("JOIN", $"{player.DisplayName} joined. Steam {player.PlatformId}, SmallID {player.SmallId}, " +
                     $"v{request.Version.Major}.{request.Version.Minor}, " +
                     $"{player.Permission.ToFusionString()}, avatar '{request.AvatarBarcode}'");
 

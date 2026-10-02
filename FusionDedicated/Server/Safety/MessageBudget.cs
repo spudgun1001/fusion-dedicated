@@ -92,6 +92,15 @@ public sealed class MessageBudget
         }
     }
 
+    /// <summary>How many went over since their count was last summed up.</summary>
+    public int Dropped(byte smallId, MessageKind kind)
+    {
+        lock (_lock)
+        {
+            return _counters.TryGetValue((smallId, kind), out var counter) ? counter.Dropped : 0;
+        }
+    }
+
     /// <summary>
     /// Drop counts whose first drop was a minute ago or more, one per player and kind.
     /// Each count starts again from zero once it is returned.
