@@ -35,7 +35,7 @@ public readonly record struct SeatEvent(
     ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
     ushort EntityId, string Barcode, byte SeatIndex, bool Ingress);
 
-/// <summary>A voice about to reach one listener, from where each pelvis was last seen. Range is how far the server carries this talker.</summary>
+/// <summary>A voice about to reach one listener, from where each pelvis was last seen. Range is how far the server carries this talker, always above zero.</summary>
 public readonly record struct VoiceEvent(
     ulong SpeakerPlatformId, ulong ListenerPlatformId,
     float SpeakerX, float SpeakerY, float SpeakerZ,

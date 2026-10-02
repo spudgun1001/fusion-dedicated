@@ -208,6 +208,9 @@ public class VoiceRelayTests
     {
         var scene = Build();
         using var world = scene.World;
+        var other = world.Join(76561198000000004, "Ellie");
+        other.FinishLoading();
+        StandAt(other, new Vec3(190, 0, 0));
         var events = Hooked(world);
         var asked = new List<VoiceEvent>();
         events.Voice.Subscribe("test", e =>
@@ -219,10 +222,38 @@ public class VoiceRelayTests
         scene.Talker.Send(Voice(scene.Talker));
 
         Assert.Equal(0, Heard(world, scene.Near));
-        var e = Assert.Single(asked);
+        Assert.Equal(1, Heard(world, other));
+        Assert.Equal(2, asked.Count);
+        var e = Assert.Single(asked, a => a.ListenerPlatformId == 76561198000000002);
         Assert.Equal(200f, e.SpeakerX);
         Assert.Equal(210f, e.ListenerX);
         Assert.Equal(41f, e.Range);
+    }
+
+    [Fact]
+    public void A_loading_listener_hears_whatever_a_plugin_says()
+    {
+        var scene = Build();
+        using var world = scene.World;
+        Hooked(world).Voice.Subscribe("test", _ => PluginVerdict.Refuse("wall"));
+        scene.Near.Send(ClientMessages.Metadata(scene.Near.SmallId, "Loading", "true"));
+
+        scene.Talker.Send(Voice(scene.Talker));
+
+        Assert.Equal(1, Heard(world, scene.Near));
+    }
+
+    [Fact]
+    public void A_loading_talker_is_heard_whatever_a_plugin_says()
+    {
+        var scene = Build();
+        using var world = scene.World;
+        Hooked(world).Voice.Subscribe("test", _ => PluginVerdict.Refuse("wall"));
+        scene.Talker.Send(ClientMessages.Metadata(scene.Talker.SmallId, "Loading", "true"));
+
+        scene.Talker.Send(Voice(scene.Talker));
+
+        Assert.Equal(1, Heard(world, scene.Near));
     }
 
     [Fact]
@@ -241,7 +272,7 @@ public class VoiceRelayTests
     }
 
     [Fact]
-    public void With_no_plugin_the_hook_is_not_asked()
+    public void An_empty_voice_channel_changes_nothing()
     {
         var scene = Build();
         using var world = scene.World;

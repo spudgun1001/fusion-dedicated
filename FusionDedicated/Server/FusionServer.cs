@@ -5426,6 +5426,11 @@ public sealed class FusionServer : IDisposable
         bool everywhere = _voiceProxies.Feeds(sender.SmallId);
         var hook = Plugins?.Voice;
 
+        // Walls are a plugin's to judge; a proxy voice is meant to carry everywhere, and a
+        // loading player's position is stale, so both are left to range alone.
+        bool ask = !everywhere && hook is { Count: > 0 } && sender.HasPosition && !sender.Loading;
+        float reach = ask ? VoiceReach.ReachOf(sender, Config.VoiceRelayRange) : 0;
+
         foreach (var player in Players.Players)
         {
             if (player.SmallId == sender.SmallId
@@ -5434,12 +5439,11 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            // Walls are a plugin's to judge; a proxy voice is meant to carry everywhere.
-            if (!everywhere && hook is { Count: > 0 } && sender.HasPosition && player.HasPosition
-                && !hook.Raise(new Plugins.VoiceEvent(sender.PlatformId, player.PlatformId,
+            if (ask && player.HasPosition && !player.Loading
+                && !hook!.Raise(new Plugins.VoiceEvent(sender.PlatformId, player.PlatformId,
                     sender.LastPosition.X, sender.LastPosition.Y, sender.LastPosition.Z,
                     player.LastPosition.X, player.LastPosition.Y, player.LastPosition.Z,
-                    VoiceReach.ReachOf(sender, Config.VoiceRelayRange))).Allowed)
+                    reach)).Allowed)
             {
                 continue;
             }
