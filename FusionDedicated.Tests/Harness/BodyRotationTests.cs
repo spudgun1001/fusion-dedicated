@@ -42,6 +42,19 @@ public class BodyRotationTests
     }
 
     [Fact]
+    public void A_spawned_prop_keeps_no_body_rotations()
+    {
+        using var world = new World(new ServerConfig { CullOrphanedEntities = false });
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+        world.Server.Entities.Register(701, "", joel.SmallId, 0, 0, 0);
+
+        joel.Send(TwoBodyPose(joel.SmallId, 701, new Quat(0f, 0.7071068f, 0f, 0.7071068f)));
+
+        Assert.Empty(world.Server.BodyRotationsOf(701));
+    }
+
+    [Fact]
     public void An_unknown_entity_has_no_rotations()
     {
         using var world = new World(new ServerConfig { CullOrphanedEntities = false });

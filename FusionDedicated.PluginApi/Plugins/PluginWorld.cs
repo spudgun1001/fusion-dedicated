@@ -77,6 +77,7 @@ public sealed class PluginWorld
     /// <summary>How the server finds the entity a level object was networked as. Null outside a server.</summary>
     public Func<int, int, ushort?>? SceneEntityLookup { get; set; }
 
+    /// <summary>How the server finds each body's rotation of a level object. Null outside a server.</summary>
     public Func<ushort, IReadOnlyList<(float X, float Y, float Z, float W)>>? BodyRotationsLookup { get; set; }
 
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);

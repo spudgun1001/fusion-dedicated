@@ -449,6 +449,7 @@ public sealed class EntityRegistry
         }
     }
 
+    /// <summary>Records each body's rotation of a level object. Anything else is left alone.</summary>
     public void NoteBodyRotations(ushort id, Quat[] rotations)
     {
         lock (_lock)
