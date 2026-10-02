@@ -925,6 +925,12 @@ public sealed class FusionServer : IDisposable
                 if (pose is { } read)
                 {
                     TrackEntityPose(sender, read);
+
+                    if (Entities.Get(read.EntityId) is { Discovered: true }
+                        && FusionProtocol.TryReadEntityBodyRotations(message) is { } bodies)
+                    {
+                        Entities.NoteBodyRotations(read.EntityId, bodies);
+                    }
                 }
 
                 RelayEntityPose(sender, message, pose);
@@ -3995,6 +4001,11 @@ public sealed class FusionServer : IDisposable
             ? new FusionDedicated.Plugins.PluginMotion(
                 entity.Rotation, entity.VelocityX, entity.VelocityY, entity.VelocityZ, entity.LastUpdate)
             : null;
+
+    /// <summary>Each body's rotation of a level object, for plugins, or empty.</summary>
+    public IReadOnlyList<(float X, float Y, float Z, float W)> BodyRotationsOf(ushort id)
+        => Entities.Get(id)?.BodyRotations.Select(q => (q.X, q.Y, q.Z, q.W)).ToList()
+           ?? (IReadOnlyList<(float, float, float, float)>)Array.Empty<(float, float, float, float)>();
 
     /// <summary>
     /// Everything in the world, for a plugin that has to find its own props.

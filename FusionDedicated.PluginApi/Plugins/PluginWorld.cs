@@ -77,6 +77,8 @@ public sealed class PluginWorld
     /// <summary>How the server finds the entity a level object was networked as. Null outside a server.</summary>
     public Func<int, int, ushort?>? SceneEntityLookup { get; set; }
 
+    public Func<ushort, IReadOnlyList<(float X, float Y, float Z, float W)>>? BodyRotationsLookup { get; set; }
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
 
     public PluginMotion? Motion(ushort entityId) => MotionLookup?.Invoke(entityId);
@@ -100,6 +102,10 @@ public sealed class PluginWorld
     /// in the level. Null when nobody has networked it or there is no server.
     /// </summary>
     public ushort? SceneEntity(int hash, int index) => SceneEntityLookup?.Invoke(hash, index);
+
+    /// <summary>Each body's last rotation of a networked level object, in the client's body order, or empty.</summary>
+    public IReadOnlyList<(float X, float Y, float Z, float W)> BodyRotations(ushort entityId)
+        => BodyRotationsLookup?.Invoke(entityId) ?? Array.Empty<(float, float, float, float)>();
 
     /// <summary>Everything in the world, empty when there is no server.</summary>
     public IReadOnlyList<PluginEntity> All()

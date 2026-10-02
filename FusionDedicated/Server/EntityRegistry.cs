@@ -55,6 +55,9 @@ public sealed class TrackedEntity
     /// </summary>
     public byte[] Rotation { get; set; } = Array.Empty<byte>();
 
+    /// <summary>Every body's last rotation, kept only for level objects, whose later bodies (a door's leaf) move alone.</summary>
+    public Quat[] BodyRotations { get; set; } = Array.Empty<Quat>();
+
     /// <summary>Where a spawn put the crate's root, until the first pose after it. Null for anything else.</summary>
     public SpawnRoot? SpawnRoot { get; set; }
 
@@ -442,6 +445,17 @@ public sealed class EntityRegistry
                 entity.Y = y;
                 entity.Z = z;
                 entity.LastUpdate = Clock();
+            }
+        }
+    }
+
+    public void NoteBodyRotations(ushort id, Quat[] rotations)
+    {
+        lock (_lock)
+        {
+            if (_entities.TryGetValue(id, out var entity) && entity.Discovered)
+            {
+                entity.BodyRotations = rotations;
             }
         }
     }

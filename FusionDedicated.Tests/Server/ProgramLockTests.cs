@@ -104,4 +104,12 @@ public class ProgramLockTests
 
         Assert.Contains("SceneEntityLookup = server.SceneEntityOf,", world);
     }
+
+    [Fact]
+    public void Plugins_can_read_every_bodys_rotation()
+    {
+        string world = ProgramSource.Between("var pluginWorld = new PluginWorld", "var plugins = new PluginHost(");
+
+        Assert.Contains("BodyRotationsLookup = server.BodyRotationsOf,", world);
+    }
 }

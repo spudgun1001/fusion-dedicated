@@ -70,6 +70,7 @@ public sealed class LevelRig : IDisposable
             HeldLookup = server.HeldBy,
             SeatOfLookup = server.SeatOfPlayer,
             SceneEntityLookup = server.SceneEntityOf,
+            BodyRotationsLookup = server.BodyRotationsOf,
         };
 
         var actions = new ServerPluginActions(

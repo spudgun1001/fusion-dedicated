@@ -1300,6 +1300,30 @@ public static class FusionProtocol
         }
     }
 
+    /// <summary>Every body's rotation in an entity pose, in the order the client sent them, or null.</summary>
+    public static Quat[]? TryReadEntityBodyRotations(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+            if (reader.ReadByte() != TagEntityPoseUpdate) return null;
+            ReadRouteAndSender(ref reader);
+            reader.ReadInt32();
+            reader.ReadUInt16();
+            byte count = reader.ReadByte();
+            var rotations = new Quat[count];
+            for (int i = 0; i < count; i++)
+            {
+                rotations[i] = FusionRigPose.ReadBodyPose(ref reader).Rotation;
+            }
+            return rotations;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public sealed record ConnectionResponseInfo(
         ulong PlatformID,
         byte SmallID,
