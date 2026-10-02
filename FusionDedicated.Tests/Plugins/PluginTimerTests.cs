@@ -145,28 +145,31 @@ public class PluginTimerTests
         context.StopTimers();
     }
 
-    [Fact]
-    public void A_period_below_a_second_is_held_to_one()
+    private static int RunsIn(TimeSpan period, TimeSpan wait)
     {
-        // Nothing a plugin does on a repeat needs to run faster than this, and a
-        // plugin asking for milliseconds would be a busy loop on the server.
         var (context, _) = Build();
         int runs = 0;
-        using var ran = new ManualResetEventSlim();
-        var clock = System.Diagnostics.Stopwatch.StartNew();
 
-        context.Every(TimeSpan.FromMilliseconds(1), () =>
-        {
-            Interlocked.Increment(ref runs);
-            ran.Set();
-        });
-
-        Assert.True(ran.Wait(TimeSpan.FromSeconds(10)));
-        Thread.Sleep(TimeSpan.FromSeconds(0.5));
+        context.Every(period, () => Interlocked.Increment(ref runs));
+        Thread.Sleep(wait);
         context.StopTimers();
 
-        // At one a second it runs at most once per second waited, with room for
-        // rounding and a late callback. A 1 ms period would run hundreds of times.
-        Assert.InRange(Volatile.Read(ref runs), 1, (int)clock.Elapsed.TotalSeconds + 2);
+        return Volatile.Read(ref runs);
+    }
+
+    [Fact]
+    public void A_100_ms_period_runs_about_ten_times_a_second()
+    {
+        // A lockpick reads the player's hands this often. About 8 runs in 800 ms,
+        // with room for a slow machine.
+        Assert.InRange(RunsIn(TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(800)), 5, 10);
+    }
+
+    [Fact]
+    public void A_period_below_100_ms_is_held_to_100()
+    {
+        // A plugin asking for a few milliseconds would be a busy loop on the server.
+        Assert.InRange(RunsIn(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(800)), 0, 10);
+        Assert.InRange(RunsIn(TimeSpan.FromMilliseconds(1), TimeSpan.FromMilliseconds(800)), 0, 10);
     }
 }

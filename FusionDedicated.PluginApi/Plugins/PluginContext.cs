@@ -151,12 +151,12 @@ public sealed class PluginContext
     /// The timer is stopped when the plugin unloads, so nothing is left firing
     /// into an assembly that is no longer there.
     /// </summary>
-    /// <param name="period">How often, and how long before the first run.</param>
+    /// <param name="period">How often, and how long before the first run. Held to at least 100 ms.</param>
     public void Every(TimeSpan period, Action work)
     {
-        if (period < TimeSpan.FromSeconds(1))
+        if (period < TimeSpan.FromMilliseconds(100))
         {
-            period = TimeSpan.FromSeconds(1);
+            period = TimeSpan.FromMilliseconds(100);
         }
 
         var timer = new Timer(_ =>
