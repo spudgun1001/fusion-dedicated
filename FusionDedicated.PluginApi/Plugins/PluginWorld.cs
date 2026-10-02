@@ -80,6 +80,12 @@ public sealed class PluginWorld
     /// <summary>How the server finds each body's rotation of a level object. Null outside a server.</summary>
     public Func<ushort, IReadOnlyList<(float X, float Y, float Z, float W)>>? BodyRotationsLookup { get; set; }
 
+    /// <summary>How the server answers for the loaded level. Null outside a server.</summary>
+    public Func<string>? LevelLookup { get; set; }
+
+    /// <summary>The barcode of the level the server has loaded, "" when unknown.</summary>
+    public string Level => LevelLookup?.Invoke() ?? "";
+
     public PluginEntity? Find(ushort entityId) => Lookup?.Invoke(entityId);
 
     public PluginMotion? Motion(ushort entityId) => MotionLookup?.Invoke(entityId);

@@ -21,4 +21,22 @@ public class PluginWorldSceneTests
         Assert.Equal((ushort)700, world.SceneEntity(1234, 0));
         Assert.Null(world.SceneEntity(1234, 1));
     }
+
+    [Fact]
+    public void No_level_is_known_without_a_server()
+    {
+        Assert.Equal("", new PluginWorld().Level);
+    }
+
+    [Fact]
+    public void The_level_comes_from_the_server_lookup()
+    {
+        string level = "a.Level.One";
+        var world = new PluginWorld { LevelLookup = () => level };
+
+        Assert.Equal("a.Level.One", world.Level);
+
+        level = "a.Level.Two";
+        Assert.Equal("a.Level.Two", world.Level);
+    }
 }

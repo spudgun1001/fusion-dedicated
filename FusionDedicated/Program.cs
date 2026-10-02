@@ -318,6 +318,7 @@ public static class Program
             SeatOfLookup = server.SeatOfPlayer,
             SceneEntityLookup = server.SceneEntityOf,
             BodyRotationsLookup = server.BodyRotationsOf,
+            LevelLookup = () => server.Config.LevelBarcode,
         };
 
         var plugins = new PluginHost(

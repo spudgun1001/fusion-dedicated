@@ -112,4 +112,12 @@ public class ProgramLockTests
 
         Assert.Contains("BodyRotationsLookup = server.BodyRotationsOf,", world);
     }
+
+    [Fact]
+    public void Plugins_read_the_live_level()
+    {
+        string world = ProgramSource.Between("var pluginWorld = new PluginWorld", "var plugins = new PluginHost(");
+
+        Assert.Contains("LevelLookup = () => server.Config.LevelBarcode,", world);
+    }
 }
