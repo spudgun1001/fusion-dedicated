@@ -1,4 +1,5 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Plugins;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 
@@ -193,6 +194,62 @@ public class VoiceRelayTests
         scene.Talker.Send(Voice(scene.Talker));
 
         Assert.Equal(0, Heard(world, scene.Near));
+    }
+
+    private static PluginEvents Hooked(World world)
+    {
+        var events = new PluginEvents(new PluginHealth(), (_, _) => { });
+        world.Server.Plugins = events;
+        return events;
+    }
+
+    [Fact]
+    public void A_plugin_can_keep_a_voice_from_one_listener()
+    {
+        var scene = Build();
+        using var world = scene.World;
+        var events = Hooked(world);
+        var asked = new List<VoiceEvent>();
+        events.Voice.Subscribe("test", e =>
+        {
+            asked.Add(e);
+            return e.ListenerPlatformId == 76561198000000002 ? PluginVerdict.Refuse("wall") : PluginVerdict.Allow;
+        });
+
+        scene.Talker.Send(Voice(scene.Talker));
+
+        Assert.Equal(0, Heard(world, scene.Near));
+        var e = Assert.Single(asked);
+        Assert.Equal(200f, e.SpeakerX);
+        Assert.Equal(210f, e.ListenerX);
+        Assert.Equal(41f, e.Range);
+    }
+
+    [Fact]
+    public void A_proxy_talker_never_reaches_the_hook()
+    {
+        var scene = Build();
+        using var world = scene.World;
+        Hooked(world).Voice.Subscribe("test", _ => PluginVerdict.Refuse("wall"));
+
+        world.Server.BroadcastModule(VoiceProxyInput, ProxyInput(500, scene.Talker.SmallId, on: true));
+        world.Sync();
+        scene.Talker.Send(Voice(scene.Talker));
+
+        Assert.Equal(1, Heard(world, scene.Near));
+        Assert.Equal(1, Heard(world, scene.Far));
+    }
+
+    [Fact]
+    public void With_no_plugin_the_hook_is_not_asked()
+    {
+        var scene = Build();
+        using var world = scene.World;
+        Hooked(world);
+
+        scene.Talker.Send(Voice(scene.Talker));
+
+        Assert.Equal(1, Heard(world, scene.Near));
     }
 
     private static List<string> VoiceLines(World world)

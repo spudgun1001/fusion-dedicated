@@ -5424,11 +5424,22 @@ public sealed class FusionServer : IDisposable
         var stamped = ServerProtocol.StampSender(message, sender.SmallId);
         bool reliable = ServerProtocol.ReadRoute(message).Channel != 1;
         bool everywhere = _voiceProxies.Feeds(sender.SmallId);
+        var hook = Plugins?.Voice;
 
         foreach (var player in Players.Players)
         {
             if (player.SmallId == sender.SmallId
                 || !(everywhere || VoiceReach.Reaches(sender, player, Config.VoiceRelayRange)))
+            {
+                continue;
+            }
+
+            // Walls are a plugin's to judge; a proxy voice is meant to carry everywhere.
+            if (!everywhere && hook is { Count: > 0 } && sender.HasPosition && player.HasPosition
+                && !hook.Raise(new Plugins.VoiceEvent(sender.PlatformId, player.PlatformId,
+                    sender.LastPosition.X, sender.LastPosition.Y, sender.LastPosition.Z,
+                    player.LastPosition.X, player.LastPosition.Y, player.LastPosition.Z,
+                    VoiceReach.ReachOf(sender, Config.VoiceRelayRange))).Allowed)
             {
                 continue;
             }

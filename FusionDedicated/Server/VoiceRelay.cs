@@ -18,13 +18,17 @@ public static class VoiceReach
             return true;
         }
 
-        float scale = AvatarStatsCheck.HeightOf(talker.AvatarStats) / AvatarStatsCheck.CalibrationHeight;
-        float reach = scale > 1f ? range * MathF.Sqrt(scale) : range;
-
         var a = talker.LastPosition;
         var b = listener.LastPosition;
 
-        return new Vec3(a.X - b.X, a.Y - b.Y, a.Z - b.Z).Magnitude <= reach;
+        return new Vec3(a.X - b.X, a.Y - b.Y, a.Z - b.Z).Magnitude <= ReachOf(talker, range);
+    }
+
+    /// <summary>How far this talker carries: a taller avatar further, as Fusion plays it.</summary>
+    public static float ReachOf(ConnectedPlayer talker, float range)
+    {
+        float scale = AvatarStatsCheck.HeightOf(talker.AvatarStats) / AvatarStatsCheck.CalibrationHeight;
+        return scale > 1f ? range * MathF.Sqrt(scale) : range;
     }
 }
 

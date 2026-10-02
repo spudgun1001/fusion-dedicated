@@ -35,6 +35,13 @@ public readonly record struct SeatEvent(
     ulong PlatformId, byte SmallId, string Name, PermissionLevel Rank,
     ushort EntityId, string Barcode, byte SeatIndex, bool Ingress);
 
+/// <summary>A voice about to reach one listener, from where each pelvis was last seen. Range is how far the server carries this talker.</summary>
+public readonly record struct VoiceEvent(
+    ulong SpeakerPlatformId, ulong ListenerPlatformId,
+    float SpeakerX, float SpeakerY, float SpeakerZ,
+    float ListenerX, float ListenerY, float ListenerZ,
+    float Range);
+
 /// <summary>
 /// Everything a plugin can watch. Each is a channel of its own, so subscribing to
 /// one costs nothing on the others, and every one can refuse except those that
@@ -56,6 +63,7 @@ public sealed class PluginEvents
         Moderation = new EventChannel<ModerationEvent>(health, log);
         Ownership = new EventChannel<OwnershipEvent>(health, log);
         Seat = new EventChannel<SeatEvent>(health, log);
+        Voice = new EventChannel<VoiceEvent>(health, log);
     }
 
     public EventChannel<SpawnEvent> Spawn { get; }
@@ -80,6 +88,9 @@ public sealed class PluginEvents
     /// <summary>Raised for live seats only. Refusing an ingress stands the rider up, and refusing an egress does nothing.</summary>
     public EventChannel<SeatEvent> Seat { get; }
 
+    /// <summary>A voice on its way to a listener. Refusing keeps it from them. Radio, phone and megaphone voices never come here.</summary>
+    public EventChannel<VoiceEvent> Voice { get; }
+
     /// <summary>Detaches a plugin from everything, so unloading leaves nothing behind.</summary>
     public void RemoveAll(string plugin)
     {
@@ -95,5 +106,6 @@ public sealed class PluginEvents
         Moderation.RemoveAll(plugin);
         Ownership.RemoveAll(plugin);
         Seat.RemoveAll(plugin);
+        Voice.RemoveAll(plugin);
     }
 }
