@@ -75,4 +75,24 @@ public class JoinAvatarGateTests
 
         Assert.NotNull(world.Server.Players.GetByPlatformId(KanzaId));
     }
+
+    [Fact]
+    public void A_join_with_a_null_barcode_is_announced_with_an_empty_one()
+    {
+        using var world = new World(new ServerConfig { CullOrphanedEntities = false });
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+
+        var connection = AskWearing(world, KanzaId, "Kanza", null!);
+
+        // Length 0 on the wire, never -1, which a client reads back as null.
+        var barcodes = new[] { connection, joel.Connection }
+            .SelectMany(world.Transport.SentTo)
+            .Select(sent => FusionProtocol.TryReadConnectionResponse(sent.Message))
+            .Where(response => response?.PlatformID == KanzaId)
+            .Select(response => response!.AvatarBarcode)
+            .ToList();
+
+        Assert.Equal(new string?[] { "", "" }, barcodes);
+    }
 }

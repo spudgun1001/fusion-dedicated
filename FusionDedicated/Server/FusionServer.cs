@@ -1210,7 +1210,7 @@ public sealed class FusionServer : IDisposable
         var joinRank = Ranks?.Get(platformId) ?? Config.GetPermission(platformId);
 
         // Everybody here loads the avatar a player joins in, so it gets the same checks as a swap.
-        string joinAvatar = request.AvatarBarcode ?? "";
+        string joinAvatar = request.AvatarBarcode;
         var avatarBlock = _blocklist.Check(joinAvatar, joinRank);
         var pluginAvatar = avatarBlock.Blocked
             ? null
