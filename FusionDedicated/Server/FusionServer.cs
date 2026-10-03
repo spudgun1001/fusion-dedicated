@@ -583,8 +583,16 @@ public sealed class FusionServer : IDisposable
             }
 
             _carriedBy[id] = leaver.PlatformId;
-            bool gone = Entities.Remove(id, FusionDedicated.Plugins.RemovalReason.Left);
-            _carriedBy.TryRemove(id, out _);
+            bool gone;
+
+            try
+            {
+                gone = Entities.Remove(id, FusionDedicated.Plugins.RemovalReason.Left);
+            }
+            finally
+            {
+                _carriedBy.TryRemove(id, out _);
+            }
 
             if (!gone)
             {

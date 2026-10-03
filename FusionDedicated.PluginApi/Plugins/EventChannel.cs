@@ -2,8 +2,9 @@ namespace FusionDedicated.Plugins;
 
 /// <summary>
 /// One event that plugins can watch and refuse. Handlers run in the order they
-/// subscribed and the first refusal ends it, so a refusal costs nothing after the
-/// plugin that made it and the log names one plugin rather than several.
+/// subscribed and in Raise the first refusal ends it, so a refusal costs nothing after the
+/// plugin that made it and the log names one plugin rather than several. Notify is
+/// for news that cannot be refused, and reaches every subscriber.
 ///
 /// A handler that throws allows the event. Refusing on a crash would be
 /// indistinguishable from the server itself blocking everything, which is the
