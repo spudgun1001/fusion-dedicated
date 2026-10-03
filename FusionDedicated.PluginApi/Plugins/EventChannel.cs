@@ -47,7 +47,12 @@ public sealed class EventChannel<T>
         }
     }
 
-    public PluginVerdict Raise(T payload)
+    public PluginVerdict Raise(T payload) => Run(payload, stopAtRefusal: true);
+
+    /// <summary>For news of something already done: every handler hears it, whatever the ones before it said.</summary>
+    public void Notify(T payload) => Run(payload, stopAtRefusal: false);
+
+    private PluginVerdict Run(T payload, bool stopAtRefusal)
     {
         List<Subscription> current;
 
@@ -84,7 +89,7 @@ public sealed class EventChannel<T>
                 continue;
             }
 
-            if (!verdict.Allowed)
+            if (stopAtRefusal && !verdict.Allowed)
             {
                 return verdict;
             }

@@ -51,6 +51,20 @@ public class EventChannelTests
     }
 
     [Fact]
+    public void Notify_reaches_every_handler_whatever_the_first_says()
+    {
+        var channel = Channel();
+        var reached = false;
+
+        channel.Subscribe("first", _ => PluginVerdict.Refuse("no"));
+        channel.Subscribe("second", _ => { reached = true; return PluginVerdict.Allow; });
+
+        channel.Notify("anything");
+
+        Assert.True(reached);
+    }
+
+    [Fact]
     public void Handlers_run_in_the_order_they_were_added()
     {
         var channel = Channel();

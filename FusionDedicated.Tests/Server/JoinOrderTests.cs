@@ -39,7 +39,7 @@ public class JoinOrderTests
         string join = JoinHandshake();
 
         int added = join.IndexOf("Players.Add(player)", StringComparison.Ordinal);
-        int raised = join.IndexOf("Plugins?.Joined.Raise", StringComparison.Ordinal);
+        int raised = join.IndexOf("Plugins?.Joined.Notify", StringComparison.Ordinal);
 
         Assert.True(added > 0, "the player is no longer added here");
         Assert.True(raised > 0, "the joined event is no longer raised here");
@@ -56,7 +56,7 @@ public class JoinOrderTests
         string join = JoinHandshake();
 
         int response = join.IndexOf("WriteConnectionResponse", StringComparison.Ordinal);
-        int raised = join.IndexOf("Plugins?.Joined.Raise", StringComparison.Ordinal);
+        int raised = join.IndexOf("Plugins?.Joined.Notify", StringComparison.Ordinal);
 
         Assert.True(raised > response);
     }

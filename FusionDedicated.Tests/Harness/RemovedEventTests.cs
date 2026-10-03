@@ -50,5 +50,29 @@ public class RemovedEventTests
         var gone = Assert.Single(heard, e => e.EntityId == Holstered);
         Assert.Equal(RemovalReason.Left, gone.Reason);
         Assert.Equal("Pack.Spawnable.Pistol", gone.Barcode);
+        Assert.Equal(JoelId, gone.OwnerPlatformId);
+    }
+
+    [Fact]
+    public void A_refusing_plugin_does_not_hide_news_from_the_next()
+    {
+        using var world = new World();
+        var events = new PluginEvents(new PluginHealth(), (_, _) => { });
+        var heard = new List<string>();
+        events.Joined.Subscribe("grump", _ => PluginVerdict.Refuse("no"));
+        events.Removed.Subscribe("grump", _ => PluginVerdict.Refuse("no"));
+        events.Left.Subscribe("grump", _ => PluginVerdict.Refuse("no"));
+        events.Joined.Subscribe("watcher", _ => { heard.Add("joined"); return PluginVerdict.Allow; });
+        events.Removed.Subscribe("watcher", _ => { heard.Add("removed"); return PluginVerdict.Allow; });
+        events.Left.Subscribe("watcher", _ => { heard.Add("left"); return PluginVerdict.Allow; });
+        world.Server.Plugins = events;
+
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+        world.Spawn(joel, 400, "Pack.Spawnable.Crate", 0, 0, 0);
+        world.Server.RemoveEntity(400);
+        world.Leave(joel, "left");
+
+        Assert.Equal(new[] { "joined", "removed", "left" }, heard);
     }
 }

@@ -126,9 +126,10 @@ public sealed class FusionServer : IDisposable
         Entities.Removed += NoteRemovedThisLevel;
 
         // Plugins hear what left, who owned it and why, for refunds and records of their own.
-        Entities.RemovedWith += (entity, reason) => Plugins?.Removed.Raise(new Plugins.RemovedEvent(
+        Entities.RemovedWith += (entity, reason) => Plugins?.Removed.Notify(new Plugins.RemovedEvent(
             entity.Id, entity.Barcode,
-            entity.OwnerSmallId is { } small ? Players.Get(small)?.PlatformId ?? 0UL : 0UL,
+            _carriedBy.TryGetValue(entity.Id, out ulong leaver) ? leaver
+                : entity.OwnerSmallId is { } small ? Players.Get(small)?.PlatformId ?? 0UL : 0UL,
             reason));
 
         _catchup = new CatchupOutbox(() => Config.CatchupMessagesPerSecond, () => Clock(),
@@ -406,7 +407,7 @@ public sealed class FusionServer : IDisposable
 
         _outbound.Forget(player.Connection.m_HSteamNetConnection);
 
-        Plugins?.Left.Raise(new Plugins.LeaveEvent(player.PlatformId, player.DisplayName));
+        Plugins?.Left.Notify(new Plugins.LeaveEvent(player.PlatformId, player.DisplayName));
 
         NoteDeparture(player.DisplayName, reason);
 
@@ -576,7 +577,16 @@ public sealed class FusionServer : IDisposable
 
         foreach (ushort id in guns.Concat(magazines))
         {
-            if (Entities.Get(id) is not { Removable: true } entity || !Entities.Remove(id, FusionDedicated.Plugins.RemovalReason.Left))
+            if (Entities.Get(id) is not { Removable: true } entity)
+            {
+                continue;
+            }
+
+            _carriedBy[id] = leaver.PlatformId;
+            bool gone = Entities.Remove(id, FusionDedicated.Plugins.RemovalReason.Left);
+            _carriedBy.TryRemove(id, out _);
+
+            if (!gone)
             {
                 continue;
             }
@@ -1350,7 +1360,7 @@ public sealed class FusionServer : IDisposable
         // LabRP's balance is sent that way, so a joining player was the one
         // person who never received it and their wrist HUD stayed empty until
         // somebody else joined behind them.
-        Plugins?.Joined.Raise(new Plugins.JoinEvent(
+        Plugins?.Joined.Notify(new Plugins.JoinEvent(
             platformId, player.DisplayName, player.Permission));
     }
 
@@ -2359,6 +2369,9 @@ public sealed class FusionServer : IDisposable
     /// spawns the item anyway once the download ends.
     /// </summary>
     private readonly RecentRemovals _removedThisLevel;
+
+    /// <summary>The leaver behind each prop DespawnCarried is removing, as they are already out of Players.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ushort, ulong> _carriedBy = new();
 
     /// <summary>Live ids the server learned of as level objects, with no barcode. Locked, as removals come from any thread.</summary>
     private readonly HashSet<ushort> _scenePropIds = new();

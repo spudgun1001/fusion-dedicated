@@ -575,8 +575,9 @@ public sealed class EntityRegistry
             return false;
         }
 
-        Removed?.Invoke(id);
+        // Plugins first, so a listener that removes a partner cannot make them hear it out of order.
         RemovedWith?.Invoke(gone, reason);
+        Removed?.Invoke(id);
 
         return true;
     }
@@ -585,8 +586,8 @@ public sealed class EntityRegistry
     {
         foreach (var entity in removed)
         {
-            Removed?.Invoke(entity.Id);
             RemovedWith?.Invoke(entity, reason);
+            Removed?.Invoke(entity.Id);
         }
     }
 

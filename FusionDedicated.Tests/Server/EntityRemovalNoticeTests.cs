@@ -164,6 +164,19 @@ public class EntityRemovalNoticeTests
     }
 
     [Fact]
+    public void Plugins_hear_a_prop_before_whatever_its_removal_takes_with_it()
+    {
+        var (registry, _) = Abandoned(2);
+        var why = Reasons(registry);
+        ushort partner = EntityRegistry.FirstEntityId + 1;
+        registry.Removed += id => registry.Remove(partner);
+
+        registry.Remove(EntityRegistry.FirstEntityId);
+
+        Assert.Equal(new[] { EntityRegistry.FirstEntityId, partner }, why.Select(w => w.Id));
+    }
+
+    [Fact]
     public void Clear_all_is_a_despawn()
     {
         var (registry, _) = Abandoned(2);
