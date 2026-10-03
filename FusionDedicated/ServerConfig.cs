@@ -501,7 +501,7 @@ public sealed class ServerConfig
     public byte DriverSeatIndex { get; set; } = 0;
 
     /// <summary>Catch-up messages sent to one joining player a second. Zero means no pacing.</summary>
-    public int CatchupMessagesPerSecond { get; set; } = 100;
+    public int CatchupMessagesPerSecond { get; set; } = 250;
 
     /// <summary>
     /// Reliable messages held for one player when Steam refuses a send, so an ownership answer or a

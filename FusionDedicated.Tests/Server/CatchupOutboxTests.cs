@@ -45,8 +45,8 @@ public class CatchupOutboxTests
     private void Wait(double seconds) => _now += TimeSpan.FromSeconds(seconds);
 
     [Fact]
-    public void The_default_is_a_hundred_a_second()
-        => Assert.Equal(100, new ServerConfig().CatchupMessagesPerSecond);
+    public void The_default_is_the_rpc_allowance()
+        => Assert.Equal(new ServerConfig().RpcMessagesPerSecond, new ServerConfig().CatchupMessagesPerSecond);
 
     [Fact]
     public void A_burst_up_to_the_allowance_goes_out_at_once()

@@ -522,13 +522,13 @@ position for yet, and anybody loading. Set it to 0 to send every voice to everyo
 a minute the log file names the five players who sent the most voice, over 10 KB each, as
 `Voice by sender in the last minute: ...`, so an open mic shows up.
 
-`CatchupMessagesPerSecond` (100) caps how many catch-up messages a player is sent each
+`CatchupMessagesPerSecond` (250) caps how many catch-up messages a player is sent each
 second: the props, scene objects and constraints already in the world when they join,
 the holsters and magazines after that, and the level's variables once they finish
-loading. The first 100 go out at once and the rest follow at about 100 a second, so
-900 level variables take about 8 seconds and a full world at the entity and variable
-caps takes about 20. Raise it if joins to a quiet server feel slow, or set it to 0 to
-send everything at once. It applies whether or not `AntiSpamEnabled` is on.
+loading. The first 250 go out at once and the rest follow at about 250 a second, so
+2,500 level variables take about 9 seconds. The server holds up to 16,384 level
+variables, which at this pace take about a minute. Raise it if joins to a quiet server
+feel slow, or set it to 0 to send everything at once. It applies whether or not `AntiSpamEnabled` is on.
 
 Across one night of testing (140 joins, peaks of 8–12 players) the guard removed
 3,254 props and kicked 4 people.
@@ -674,7 +674,7 @@ gitignored.
 | `FlightStrikesBeforeKick` | flights inside the window before a kick (3 by default, 0 only logs) |
 | `FlightStrikeWindowSeconds` | how long a flight counts against a player (60 by default) |
 | `FlightExemptLevel` | rank never checked for flying (`Operator` by default) |
-| `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (100 by default, 0 sends everything at once) |
+| `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (250 by default, 0 sends everything at once) |
 | `SendRetryQueue` | reliable messages held for one player when Steam refuses a send (256 by default, 0 drops a refused send) |
 | `CongestedPendingBytes` | bytes Steam still has unsent for a player, at or above which they are sent no poses (131072 by default, 0 sends poses whatever is waiting) |
 | `SendRateMin` / `SendRateMax` | bytes a second Steam sends to each player, keep them equal (1048576 by default, 0 keeps Steam's 256 KB) |
