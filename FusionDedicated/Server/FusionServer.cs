@@ -5175,6 +5175,7 @@ public sealed class FusionServer : IDisposable
 
         sender.LastPosition = pose.Value.Pose.PelvisPosition;
         sender.HasPosition = true;
+        sender.LastVelocity = pose.Value.Pose.PelvisVelocity;
 
         CheckForFlight(sender);
 

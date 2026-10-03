@@ -12,5 +12,8 @@ public static class PluginPlayers
             Y = player.LastPosition.Y,
             Z = player.LastPosition.Z,
             HasPosition = player.HasPosition,
+            VelocityX = player.LastVelocity.X,
+            VelocityY = player.LastVelocity.Y,
+            VelocityZ = player.LastVelocity.Z,
         };
 }

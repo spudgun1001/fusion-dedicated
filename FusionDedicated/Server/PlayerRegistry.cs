@@ -194,6 +194,9 @@ public sealed class ConnectedPlayer
 
     public bool HasPosition { get; set; }
 
+    /// <summary>Last pelvis velocity this player reported.</summary>
+    public Vec3 LastVelocity { get; set; } = Vec3.Zero;
+
     public long BytesIn { get; set; }
     public long BytesOut { get; set; }
 

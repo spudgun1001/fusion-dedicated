@@ -1,6 +1,7 @@
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Plugins;
 using FusionDedicated.Server;
+using FusionDedicated.Tests.Harness;
 using Steamworks;
 
 namespace FusionDedicated.Tests.Plugins;
@@ -29,6 +30,36 @@ public class PluginPlayerSnapshotTests
         Assert.Equal(1f, seen.X);
         Assert.Equal(2f, seen.Y);
         Assert.Equal(3f, seen.Z);
+    }
+
+    [Fact]
+    public void A_player_is_given_to_plugins_moving_as_fast_as_they_last_were()
+    {
+        var player = Player();
+        player.LastVelocity = new Vec3(4f, 5f, 6f);
+
+        var seen = PluginPlayers.Snapshot(player);
+
+        Assert.Equal(4f, seen.VelocityX);
+        Assert.Equal(5f, seen.VelocityY);
+        Assert.Equal(6f, seen.VelocityZ);
+    }
+
+    [Fact]
+    public void A_fast_pose_shows_up_as_velocity_on_the_plugin_player()
+    {
+        using var world = new World();
+        var joel = world.Join(76561198000000001, "Joel");
+        joel.FinishLoading();
+
+        joel.Send(FusionProtocol.BuildPlayerPoseUpdate(joel.SmallId,
+            new FusionRigPose { PelvisVelocity = new Vec3(40f, 0f, 0f) }));
+
+        var seen = PluginPlayers.Snapshot(world.Server.Players.Get(joel.SmallId)!);
+
+        Assert.Equal(40f, seen.VelocityX, 0.01f);
+        Assert.Equal(0f, seen.VelocityY, 0.01f);
+        Assert.Equal(0f, seen.VelocityZ, 0.01f);
     }
 
     [Fact]

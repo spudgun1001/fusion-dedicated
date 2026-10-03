@@ -18,4 +18,11 @@ public readonly record struct PluginPlayer(
 
     /// <summary>False until their first pose arrives, when the position is just zero.</summary>
     public bool HasPosition { get; init; }
+
+    /// <summary>How fast their pelvis was moving, in metres per second, from the same pose.</summary>
+    public float VelocityX { get; init; }
+
+    public float VelocityY { get; init; }
+
+    public float VelocityZ { get; init; }
 }
