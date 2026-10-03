@@ -100,7 +100,7 @@ public class RpcVariableCacheTests
             Hold(cache, EntityPath((ushort)(EntityRegistry.FirstEntityId + i), 6));
         }
 
-        var extra = EntityPath(9000, 6);
+        var extra = EntityPath((ushort)(EntityRegistry.FirstEntityId + RpcVariableCache.MaxVariables), 6);
         Assert.False(cache.Set(RpcBool, 1, Body(extra, 1), extra));
 
         cache.ForgetEntity(EntityRegistry.FirstEntityId);

@@ -242,8 +242,8 @@ public class LoadSimulationTests
 
         _out.WriteLine($"cache holds {rig.Server.CachedRpcVariables} of {RpcVariableCache.MaxVariables}");
 
-        // The cache fills long before the level has finished writing.
-        Assert.Equal(RpcVariableCache.MaxVariables, rig.Server.CachedRpcVariables);
+        // Every one is held, so a late joiner is told all of them.
+        Assert.Equal(EvoCityLevelVariables, rig.Server.CachedRpcVariables);
     }
 
     [Fact]

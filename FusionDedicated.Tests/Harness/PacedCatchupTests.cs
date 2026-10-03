@@ -111,6 +111,34 @@ public class PacedCatchupTests
     }
 
     [Fact]
+    public void A_level_with_more_than_2048_written_variables_replays_them_all_at_the_pace()
+    {
+        using var world = new World(new ServerConfig { CullOrphanedEntities = false, CatchupMessagesPerSecond = 250 });
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+
+        for (uint i = 0; i < 3000; i++)
+        {
+            world.Server.SendRpc(RpcKind.Bool, LevelRpc.Path(LevelRpc.Hash(0x200000 + i), 0), RpcValue.OfBool(true), null);
+        }
+
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+        Assert.Equal(250, RpcsTo(world, late));
+
+        world.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(500, RpcsTo(world, late));
+
+        for (int second = 0; second < 11; second++)
+        {
+            world.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.Equal(3000, RpcsTo(world, late));
+        Assert.Contains(world.Server.RecentLog(), e => e.Message == "Late finished loading, sent 3000 level variables");
+    }
+
+    [Fact]
     public void Cull_flags_sent_after_loading_are_paced_and_all_arrive()
     {
         using var world = new World(new ServerConfig { CullOrphanedEntities = false, CatchupMessagesPerSecond = 1 });

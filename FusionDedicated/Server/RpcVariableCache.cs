@@ -13,8 +13,9 @@ public sealed class RpcVariableCache
     /// <summary>
     /// The most to hold. Everything here comes from what clients sent, so without a
     /// ceiling one player could make every future join carry whatever they liked.
+    /// Southside has about 14,100 RPC variables and EvoCity about 14,600.
     /// </summary>
-    public const int MaxVariables = 2048;
+    public const int MaxVariables = 16_384;
 
     private readonly Dictionary<(byte Tag, string Key), (byte From, byte[] Body, bool Stale, byte[] Path)> _values = new();
 
