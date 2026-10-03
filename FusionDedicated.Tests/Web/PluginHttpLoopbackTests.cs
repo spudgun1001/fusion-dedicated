@@ -46,7 +46,7 @@ public class PluginHttpLoopbackTests
     private static string Auth => Convert.ToBase64String(Encoding.ASCII.GetBytes("admin:" + Password));
 
     [Fact]
-    public void A_stalled_body_is_dropped_and_the_next_request_is_answered()
+    public async Task A_stalled_body_is_dropped_and_the_next_request_is_answered()
     {
         var config = new ServerConfig { CullOrphanedEntities = false, DashboardHost = "localhost", DashboardPassword = Password };
         using var world = new World(config);
@@ -99,11 +99,11 @@ public class PluginHttpLoopbackTests
             client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Auth);
             client.Timeout = TimeSpan.FromSeconds(5);
 
-            var reply = client.PostAsync($"http://localhost:{port}/api/plugins/http/discord/me",
-                new StringContent("{\"a\":\"b\"}", Encoding.UTF8, "application/json")).GetAwaiter().GetResult();
+            var reply = await client.PostAsync($"http://localhost:{port}/api/plugins/http/discord/me",
+                new StringContent("{\"a\":\"b\"}", Encoding.UTF8, "application/json"));
 
             Assert.Equal(HttpStatusCode.OK, reply.StatusCode);
-            Assert.Contains("\\u0022a\\u0022", reply.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+            Assert.Contains("\\u0022a\\u0022", await reply.Content.ReadAsStringAsync());
         }
         finally
         {
