@@ -1,6 +1,7 @@
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server;
+using FusionDedicated.Tests.Protocol;
 
 namespace FusionDedicated.Tests.Harness;
 
@@ -40,6 +41,54 @@ public class LevelPropCapTests
         Pose(kanza, 503);
 
         Assert.Equal((byte?)kanza.SmallId, world.Server.Entities.Get(503)!.OwnerSmallId);
+    }
+
+    /// <summary>Networks a level object the way a first grab or sit does.</summary>
+    private static void Unqueue(FakePlayer player, ushort queuedId)
+    {
+        var data = new OracleWriter();
+        data.Write(player.SmallId);
+        data.Write(queuedId);
+
+        var message = new OracleWriter();
+        message.Write(FusionProtocol.TagEntityUnqueueRequest);
+        message.Write((byte)1);         // ToServer
+        message.Write((byte)0);         // Reliable
+        message.Write((byte?)player.SmallId);
+        message.Write(data.ToArray());
+
+        player.Send(message.ToArray());
+    }
+
+    [Fact]
+    public void A_level_seat_somebody_sat_in_does_not_count_toward_their_limit()
+    {
+        using var world = LimitOfTwo();
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+
+        Unqueue(joel, 1);
+        ushort seat = world.Server.Entities.Entities.Single(e => e.Discovered).Id;
+        joel.Send(FusionProtocol.BuildSeat(joel.SmallId, seat, 0, true));
+
+        Unqueue(joel, 2);
+        Unqueue(joel, 3);
+
+        Assert.Equal(3, world.Server.Entities.Entities.Count(e => e.Discovered));
+    }
+
+    [Fact]
+    public void Level_props_nobody_sat_in_still_count_toward_the_limit()
+    {
+        using var world = LimitOfTwo();
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+
+        Unqueue(joel, 1);
+        Unqueue(joel, 2);
+        Unqueue(joel, 3);
+
+        Assert.Equal(2, world.Server.Entities.Entities.Count(e => e.Discovered));
     }
 
     [Fact]

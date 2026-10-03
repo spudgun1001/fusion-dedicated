@@ -1,4 +1,5 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Protocol;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Harness;
@@ -199,6 +200,22 @@ public class LeaveHandoffTests
 
         Assert.NotNull(world.Server.Entities.Get(Turret));
         Assert.True(holder.View.Entities.ContainsKey(Turret));
+    }
+
+    [Fact]
+    public void A_seated_player_leaving_is_stood_up_for_everybody_else_before_they_go()
+    {
+        var (world, _, holder, rider) = BusyLeaver();
+        using var _w = world;
+        int before = world.Transport.SentTo(holder.Connection).Count;
+
+        world.Leave(rider, "left");
+
+        var toHolder = world.Transport.SentTo(holder.Connection).Skip(before).Select(s => s.Message).ToList();
+        int egress = toHolder.FindIndex(m => m.SequenceEqual(FusionProtocol.BuildSeat(rider.SmallId, Van, 1, false)));
+        int gone = toHolder.FindIndex(m => m.SequenceEqual(ServerProtocol.WriteDisconnect(76561198000000003, "Player left")));
+
+        Assert.InRange(egress, 0, gone - 1);
     }
 
     [Fact]

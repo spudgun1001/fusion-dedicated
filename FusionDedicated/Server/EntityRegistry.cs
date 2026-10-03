@@ -110,6 +110,9 @@ public sealed class TrackedEntity
     /// </summary>
     public bool Occupied { get; set; }
 
+    /// <summary>Somebody has sat in it, so a level seat never counts against the sitter's level prop limit.</summary>
+    public bool SatIn { get; set; }
+
     /// <summary>
     /// Fusion's EntitySource, as the spawn carried it. Repeated to a newcomer so
     /// their copy agrees with everybody else's about what the thing is.
@@ -260,12 +263,12 @@ public sealed class EntityRegistry
         }
     }
 
-    /// <summary>How many discovered entities this player owns, unqueued ones included.</summary>
+    /// <summary>How many discovered entities this player owns, unqueued ones included and seats left out.</summary>
     public int DiscoveredOwnedBy(byte smallId)
     {
         lock (_lock)
         {
-            return _entities.Values.Count(e => e.OwnerSmallId == smallId && e.Discovered);
+            return _entities.Values.Count(e => e.OwnerSmallId == smallId && e.Discovered && !e.SatIn);
         }
     }
 

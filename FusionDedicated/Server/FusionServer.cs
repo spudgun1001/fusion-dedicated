@@ -424,6 +424,15 @@ public sealed class FusionServer : IDisposable
         _confirmations.ForgetPlayer(player.SmallId);
         _holdAnswers.ForgetPlayer(player.SmallId);
         _catchup.Forget(player.SmallId);
+
+        // Fusion sends no egress for a leaver, so the others would see them frozen in the seat.
+        // Sent before the disconnect, while their clients still know who the rider is.
+        if (_seats.SeatOf(player.SmallId) is { } seat)
+        {
+            Broadcast(FusionProtocol.BuildSeat(player.SmallId, seat.EntityId, seat.Index, ingress: false),
+                reliable: true, except: player.SmallId);
+        }
+
         SeatForgetRider(player.SmallId);
         _seatRefusals.ForgetRider(player.SmallId);
 
@@ -5085,6 +5094,11 @@ public sealed class FusionServer : IDisposable
 
             _seats.Ingress(rider, entityId, index, now);
             _everSeated.Add(entityId);
+
+            if (Entities.Get(entityId) is { } entity)
+            {
+                entity.SatIn = true;
+            }
 
             SyncOccupied(before);
             SyncOccupied(entityId);
