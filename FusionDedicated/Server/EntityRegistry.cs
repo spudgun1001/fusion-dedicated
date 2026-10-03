@@ -1,4 +1,5 @@
 using BonelabServerBrowser.Fusion;
+using FusionDedicated.Plugins;
 
 namespace FusionDedicated.Server;
 
@@ -280,6 +281,9 @@ public sealed class EntityRegistry
     /// </summary>
     public event Action<ushort>? Removed;
 
+    /// <summary>The same news with the prop as it was and why it went, for plugins.</summary>
+    public event Action<TrackedEntity, RemovalReason>? RemovedWith;
+
     /// <summary>
     /// The most entities to hold, or zero for no limit. Only consulted where an
     /// entity would be created from something a client sent unprompted.
@@ -557,28 +561,32 @@ public sealed class EntityRegistry
         return PoseNoted.Discovered;
     }
 
-    public bool Remove(ushort id)
+    public bool Remove(ushort id, RemovalReason reason = RemovalReason.Despawned)
     {
-        bool removed;
+        TrackedEntity? gone;
 
         lock (_lock)
         {
-            removed = _entities.Remove(id);
+            _entities.Remove(id, out gone);
         }
 
-        if (removed)
+        if (gone == null)
         {
-            Removed?.Invoke(id);
+            return false;
         }
 
-        return removed;
+        Removed?.Invoke(id);
+        RemovedWith?.Invoke(gone, reason);
+
+        return true;
     }
 
-    private void Announce(List<ushort> removed)
+    private void Announce(List<TrackedEntity> removed, RemovalReason reason)
     {
-        foreach (ushort id in removed)
+        foreach (var entity in removed)
         {
-            Removed?.Invoke(id);
+            Removed?.Invoke(entity.Id);
+            RemovedWith?.Invoke(entity, reason);
         }
     }
 
@@ -624,7 +632,7 @@ public sealed class EntityRegistry
     /// </summary>
     public List<ushort> CullOrphans(TimeSpan olderThan)
     {
-        var removed = new List<ushort>();
+        var removed = new List<TrackedEntity>();
         var cutoff = Clock() - olderThan;
 
         lock (_lock)
@@ -635,13 +643,13 @@ public sealed class EntityRegistry
                 .ToList())
             {
                 _entities.Remove(entity.Id);
-                removed.Add(entity.Id);
+                removed.Add(entity);
             }
         }
 
-        Announce(removed);
+        Announce(removed, RemovalReason.Cleanup);
 
-        return removed;
+        return removed.Select(e => e.Id).ToList();
     }
 
     /// <summary>
@@ -776,7 +784,7 @@ public sealed class EntityRegistry
             }
         }
 
-        Announce(removed.Select(e => e.Id).ToList());
+        Announce(removed, RemovalReason.Cleanup);
 
         return removed;
     }
@@ -804,12 +812,12 @@ public sealed class EntityRegistry
     public List<ushort> EvictOldest(int count, bool anyOwner = false, TimeSpan idleFor = default,
         IReadOnlySet<ushort>? inUse = null)
     {
-        var removed = new List<ushort>();
         var cutoff = Clock() - (idleFor == default ? TimeSpan.FromMinutes(2) : idleFor);
+        List<TrackedEntity> candidates;
 
         lock (_lock)
         {
-            var candidates = _entities.Values
+            candidates = _entities.Values
                 // Discovered ones came with the level and synthetic ones are not
                 // spawnables, so despawning either tells clients about something
                 // they cannot act on. That held on the last resort pass and not
@@ -833,13 +841,12 @@ public sealed class EntityRegistry
             foreach (var entity in candidates)
             {
                 _entities.Remove(entity.Id);
-                removed.Add(entity.Id);
             }
         }
 
-        Announce(removed);
+        Announce(candidates, RemovalReason.Cleanup);
 
-        return removed;
+        return candidates.Select(e => e.Id).ToList();
     }
 
     /// <summary>
@@ -854,22 +861,22 @@ public sealed class EntityRegistry
     /// </summary>
     public List<ushort> Forget()
     {
-        List<ushort> removed;
+        List<TrackedEntity> removed;
 
         lock (_lock)
         {
-            removed = _entities.Keys.ToList();
+            removed = _entities.Values.ToList();
             _entities.Clear();
         }
 
-        Announce(removed);
+        Announce(removed, RemovalReason.Cleanup);
 
-        return removed;
+        return removed.Select(e => e.Id).ToList();
     }
 
     public List<ushort> Clear(bool includeDiscovered = false)
     {
-        List<ushort> removed;
+        List<TrackedEntity> removed;
 
         lock (_lock)
         {
@@ -879,17 +886,16 @@ public sealed class EntityRegistry
                 // A constraint end stays until the server drops its constraint: when what
                 // it holds goes, one of its ends goes missing, or it is cleared.
                 .Where(e => e.Removable && !e.Synthetic && (includeDiscovered || !e.Discovered))
-                .Select(e => e.Id)
                 .ToList();
 
-            foreach (ushort id in removed)
+            foreach (var entity in removed)
             {
-                _entities.Remove(id);
+                _entities.Remove(entity.Id);
             }
         }
 
-        Announce(removed);
+        Announce(removed, RemovalReason.Despawned);
 
-        return removed;
+        return removed.Select(e => e.Id).ToList();
     }
 }

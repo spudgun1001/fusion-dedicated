@@ -125,6 +125,12 @@ public sealed class FusionServer : IDisposable
         _removedThisLevel = new RecentRemovals(() => Clock(), TimeSpan.FromMinutes(30));
         Entities.Removed += NoteRemovedThisLevel;
 
+        // Plugins hear what left, who owned it and why, for refunds and records of their own.
+        Entities.RemovedWith += (entity, reason) => Plugins?.Removed.Raise(new Plugins.RemovedEvent(
+            entity.Id, entity.Barcode,
+            entity.OwnerSmallId is { } small ? Players.Get(small)?.PlatformId ?? 0UL : 0UL,
+            reason));
+
         _catchup = new CatchupOutbox(() => Config.CatchupMessagesPerSecond, () => Clock(),
             (player, message, reliable) =>
             {
@@ -570,7 +576,7 @@ public sealed class FusionServer : IDisposable
 
         foreach (ushort id in guns.Concat(magazines))
         {
-            if (Entities.Get(id) is not { Removable: true } entity || !Entities.Remove(id))
+            if (Entities.Get(id) is not { Removable: true } entity || !Entities.Remove(id, FusionDedicated.Plugins.RemovalReason.Left))
             {
                 continue;
             }

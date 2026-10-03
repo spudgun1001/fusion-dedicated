@@ -1,3 +1,4 @@
+using FusionDedicated.Plugins;
 using FusionDedicated.Server;
 
 namespace FusionDedicated.Tests.Server;
@@ -96,5 +97,81 @@ public class EntityRemovalNoticeTests
         var removed = registry.Forget();
 
         Assert.Equal(removed, heard);
+    }
+
+    private static List<(ushort Id, string Barcode, RemovalReason Reason)> Reasons(EntityRegistry registry)
+    {
+        var heard = new List<(ushort, string, RemovalReason)>();
+        registry.RemovedWith += (entity, reason) => heard.Add((entity.Id, entity.Barcode, reason));
+        return heard;
+    }
+
+    [Fact]
+    public void A_plain_remove_is_a_despawn()
+    {
+        var (registry, _) = Abandoned(1);
+        var why = Reasons(registry);
+
+        registry.Remove(EntityRegistry.FirstEntityId);
+
+        Assert.Equal(new[] { (EntityRegistry.FirstEntityId, "Pack.Spawnable.Thing", RemovalReason.Despawned) }, why);
+    }
+
+    [Fact]
+    public void A_remove_can_say_the_player_left()
+    {
+        var (registry, _) = Abandoned(1);
+        var why = Reasons(registry);
+
+        registry.Remove(EntityRegistry.FirstEntityId, RemovalReason.Left);
+
+        Assert.Equal(RemovalReason.Left, Assert.Single(why).Reason);
+    }
+
+    [Fact]
+    public void Removing_nothing_says_no_reason()
+    {
+        var (registry, _) = Abandoned(1);
+        var why = Reasons(registry);
+
+        registry.Remove(9000);
+
+        Assert.Empty(why);
+    }
+
+    [Fact]
+    public void Culls_evictions_and_a_level_change_are_cleanup()
+    {
+        var cleanups = new Func<EntityRegistry, List<ushort>>[]
+        {
+            r => r.CullOrphans(TimeSpan.FromMinutes(1)),
+            r => r.CullStale(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)),
+            r => r.EvictOldest(5),
+            r => r.Forget(),
+        };
+
+        foreach (var cleanup in cleanups)
+        {
+            var (registry, _) = Abandoned(2);
+            var why = Reasons(registry);
+
+            var removed = cleanup(registry);
+
+            Assert.Equal(2, removed.Count);
+            Assert.Equal(removed, why.Select(w => w.Id));
+            Assert.All(why, w => Assert.Equal(RemovalReason.Cleanup, w.Reason));
+        }
+    }
+
+    [Fact]
+    public void Clear_all_is_a_despawn()
+    {
+        var (registry, _) = Abandoned(2);
+        var why = Reasons(registry);
+
+        registry.Clear();
+
+        Assert.Equal(2, why.Count);
+        Assert.All(why, w => Assert.Equal(RemovalReason.Despawned, w.Reason));
     }
 }

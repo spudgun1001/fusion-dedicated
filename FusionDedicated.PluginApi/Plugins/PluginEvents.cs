@@ -42,6 +42,22 @@ public readonly record struct VoiceEvent(
     float ListenerX, float ListenerY, float ListenerZ,
     float Range);
 
+/// <summary>Why a prop left the world.</summary>
+public enum RemovalReason
+{
+    /// <summary>Staff, a plugin or a player's game removed it.</summary>
+    Despawned,
+
+    /// <summary>The server cleared it: the stale timer, the entity cap, or a level change.</summary>
+    Cleanup,
+
+    /// <summary>It went with a player who left.</summary>
+    Left,
+}
+
+/// <summary>A prop that has left the world. Owner is 0 when nobody owned it or the owner has gone.</summary>
+public readonly record struct RemovedEvent(ushort EntityId, string Barcode, ulong OwnerPlatformId, RemovalReason Reason);
+
 /// <summary>
 /// Everything a plugin can watch. Each is a channel of its own, so subscribing to
 /// one costs nothing on the others, and every one can refuse except those that
@@ -64,6 +80,7 @@ public sealed class PluginEvents
         Ownership = new EventChannel<OwnershipEvent>(health, log);
         Seat = new EventChannel<SeatEvent>(health, log);
         Voice = new EventChannel<VoiceEvent>(health, log);
+        Removed = new EventChannel<RemovedEvent>(health, log);
     }
 
     public EventChannel<SpawnEvent> Spawn { get; }
@@ -91,6 +108,9 @@ public sealed class PluginEvents
     /// <summary>A voice on its way to a listener. Refusing keeps it from them. Radio, phone and megaphone voices never come here.</summary>
     public EventChannel<VoiceEvent> Voice { get; }
 
+    /// <summary>A prop that has already gone, so refusing does nothing. Raised on whichever thread removed it.</summary>
+    public EventChannel<RemovedEvent> Removed { get; }
+
     /// <summary>Detaches a plugin from everything, so unloading leaves nothing behind.</summary>
     public void RemoveAll(string plugin)
     {
@@ -107,5 +127,6 @@ public sealed class PluginEvents
         Ownership.RemoveAll(plugin);
         Seat.RemoveAll(plugin);
         Voice.RemoveAll(plugin);
+        Removed.RemoveAll(plugin);
     }
 }
