@@ -55,7 +55,7 @@ public enum RemovalReason
     Left,
 }
 
-/// <summary>A prop that has left the world. A Left removal names the leaver as owner, and owner is 0 when nobody owned it.</summary>
+/// <summary>A prop that has left the world. A Left removal names the leaver as owner, and owner is 0 when nobody owned it or the owner has gone.</summary>
 public readonly record struct RemovedEvent(ushort EntityId, string Barcode, ulong OwnerPlatformId, RemovalReason Reason);
 
 /// <summary>
