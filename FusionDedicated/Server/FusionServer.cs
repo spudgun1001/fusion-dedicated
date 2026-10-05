@@ -1814,6 +1814,7 @@ public sealed class FusionServer : IDisposable
         }
 
         CacheRpcVariable(tag, from, body, path);
+        ResendEarlyVariables(path);
     }
 
     /// <summary>
@@ -4017,14 +4018,14 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>
     /// A client drops a variable on an entity it is still building, so one set just after a spawn
-    /// is lost there. Sends the entity's variables to everybody once more, at the end of the window.
+    /// is lost there. Sends the entity's variables to everybody but their setter once more, at the
+    /// end of the window, which fires the prop's change events again.
     /// </summary>
     private void ResendEarlyVariables(byte[] path)
     {
         var window = TimeSpan.FromSeconds(Config.EarlyVariableWindowSeconds);
 
-        if (window <= TimeSpan.Zero
-            || RpcProtocol.TryReadPath(path) is not { HasEntity: true } named
+        if (RpcProtocol.TryReadPath(path) is not { HasEntity: true } named
             || Entities.Get(named.EntityId) is not { } entity
             || entity.SpawnedAt + window <= Clock())
         {
@@ -4059,12 +4060,23 @@ public sealed class FusionServer : IDisposable
                 variables = _rpcVariables.ForEntity(entity.Id);
             }
 
+            if (variables.Count == 0)
+            {
+                return;
+            }
+
             var players = Players.Players.ToList();
 
             foreach (var player in players)
             {
                 foreach (var (tag, from, body) in variables)
                 {
+                    // The setter has it already, and may have changed it since.
+                    if (from == player.SmallId)
+                    {
+                        continue;
+                    }
+
                     SendRpcVariable(player, tag, from, body);
                 }
             }

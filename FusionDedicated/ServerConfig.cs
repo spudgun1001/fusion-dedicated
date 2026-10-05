@@ -504,8 +504,9 @@ public sealed class ServerConfig
     public int CatchupMessagesPerSecond { get; set; } = 250;
 
     /// <summary>
-    /// A client drops a variable on an entity it is still building, so variables a plugin sets
-    /// this soon after a spawn are sent again once, this long after it. Zero sends them once only.
+    /// A client drops a variable on an entity it is still building, so variables set this soon
+    /// after a spawn are sent again once, this long after it, to everybody but their setter. This
+    /// fires the prop's change events once more, so keep them safe to repeat. Zero sends them once only.
     /// </summary>
     public double EarlyVariableWindowSeconds { get; set; } = 3;
 

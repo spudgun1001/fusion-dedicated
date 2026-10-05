@@ -10,7 +10,7 @@ public class EarlyVariableResendTests
     private static readonly string Path = RpcProtocol.PathFor(Id, 0);
     private static readonly string OtherPath = RpcProtocol.PathFor(Id, 1);
 
-    private static World Spawned(ServerConfig? config = null)
+    private static World Spawned(ServerConfig? config = null, Action<FakePlayer>? beforeSpawn = null)
     {
         var world = new World(config);
         var a = world.Join(1, "A");
@@ -20,6 +20,7 @@ public class EarlyVariableResendTests
 
         // Past the resends of owned props' variables that follow loading.
         Wait(world, 10);
+        beforeSpawn?.Invoke(a);
         world.Spawn(a, Id, "Test.Crate", 0, 0, 0);
         return world;
     }
@@ -41,6 +42,60 @@ public class EarlyVariableResendTests
 
     private static string Body(RpcKind kind, string path, RpcValue value)
         => Convert.ToHexString(RpcProtocol.WriteValue(kind, Convert.FromHexString(path), value));
+
+    private static byte[] ClientInt(FakePlayer from, string path, int value)
+        => GateProtocol.BuildRpcVariable((byte)RpcKind.Int, from.SmallId, from.SmallId,
+            RpcProtocol.WriteValue(RpcKind.Int, Convert.FromHexString(path), RpcValue.OfInt(value)));
+
+    [Fact]
+    public void A_client_variable_on_a_young_entity_reaches_the_others_once_at_the_window_and_never_the_setter()
+    {
+        using var world = Spawned();
+        var (a, b) = (world.Players[0], world.Players[1]);
+        Wait(world, 0.5);
+        a.Send(ClientInt(a, Path, 9));
+
+        var marks = Marks(world);
+        Wait(world, 2.4);
+        Assert.All(RpcsSince(world, marks), Assert.Empty);
+
+        Wait(world, 10);
+        var sent = RpcsSince(world, marks);
+        Assert.Empty(sent[0]);
+        Assert.Equal(new[] { Body(RpcKind.Int, Path, RpcValue.OfInt(9)) }, sent[1]);
+    }
+
+    [Fact]
+    public void The_resend_skips_the_client_that_set_a_value()
+    {
+        using var world = Spawned();
+        var a = world.Players[0];
+        a.Send(ClientInt(a, OtherPath, 9));
+        Wait(world, 0.5);
+        world.Server.SendRpc(RpcKind.Int, Path, RpcValue.OfInt(5), null);
+
+        var marks = Marks(world);
+        Wait(world, 10);
+
+        var plugin = Body(RpcKind.Int, Path, RpcValue.OfInt(5));
+        var client = Body(RpcKind.Int, OtherPath, RpcValue.OfInt(9));
+        var sent = RpcsSince(world, marks);
+
+        Assert.Equal(new[] { plugin }, sent[0]);
+        Assert.Equal(new[] { plugin, client }.Order(), sent[1].Order());
+    }
+
+    [Fact]
+    public void A_resend_with_nothing_held_logs_nothing()
+    {
+        using var world = Spawned();
+
+        // Too big to hold, so the cache has nothing for the entity when the resend runs.
+        world.Server.SendRpc(RpcKind.String, Path, RpcValue.OfString(new string('Y', 600)), null);
+        Wait(world, 10);
+
+        Assert.DoesNotContain(world.Server.RecentLog(2000), e => e.Message.Contains("early variable"));
+    }
 
     [Fact]
     public void The_default_window_is_three_seconds()
@@ -103,12 +158,8 @@ public class EarlyVariableResendTests
     [Fact]
     public void A_per_player_send_or_an_event_schedules_nothing()
     {
-        using var world = Spawned();
-        var a = world.Players[0];
-
-        // Held in the cache, so a resend scheduled by mistake would carry it.
-        a.Send(GateProtocol.BuildRpcVariable((byte)RpcKind.Int, a.SmallId, a.SmallId,
-            RpcProtocol.WriteValue(RpcKind.Int, Convert.FromHexString(OtherPath), RpcValue.OfInt(9))));
+        // Held in the cache, so a resend scheduled by mistake would carry it. Set before the spawn so it schedules none itself.
+        using var world = Spawned(beforeSpawn: a => a.Send(ClientInt(a, OtherPath, 9)));
 
         Wait(world, 0.5);
         world.Server.SendRpc(RpcKind.Int, Path, RpcValue.OfInt(5), 1);
