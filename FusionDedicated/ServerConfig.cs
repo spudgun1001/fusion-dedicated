@@ -504,6 +504,12 @@ public sealed class ServerConfig
     public int CatchupMessagesPerSecond { get; set; } = 250;
 
     /// <summary>
+    /// A client drops a variable on an entity it is still building, so variables a plugin sets
+    /// this soon after a spawn are sent again once, this long after it. Zero sends them once only.
+    /// </summary>
+    public double EarlyVariableWindowSeconds { get; set; } = 3;
+
+    /// <summary>
     /// Reliable messages held for one player when Steam refuses a send, so an ownership answer or a
     /// despawn goes out once their connection drains. The oldest are dropped when the queue is full,
     /// and zero or less throws a refused send away where it stands.

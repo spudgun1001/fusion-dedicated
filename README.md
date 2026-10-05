@@ -675,6 +675,7 @@ gitignored.
 | `FlightStrikeWindowSeconds` | how long a flight counts against a player (60 by default) |
 | `FlightExemptLevel` | rank never checked for flying (`Operator` by default) |
 | `CatchupMessagesPerSecond` | catch-up messages each joining player is sent per second (250 by default, 0 sends everything at once) |
+| `EarlyVariableWindowSeconds` | variables a plugin sets this soon after a spawn are sent to everyone once more at the end of it, since a client still building the entity drops them (3 by default, 0 sends them once only) |
 | `SendRetryQueue` | reliable messages held for one player when Steam refuses a send (256 by default, 0 drops a refused send) |
 | `CongestedPendingBytes` | bytes Steam still has unsent for a player, at or above which they are sent no poses (131072 by default, 0 sends poses whatever is waiting) |
 | `SendRateMin` / `SendRateMax` | bytes a second Steam sends to each player, keep them equal (1048576 by default, 0 keeps Steam's 256 KB) |

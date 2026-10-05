@@ -3985,6 +3985,8 @@ public sealed class FusionServer : IDisposable
                     CacheRpcVariable((byte)kind, PlayerRegistry.ServerSmallId, payload, pathBytes);
                 }
             }
+
+            ResendEarlyVariables(pathBytes);
         }
 
         // Stamped as the player being told rather than as the server, which is
@@ -4008,6 +4010,68 @@ public sealed class FusionServer : IDisposable
             SendTo(player.Connection, GateProtocol.BuildRpcVariable(
                 (byte)kind, player.SmallId, player.SmallId, payload), reliable: true);
         }
+    }
+
+    /// <summary>Entities with a resend of their early variables waiting.</summary>
+    private readonly HashSet<TrackedEntity> _earlyResends = new();
+
+    /// <summary>
+    /// A client drops a variable on an entity it is still building, so one set just after a spawn
+    /// is lost there. Sends the entity's variables to everybody once more, at the end of the window.
+    /// </summary>
+    private void ResendEarlyVariables(byte[] path)
+    {
+        var window = TimeSpan.FromSeconds(Config.EarlyVariableWindowSeconds);
+
+        if (window <= TimeSpan.Zero
+            || RpcProtocol.TryReadPath(path) is not { HasEntity: true } named
+            || Entities.Get(named.EntityId) is not { } entity
+            || entity.SpawnedAt + window <= Clock())
+        {
+            return;
+        }
+
+        lock (_earlyResends)
+        {
+            if (!_earlyResends.Add(entity))
+            {
+                return;
+            }
+        }
+
+        Defer(entity.SpawnedAt + window - Clock(), () =>
+        {
+            lock (_earlyResends)
+            {
+                _earlyResends.Remove(entity);
+            }
+
+            // Gone, or its id now belongs to another entity.
+            if (Entities.Get(entity.Id) != entity)
+            {
+                return;
+            }
+
+            List<(byte Tag, byte From, byte[] Body)> variables;
+
+            lock (_cacheLock)
+            {
+                variables = _rpcVariables.ForEntity(entity.Id);
+            }
+
+            var players = Players.Players.ToList();
+
+            foreach (var player in players)
+            {
+                foreach (var (tag, from, body) in variables)
+                {
+                    SendRpcVariable(player, tag, from, body);
+                }
+            }
+
+            Log("INFO", $"Resent {variables.Count} early variable(s) on entity {entity.Id} ({entity.Barcode}) " +
+                        $"to {players.Count} player(s), {window.TotalSeconds:0.#}s after its spawn", console: false);
+        });
     }
 
     /// <summary>
