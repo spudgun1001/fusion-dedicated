@@ -506,7 +506,8 @@ public sealed class ServerConfig
     /// <summary>
     /// A client drops a variable on an entity it is still building, so variables set this soon
     /// after a spawn are sent again once, this long after it, to everybody but their setter. This
-    /// fires the prop's change events once more, so keep them safe to repeat. Zero sends them once only.
+    /// fires the prop's change events once more, so keep them safe to repeat. Zero or less sends them
+    /// once only, and anything over 60 is held to 60.
     /// </summary>
     public double EarlyVariableWindowSeconds { get; set; } = 3;
 

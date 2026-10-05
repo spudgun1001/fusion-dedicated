@@ -206,6 +206,37 @@ public class EarlyVariableResendTests
         Assert.All(RpcsSince(world, marks), Assert.Empty);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(-1e300)]
+    public void A_window_that_is_not_a_finite_positive_number_turns_resends_off(double seconds)
+    {
+        using var world = Spawned(new ServerConfig { CullOrphanedEntities = false, EarlyVariableWindowSeconds = seconds });
+        world.Server.SendRpc(RpcKind.Int, Path, RpcValue.OfInt(5), null);
+
+        var marks = Marks(world);
+        Wait(world, 120);
+
+        Assert.All(RpcsSince(world, marks), Assert.Empty);
+    }
+
+    [Fact]
+    public void A_huge_window_is_held_to_sixty_seconds()
+    {
+        using var world = Spawned(new ServerConfig { CullOrphanedEntities = false, EarlyVariableWindowSeconds = 1e9 });
+        Wait(world, 0.5);
+        world.Server.SendRpc(RpcKind.Int, Path, RpcValue.OfInt(5), null);
+
+        var marks = Marks(world);
+        Wait(world, 59.4);
+        Assert.All(RpcsSince(world, marks), Assert.Empty);
+
+        Wait(world, 0.2);
+        Assert.All(RpcsSince(world, marks), rpcs =>
+            Assert.Equal(new[] { Body(RpcKind.Int, Path, RpcValue.OfInt(5)) }, rpcs));
+    }
+
     [Fact]
     public void A_value_changed_before_the_resend_goes_out_as_the_latest()
     {

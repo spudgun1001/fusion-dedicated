@@ -4023,7 +4023,8 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void ResendEarlyVariables(byte[] path)
     {
-        var window = TimeSpan.FromSeconds(Config.EarlyVariableWindowSeconds);
+        double seconds = Config.EarlyVariableWindowSeconds;
+        var window = TimeSpan.FromSeconds(double.IsFinite(seconds) ? Math.Clamp(seconds, 0, 60) : 0);
 
         if (RpcProtocol.TryReadPath(path) is not { HasEntity: true } named
             || Entities.Get(named.EntityId) is not { } entity
