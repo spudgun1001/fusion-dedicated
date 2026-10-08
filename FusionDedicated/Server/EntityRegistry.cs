@@ -30,8 +30,11 @@ public sealed class TrackedEntity
 
     public DateTime SpawnedAt { get; init; } = DateTime.UtcNow;
 
-    /// <summary>Who it was registered for: the spawner, or the player a plugin named.</summary>
-    public byte SpawnedBy { get; init; }
+    /// <summary>Who it was registered for, by name and platform id, kept in case they leave.</summary>
+    public string SpawnedBy { get; init; } = "";
+
+    /// <summary>Players whose game showed it built this, by asking for its state or sending its pose. Lock it to use it.</summary>
+    public HashSet<byte> Builders { get; } = new();
 
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
@@ -187,6 +190,9 @@ public sealed class EntityRegistry
 
     /// <summary>The clock every stamp and cutoff reads, swappable so tests can move it.</summary>
     public Func<DateTime> Clock { get; set; } = () => DateTime.UtcNow;
+
+    /// <summary>How a spawner is named in the books. The server sets it to their name and platform id.</summary>
+    public Func<byte, string> DescribePlayer { get; set; } = id => $"player {id}";
 
     public int Count
     {
@@ -358,7 +364,7 @@ public sealed class EntityRegistry
             Id = id,
             Barcode = barcode,
             OwnerSmallId = owner,
-            SpawnedBy = owner,
+            SpawnedBy = DescribePlayer(owner),
             X = x,
             Y = y,
             Z = z,

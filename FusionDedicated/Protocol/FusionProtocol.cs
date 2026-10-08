@@ -1210,16 +1210,6 @@ public static class FusionProtocol
         return message.ToArray();
     }
 
-    /// <summary>
-    /// Reads an entity's networked pose: a ushort ID, a body count, then one
-    /// BodyPose per body. Validated against a 31 byte capture (2 + 1 + 28).
-    /// </summary>
-    /// <returns>
-    /// The rotation comes back as the seven bytes a spawn carries, not the four
-    /// a pose uses, so it can be repeated to somebody joining later. Without it
-    /// the catch-up sent the rotation a thing was spawned at, however it has been
-    /// turned since.
-    /// </returns>
     /// <summary>The entity a pose is for, whatever its bodies hold, or null.</summary>
     public static ushort? TryReadEntityPoseId(ReadOnlySpan<byte> message)
     {
@@ -1284,6 +1274,16 @@ public static class FusionProtocol
         }
     }
 
+    /// <summary>
+    /// Reads an entity's networked pose: a ushort ID, a body count, then one
+    /// BodyPose per body. Validated against a 31 byte capture (2 + 1 + 28).
+    /// </summary>
+    /// <returns>
+    /// The rotation comes back as the seven bytes a spawn carries, not the four
+    /// a pose uses, so it can be repeated to somebody joining later. Without it
+    /// the catch-up sent the rotation a thing was spawned at, however it has been
+    /// turned since.
+    /// </returns>
     public static (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation)?
         TryReadEntityPose(ReadOnlySpan<byte> message)
     {

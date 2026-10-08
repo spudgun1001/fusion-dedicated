@@ -74,6 +74,7 @@ public sealed class FusionServer : IDisposable
         Players.MaxPlayers = config.MaxPlayers;
         Entities.Capacity = config.MaxEntities;
         Entities.Clock = () => Clock();
+        Entities.DescribePlayer = id => Players.Get(id) is { } p ? $"{p.DisplayName} ({p.PlatformId})" : $"player {id}";
         Guard = new SpawnGuard(config);
         _budget = new MessageBudget(config);
         _hits = new HitBudget(config);
@@ -433,6 +434,16 @@ public sealed class FusionServer : IDisposable
         _confirmations.ForgetPlayer(player.SmallId);
         _holdAnswers.ForgetPlayer(player.SmallId);
         _catchup.Forget(player.SmallId);
+        _ghosts.Depart(player.SmallId);
+
+        // Small ids are reused, and whoever is given this one next has built nothing yet.
+        foreach (var entity in Entities.Entities)
+        {
+            lock (entity.Builders)
+            {
+                entity.Builders.Remove(player.SmallId);
+            }
+        }
 
         // Fusion sends no egress for a leaver, so the others would see them frozen in the seat.
         // Sent before the disconnect, while their clients still know who the rider is.
@@ -950,9 +961,16 @@ public sealed class FusionServer : IDisposable
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
             {
                 // Any pose shows the sender's game has the entity, a broken or bodiless one too.
-                if (_ghosts.Count > 0 && FusionProtocol.TryReadEntityPoseId(message) is { } posed)
+                bool settled = false;
+
+                if (FusionProtocol.TryReadEntityPoseId(message) is { } posed && Entities.Get(posed) is { } posedEntity)
                 {
-                    _ghosts.Answered(posed, sender.SmallId);
+                    lock (posedEntity.Builders)
+                    {
+                        posedEntity.Builders.Add(sender.SmallId);
+                    }
+
+                    settled = _ghosts.Count > 0 && _ghosts.Answered(posed);
                 }
 
                 if (FusionProtocol.EntityPoseProblem(message) is { } problem)
@@ -965,7 +983,7 @@ public sealed class FusionServer : IDisposable
 
                 if (pose is { } read)
                 {
-                    TrackEntityPose(sender, read);
+                    TrackEntityPose(sender, read, quiet: settled);
 
                     if (Entities.Get(read.EntityId) is { Discovered: true }
                         && FusionProtocol.TryReadEntityBodyRotations(message) is { } bodies)
@@ -5368,7 +5386,9 @@ public sealed class FusionServer : IDisposable
     /// <summary>Keeps the ignored-pose and kept-prop-moved log lines from repeating every tick.</summary>
     private readonly PoseLogThrottle _poseLog = new();
 
-    private void TrackEntityPose(ConnectedPlayer sender, (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation) pose)
+    /// <param name="quiet">True for an answer to a ghost probe, which a settled player sends for a prop nobody owns.</param>
+    private void TrackEntityPose(ConnectedPlayer sender, (ushort EntityId, Vec3 Position, Vec3 Velocity, byte[] Rotation) pose,
+        bool quiet = false)
     {
         ushort vehicleId = pose.EntityId;
 
@@ -5431,7 +5451,7 @@ public sealed class FusionServer : IDisposable
         // props are noticed in the first place.
         if (known != null && known.OwnerSmallId != sender.SmallId)
         {
-            if (_poseLog.AllowIgnored(vehicleId, sender.SmallId, Clock()))
+            if (!quiet && _poseLog.AllowIgnored(vehicleId, sender.SmallId, Clock()))
             {
                 string ownerName = known.OwnerSmallId is { } ownerId
                     ? Players.Get(ownerId)?.DisplayName ?? "nobody"
@@ -5703,16 +5723,25 @@ public sealed class FusionServer : IDisposable
 
         var entity = Entities.Get(request.EntityId);
 
+        // A game asks exactly when it builds the entity.
+        if (entity != null)
+        {
+            lock (entity.Builders)
+            {
+                entity.Builders.Add(sender.SmallId);
+            }
+        }
+
         byte? target = WorldCatchup.DataRequestTarget(
             request.Target,
             entity?.OwnerSmallId,
             sender.SmallId,
             id => Players.Get(id) != null);
 
-        // Nobody here owns it, so the request went to nobody. A settled player can answer instead.
+        // Nobody here owns it, so the request went to nobody. A player whose game built it can answer instead.
         if (target == null && entity != null && Probeable(entity)
             && (entity.OwnerSmallId is not { } absent || Players.Get(absent) == null)
-            && Players.SteadiestPlayer(except: sender.SmallId) is { Loaded: true } settled)
+            && SteadiestBuilder(entity, sender.SmallId) is { } settled)
         {
             target = settled.SmallId;
         }
@@ -5756,25 +5785,58 @@ public sealed class FusionServer : IDisposable
     private static bool Probeable(TrackedEntity entity)
         => entity is { Discovered: false, Persistent: false, Synthetic: false } && !string.IsNullOrEmpty(entity.Barcode);
 
-    /// <summary>Watches for the answer from whoever a data request went to: the owner, or a settled player when nobody owns it.</summary>
-    private void ProbeForGhost(ConnectedPlayer requester, TrackedEntity? entity, ConnectedPlayer? asked)
+    /// <summary>
+    /// Watches for an answer from a player whose game built the entity: whoever the request went to when
+    /// they did, or else the steadiest builder, asked here. A game that never built it is silent for no reason.
+    /// </summary>
+    private void ProbeForGhost(ConnectedPlayer requester, TrackedEntity? entity, ConnectedPlayer? sentTo)
     {
-        if (entity != null && Probeable(entity)
-            && asked is { Loaded: true } && asked.SmallId != requester.SmallId
-            && (entity.OwnerSmallId == asked.SmallId
-                || entity.OwnerSmallId is not { } owner || Players.Get(owner) == null))
+        if (entity == null || !Probeable(entity) || entity.OwnerSmallId == requester.SmallId)
         {
-            _ghosts.Start(entity, requester.SmallId, asked.SmallId);
+            return;
+        }
+
+        var asked = sentTo is { Loaded: true } && sentTo != requester && Built(entity, sentTo.SmallId)
+            ? sentTo
+            : SteadiestBuilder(entity, requester.SmallId);
+
+        if (asked == null)
+        {
+            return;
+        }
+
+        string owner = entity.OwnerSmallId is { } id ? Players.Get(id)?.DisplayName ?? $"player {id}" : "nobody";
+
+        if (_ghosts.Start(entity, requester.SmallId, asked.SmallId, owner) && asked != sentTo)
+        {
+            SendTo(asked.Connection, FusionProtocol.BuildEntityDataRequest(requester.SmallId, asked.SmallId, entity.Id),
+                reliable: true);
         }
     }
 
+    private static bool Built(TrackedEntity entity, byte player)
+    {
+        lock (entity.Builders)
+        {
+            return entity.Builders.Contains(player);
+        }
+    }
+
+    /// <summary>The longest-joined loaded player, leaving out those given, whose game showed it built this.</summary>
+    private ConnectedPlayer? SteadiestBuilder(TrackedEntity entity, byte except, byte? alsoExcept = null)
+        => Players.Players
+            .Where(p => p.Loaded && p.SmallId != except && p.SmallId != alsoExcept && Built(entity, p.SmallId))
+            .OrderBy(p => p.JoinedAt)
+            .ThenBy(p => p.SmallId)
+            .FirstOrDefault();
+
     /// <summary>
-    /// Asks a second loaded player about each entity its owner did not answer for, and removes it
-    /// everywhere when they are silent too. A joiner is built from this list, so they alone saw such an item.
+    /// Asks a second builder about each entity the first did not answer for, and removes it everywhere
+    /// when they are silent too. A joiner is built from this list, so they alone saw such an item.
     /// </summary>
     private void CheckGhostProbes()
     {
-        foreach (var probe in _ghosts.TakeDue(id => Players.Get(id) != null))
+        foreach (var probe in _ghosts.TakeDue())
         {
             var entity = probe.Entity;
 
@@ -5788,18 +5850,12 @@ public sealed class FusionServer : IDisposable
             string first = Players.Get(probe.Asked)?.DisplayName ?? $"player {probe.Asked}";
 
             // A second player who left before answering is replaced rather than counted as silent.
-            if (probe.Second is not { } second || Players.Get(second) == null)
+            if (probe.Second is not { } second || Players.Get(second) is not { } secondPlayer)
             {
-                var next = Players.Players
-                    .Where(p => p.Loaded && p.SmallId != probe.Requester && p.SmallId != probe.Asked)
-                    .OrderBy(p => p.JoinedAt)
-                    .ThenBy(p => p.SmallId)
-                    .FirstOrDefault();
-
-                if (next == null)
+                if (SteadiestBuilder(entity, probe.Requester, probe.Asked) is not { } next)
                 {
                     Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), {first} did not " +
-                                "answer for it and nobody else could be asked", console: false);
+                                "answer for it and nobody else who built it could be asked", console: false);
                     continue;
                 }
 
@@ -5809,17 +5865,18 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            if (!DespawnEntity(entity.Id))
+            // Written before the despawn, whose hooks can kick the very players it names.
+            string flags = (entity.PluginSpawned ? ", plugin spawned" : "") + (entity.Inherited ? ", inherited" : "");
+            string line = $"Ghost removed: entity {entity.Id} ('{entity.ShortName}', {entity.Barcode}), spawned by " +
+                          $"{(entity.PluginSpawned ? "a plugin" : entity.SpawnedBy)} at {entity.SpawnedAt:HH:mm:ss} UTC, " +
+                          $"owned by {probe.OwnerName}, last update {(Clock() - entity.LastUpdate).TotalSeconds:0} s ago " +
+                          $"at ({entity.X:0.0}, {entity.Y:0.0}, {entity.Z:0.0}){flags}; " +
+                          $"neither {first} nor {secondPlayer.DisplayName} had it";
+
+            if (DespawnEntity(entity.Id))
             {
-                continue;
+                Log("WARN", line);
             }
-
-            string spawner = Players.Get(entity.SpawnedBy)?.DisplayName ?? $"player {entity.SpawnedBy}";
-            string owner = probe.Owner is { } owned ? Players.Get(owned)?.DisplayName ?? $"player {owned}" : "nobody";
-
-            Log("WARN", $"Ghost removed: entity {entity.Id} ('{entity.ShortName}'), spawned by {spawner} at " +
-                        $"{entity.SpawnedAt:HH:mm:ss} UTC, owned by {owner}; neither {first} nor " +
-                        $"{Players.Get(second)!.DisplayName} had it");
         }
     }
 

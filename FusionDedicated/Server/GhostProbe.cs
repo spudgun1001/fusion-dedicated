@@ -1,9 +1,8 @@
 namespace FusionDedicated.Server;
 
 /// <summary>
-/// Entities a player was asked about and has not answered for yet. A game that has an
-/// entity answers with its pose, so an entity nobody answers for is one the server lists but no
-/// game has. Only touched from the main loop.
+/// Entities a player was asked about and has not answered for yet. A game that has an entity
+/// answers with its pose, so an entity nobody answers for is one the server lists but no game has.
 /// </summary>
 public sealed class GhostProbe
 {
@@ -11,6 +10,10 @@ public sealed class GhostProbe
 
     private readonly Func<DateTime> _clock;
     private readonly Dictionary<ushort, Probe> _pending = new();
+    private DateTime _nextDue = DateTime.MaxValue;
+
+    /// <summary>A departure can arrive off the main loop, as a kick.</summary>
+    private readonly object _lock = new();
 
     public GhostProbe(Func<DateTime> clock)
     {
@@ -21,11 +24,14 @@ public sealed class GhostProbe
     {
         public required TrackedEntity Entity { get; init; }
         public required byte Requester { get; init; }
-        /// <summary>Who was asked first: the owner, or a settled player when nobody here owns it.</summary>
+
+        /// <summary>Who was asked first: the owner, or the steadiest other player whose game built it.</summary>
         public required byte Asked { get; init; }
 
         /// <summary>The owner when it started, so a probe ends if the entity changes hands.</summary>
         public byte? Owner { get; init; }
+
+        public required string OwnerName { get; init; }
 
         /// <summary>Who was asked once the first stayed silent, or null while it is still their turn.</summary>
         public byte? Second { get; set; }
@@ -33,49 +39,99 @@ public sealed class GhostProbe
         public DateTime Due { get; set; }
     }
 
-    /// <summary>Starts a probe for this entity unless one is already running.</summary>
-    public void Start(TrackedEntity entity, byte requester, byte asked)
-        => _pending.TryAdd(entity.Id, new Probe
-        {
-            Entity = entity, Requester = requester, Asked = asked, Owner = entity.OwnerSmallId, Due = _clock() + Wait,
-        });
-
     public int Count => _pending.Count;
 
-    /// <summary>A pose from either asked player shows they have the entity.</summary>
-    public void Answered(ushort entityId, byte sender)
+    /// <summary>Starts a probe for this entity, unless one is already running.</summary>
+    public bool Start(TrackedEntity entity, byte requester, byte asked, string ownerName)
     {
-        if (_pending.TryGetValue(entityId, out var probe)
-            && (sender == probe.Asked || sender == probe.Second))
+        lock (_lock)
         {
-            _pending.Remove(entityId);
+            var probe = new Probe
+            {
+                Entity = entity, Requester = requester, Asked = asked, Owner = entity.OwnerSmallId,
+                OwnerName = ownerName, Due = _clock() + Wait,
+            };
+
+            if (!_pending.TryAdd(entity.Id, probe))
+            {
+                return false;
+            }
+
+            Schedule(probe.Due);
+            return true;
         }
     }
 
-    /// <summary>Takes out every probe past its deadline or whose asked player has gone.</summary>
-    public List<Probe> TakeDue(Func<byte, bool> present)
+    /// <summary>Any pose shows a game has the entity. True when that ended a probe.</summary>
+    public bool Answered(ushort entityId)
     {
-        if (_pending.Count == 0)
+        lock (_lock)
         {
-            return new List<Probe>();
+            return _pending.Remove(entityId);
         }
+    }
 
-        var now = _clock();
-        var due = _pending.Values.Where(p => p.Due <= now || !present(p.Second ?? p.Asked)).ToList();
-
-        foreach (var probe in due)
+    /// <summary>Ends what a leaver asked for, and stops waiting on any answer from them.</summary>
+    public void Depart(byte player)
+    {
+        lock (_lock)
         {
-            _pending.Remove(probe.Entity.Id);
+            foreach (var probe in _pending.Values.ToList())
+            {
+                if (probe.Requester == player)
+                {
+                    _pending.Remove(probe.Entity.Id);
+                }
+                else if ((probe.Second ?? probe.Asked) == player)
+                {
+                    probe.Due = _clock();
+                    Schedule(probe.Due);
+                }
+            }
         }
+    }
 
-        return due;
+    /// <summary>Takes out every probe past its deadline. Costs one time check until one is due.</summary>
+    public IReadOnlyList<Probe> TakeDue()
+    {
+        lock (_lock)
+        {
+            var now = _clock();
+
+            if (now < _nextDue)
+            {
+                return Array.Empty<Probe>();
+            }
+
+            var due = _pending.Values.Where(p => p.Due <= now).ToList();
+
+            foreach (var probe in due)
+            {
+                _pending.Remove(probe.Entity.Id);
+            }
+
+            _nextDue = _pending.Count == 0 ? DateTime.MaxValue : _pending.Values.Min(p => p.Due);
+            return due;
+        }
     }
 
     /// <summary>Puts a probe back, now waiting on a second player.</summary>
     public void AskNext(Probe probe, byte next)
     {
-        probe.Second = next;
-        probe.Due = _clock() + Wait;
-        _pending[probe.Entity.Id] = probe;
+        lock (_lock)
+        {
+            probe.Second = next;
+            probe.Due = _clock() + Wait;
+            _pending[probe.Entity.Id] = probe;
+            Schedule(probe.Due);
+        }
+    }
+
+    private void Schedule(DateTime due)
+    {
+        if (due < _nextDue)
+        {
+            _nextDue = due;
+        }
     }
 }
