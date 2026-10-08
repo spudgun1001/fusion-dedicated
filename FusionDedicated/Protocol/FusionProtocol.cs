@@ -1220,6 +1220,29 @@ public static class FusionProtocol
     /// the catch-up sent the rotation a thing was spawned at, however it has been
     /// turned since.
     /// </returns>
+    /// <summary>The entity a pose is for, whatever its bodies hold, or null.</summary>
+    public static ushort? TryReadEntityPoseId(ReadOnlySpan<byte> message)
+    {
+        try
+        {
+            var reader = new FusionNetReader(message);
+
+            if (reader.ReadByte() != TagEntityPoseUpdate)
+            {
+                return null;
+            }
+
+            ReadRouteAndSender(ref reader);
+            reader.ReadInt32();
+
+            return reader.ReadUInt16();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Why no working game could have sent this entity pose, or null. A body is 28 bytes, and only its
     /// position, velocity and spin magnitudes are floats, so those are what can carry a NaN.

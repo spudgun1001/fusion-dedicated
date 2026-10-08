@@ -125,6 +125,8 @@ public sealed class FusionServer : IDisposable
         _removedThisLevel = new RecentRemovals(() => Clock(), TimeSpan.FromMinutes(30));
         Entities.Removed += NoteRemovedThisLevel;
 
+        _ghosts = new GhostProbe(() => Clock());
+
         // Plugins hear what left, who owned it and why, for refunds and records of their own.
         Entities.RemovedWith += (entity, reason) => Plugins?.Removed.Notify(new Plugins.RemovedEvent(
             entity.Id, entity.Barcode,
@@ -947,6 +949,12 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
             {
+                // Any pose shows the sender's game has the entity, a broken or bodiless one too.
+                if (_ghosts.Count > 0 && FusionProtocol.TryReadEntityPoseId(message) is { } posed)
+                {
+                    _ghosts.Answered(posed, sender.SmallId);
+                }
+
                 if (FusionProtocol.EntityPoseProblem(message) is { } problem)
                 {
                     LogBrokenPose(sender, problem);
@@ -4335,6 +4343,7 @@ public sealed class FusionServer : IDisposable
         RetrySends();
 
         _catchup.Pump();
+        CheckGhostProbes();
 
         List<Action> due;
 
@@ -5715,12 +5724,86 @@ public sealed class FusionServer : IDisposable
             Relay(sender, message);
         }
 
+        ProbeForGhost(sender, request.EntityId);
+
         ReplayVariables(sender, request.EntityId);
         ReplaySeats(sender, request.EntityId);
         ReplayGrabs(sender, request.EntityId);
 
         // A game drops a slot insert for a gun it has not built, and it asks this once it has.
         ReplayHolster(sender, request.EntityId);
+    }
+
+    /// <summary>Spawned items whose owner was asked about them and has not answered with a pose yet.</summary>
+    private readonly GhostProbe _ghosts;
+
+    /// <summary>
+    /// Watches for the owner's answer to a data request, which both routes above deliver. Only spawned
+    /// crates: level objects, kept props and constraint ends are not ours to judge, or never answer.
+    /// </summary>
+    private void ProbeForGhost(ConnectedPlayer requester, ushort entityId)
+    {
+        if (Entities.Get(entityId) is { Discovered: false, Persistent: false, Synthetic: false, OwnerSmallId: { } owner } entity
+            && !string.IsNullOrEmpty(entity.Barcode)
+            && owner != requester.SmallId
+            && Players.Get(owner) is { Loaded: true })
+        {
+            _ghosts.Start(entity, requester.SmallId, owner);
+        }
+    }
+
+    /// <summary>
+    /// Asks a second loaded player about each entity its owner did not answer for, and removes it
+    /// everywhere when they are silent too. A joiner is built from this list, so they alone saw such an item.
+    /// </summary>
+    private void CheckGhostProbes()
+    {
+        foreach (var probe in _ghosts.TakeDue(id => Players.Get(id) != null))
+        {
+            var entity = probe.Entity;
+
+            // Gone, handed on, or nobody left to answer on behalf of, so there is nothing to judge.
+            if (!ReferenceEquals(Entities.Get(entity.Id), entity) || entity.OwnerSmallId != probe.Owner
+                || Players.Get(probe.Requester) == null)
+            {
+                continue;
+            }
+
+            string owner = Players.Get(probe.Owner)?.DisplayName ?? $"player {probe.Owner}";
+
+            // A second player who left before answering is replaced rather than counted as silent.
+            if (probe.Second is not { } second || Players.Get(second) == null)
+            {
+                var next = Players.Players
+                    .Where(p => p.Loaded && p.SmallId != probe.Requester && p.SmallId != probe.Owner)
+                    .OrderBy(p => p.JoinedAt)
+                    .ThenBy(p => p.SmallId)
+                    .FirstOrDefault();
+
+                if (next == null)
+                {
+                    Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), {owner} did not " +
+                                "answer for it and nobody else could be asked", console: false);
+                    continue;
+                }
+
+                SendTo(next.Connection, FusionProtocol.BuildEntityDataRequest(probe.Requester, next.SmallId, entity.Id),
+                    reliable: true);
+                _ghosts.AskNext(probe, next.SmallId);
+                continue;
+            }
+
+            if (!DespawnEntity(entity.Id))
+            {
+                continue;
+            }
+
+            string spawner = Players.Get(entity.SpawnedBy)?.DisplayName ?? $"player {entity.SpawnedBy}";
+
+            Log("WARN", $"Ghost removed: entity {entity.Id} ('{entity.ShortName}'), spawned by {spawner} at " +
+                        $"{entity.SpawnedAt:HH:mm:ss} UTC, owned by {owner}; neither {owner} nor " +
+                        $"{Players.Get(second)!.DisplayName} had it");
+        }
     }
 
     // ---- vehicle seats ----

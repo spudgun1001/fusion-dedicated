@@ -29,6 +29,10 @@ public sealed class TrackedEntity
     public bool PluginSpawned { get; set; }
 
     public DateTime SpawnedAt { get; init; } = DateTime.UtcNow;
+
+    /// <summary>Who it was registered for: the spawner, or the player a plugin named.</summary>
+    public byte SpawnedBy { get; init; }
+
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
     public float X { get; set; }
@@ -354,6 +358,7 @@ public sealed class EntityRegistry
             Id = id,
             Barcode = barcode,
             OwnerSmallId = owner,
+            SpawnedBy = owner,
             X = x,
             Y = y,
             Z = z,
