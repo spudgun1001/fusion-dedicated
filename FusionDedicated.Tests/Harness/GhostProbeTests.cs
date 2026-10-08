@@ -219,6 +219,63 @@ public class GhostProbeTests
         Assert.Equal(1, DataRequestsTo(world, mia, Gun));
     }
 
+    /// <summary>The gun's owner has gone, so Newbie is told it belongs to player 0, who is nobody.</summary>
+    private static (World World, FakePlayer Joel, FakePlayer Mia, FakePlayer Newbie) NewbieAsksAboutAnOwnerlessGun()
+        => NewbieAsksJoel(gun => gun.OwnerSmallId = null);
+
+    [Fact]
+    public void An_ownerless_entity_neither_settled_player_answers_for_is_removed()
+    {
+        var (world, joel, mia, newbie) = NewbieAsksAboutAnOwnerlessGun();
+        using var _ = world;
+
+        Assert.Equal(1, DataRequestsTo(world, joel, Gun));
+
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.Null(world.Server.Entities.Get(Gun));
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+        Assert.Equal(1, DespawnsTo(world, newbie, Gun));
+        var line = Assert.Single(Lines(world, $"Ghost removed: entity {Gun} ('Gun')"));
+        Assert.Contains("owned by nobody; neither Joel nor Mia had it", line.Message);
+    }
+
+    [Fact]
+    public void An_ownerless_entity_the_steadiest_player_answers_for_is_kept_and_named_theirs()
+    {
+        var (world, joel, mia, newbie) = NewbieAsksAboutAnOwnerlessGun();
+        using var _ = world;
+
+        Answer(joel, Gun);
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Equal(0, DataRequestsTo(world, mia, Gun));
+        Assert.Equal((byte?)joel.SmallId, newbie.View.Entities[Gun].Owner);
+    }
+
+    [Fact]
+    public void An_ownerless_entity_with_only_the_joiner_here_is_left_alone()
+    {
+        var world = new World();
+        using var _ = world;
+        var gun = world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", 0, 1, 2, 3);
+        gun.OwnerSmallId = null;
+
+        var newbie = world.Join(NewbieId, "Newbie");
+        newbie.FinishLoading();
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Equal(0, DataRequestsTo(world, newbie, Gun));
+        Assert.DoesNotContain(world.Transport.SentTo(newbie.Connection),
+            sent => FusionProtocol.TryReadOwnershipResponse(sent.Message)?.EntityId == Gun);
+        Assert.Empty(Lines(world, "Possible ghost"));
+    }
+
     [Fact]
     public void A_probe_ends_when_the_entity_changes_hands()
     {

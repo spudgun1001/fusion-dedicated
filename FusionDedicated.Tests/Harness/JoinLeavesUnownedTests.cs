@@ -28,7 +28,8 @@ public class JoinLeavesUnownedTests
 
         Assert.Null(world.Server.Entities.Get(300)!.OwnerSmallId);
         Assert.Equal(before, OwnershipResponses(world, joel, 300));
-        Assert.Equal(PlayerRegistry.ServerSmallId, newbie.View.Entities[300].Owner);
+        // Only the joiner is pointed at a settled player, whose pose a game takes only from the owner it knows.
+        Assert.Equal(joel.SmallId, newbie.View.Entities[300].Owner);
     }
 
     [Fact]

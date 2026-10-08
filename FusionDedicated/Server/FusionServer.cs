@@ -5701,11 +5701,23 @@ public sealed class FusionServer : IDisposable
             return;
         }
 
+        var entity = Entities.Get(request.EntityId);
+
         byte? target = WorldCatchup.DataRequestTarget(
             request.Target,
-            Entities.Get(request.EntityId)?.OwnerSmallId,
+            entity?.OwnerSmallId,
             sender.SmallId,
             id => Players.Get(id) != null);
+
+        // Nobody here owns it, so the request went to nobody. A settled player can answer instead.
+        if (target == null && entity != null && Probeable(entity)
+            && (entity.OwnerSmallId is not { } absent || Players.Get(absent) == null)
+            && Players.SteadiestPlayer(except: sender.SmallId) is { Loaded: true } settled)
+        {
+            target = settled.SmallId;
+        }
+
+        ConnectedPlayer? asked;
 
         if (target is { } owner && Players.Get(owner) is { } current)
         {
@@ -5718,13 +5730,16 @@ public sealed class FusionServer : IDisposable
 
             Log("INFO", $"Data request by {sender.DisplayName} for entity {request.EntityId} " +
                         $"redirected from {request.Target?.ToString() ?? "nobody"} to player {owner}", console: false);
+
+            asked = current;
         }
         else
         {
             Relay(sender, message);
+            asked = request.Target is { } named ? Players.Get(named) : null;
         }
 
-        ProbeForGhost(sender, request.EntityId);
+        ProbeForGhost(sender, entity, asked);
 
         ReplayVariables(sender, request.EntityId);
         ReplaySeats(sender, request.EntityId);
@@ -5737,18 +5752,19 @@ public sealed class FusionServer : IDisposable
     /// <summary>Spawned items whose owner was asked about them and has not answered with a pose yet.</summary>
     private readonly GhostProbe _ghosts;
 
-    /// <summary>
-    /// Watches for the owner's answer to a data request, which both routes above deliver. Only spawned
-    /// crates: level objects, kept props and constraint ends are not ours to judge, or never answer.
-    /// </summary>
-    private void ProbeForGhost(ConnectedPlayer requester, ushort entityId)
+    /// <summary>Spawned crates only: level objects, kept props and constraint ends are not ours to judge, or never answer.</summary>
+    private static bool Probeable(TrackedEntity entity)
+        => entity is { Discovered: false, Persistent: false, Synthetic: false } && !string.IsNullOrEmpty(entity.Barcode);
+
+    /// <summary>Watches for the answer from whoever a data request went to: the owner, or a settled player when nobody owns it.</summary>
+    private void ProbeForGhost(ConnectedPlayer requester, TrackedEntity? entity, ConnectedPlayer? asked)
     {
-        if (Entities.Get(entityId) is { Discovered: false, Persistent: false, Synthetic: false, OwnerSmallId: { } owner } entity
-            && !string.IsNullOrEmpty(entity.Barcode)
-            && owner != requester.SmallId
-            && Players.Get(owner) is { Loaded: true })
+        if (entity != null && Probeable(entity)
+            && asked is { Loaded: true } && asked.SmallId != requester.SmallId
+            && (entity.OwnerSmallId == asked.SmallId
+                || entity.OwnerSmallId is not { } owner || Players.Get(owner) == null))
         {
-            _ghosts.Start(entity, requester.SmallId, owner);
+            _ghosts.Start(entity, requester.SmallId, asked.SmallId);
         }
     }
 
@@ -5769,20 +5785,20 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            string owner = Players.Get(probe.Owner)?.DisplayName ?? $"player {probe.Owner}";
+            string first = Players.Get(probe.Asked)?.DisplayName ?? $"player {probe.Asked}";
 
             // A second player who left before answering is replaced rather than counted as silent.
             if (probe.Second is not { } second || Players.Get(second) == null)
             {
                 var next = Players.Players
-                    .Where(p => p.Loaded && p.SmallId != probe.Requester && p.SmallId != probe.Owner)
+                    .Where(p => p.Loaded && p.SmallId != probe.Requester && p.SmallId != probe.Asked)
                     .OrderBy(p => p.JoinedAt)
                     .ThenBy(p => p.SmallId)
                     .FirstOrDefault();
 
                 if (next == null)
                 {
-                    Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), {owner} did not " +
+                    Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), {first} did not " +
                                 "answer for it and nobody else could be asked", console: false);
                     continue;
                 }
@@ -5799,9 +5815,10 @@ public sealed class FusionServer : IDisposable
             }
 
             string spawner = Players.Get(entity.SpawnedBy)?.DisplayName ?? $"player {entity.SpawnedBy}";
+            string owner = probe.Owner is { } owned ? Players.Get(owned)?.DisplayName ?? $"player {owned}" : "nobody";
 
             Log("WARN", $"Ghost removed: entity {entity.Id} ('{entity.ShortName}'), spawned by {spawner} at " +
-                        $"{entity.SpawnedAt:HH:mm:ss} UTC, owned by {owner}; neither {owner} nor " +
+                        $"{entity.SpawnedAt:HH:mm:ss} UTC, owned by {owner}; neither {first} nor " +
                         $"{Players.Get(second)!.DisplayName} had it");
         }
     }
