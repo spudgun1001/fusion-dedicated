@@ -965,12 +965,8 @@ public sealed class FusionServer : IDisposable
 
                 if (FusionProtocol.TryReadEntityPoseId(message) is { } posed && Entities.Get(posed) is { } posedEntity)
                 {
-                    lock (posedEntity.Builders)
-                    {
-                        posedEntity.Builders.Add(sender.SmallId);
-                    }
-
-                    settled = _ghosts.Count > 0 && _ghosts.Answered(posed);
+                    NoteBuilder(posedEntity, sender);
+                    settled = _ghosts.Count > 0 && _ghosts.Answered(posed, sender.SmallId);
                 }
 
                 if (FusionProtocol.EntityPoseProblem(message) is { } problem)
@@ -1296,6 +1292,7 @@ public sealed class FusionServer : IDisposable
             Connection = connection,
             PlatformId = platformId,
             SmallId = smallId.Value,
+            JoinedAt = Clock(),
             AvatarBarcode = request.AvatarBarcode,
             AvatarStats = joinStats,
             Metadata = request.Metadata,
@@ -5726,10 +5723,7 @@ public sealed class FusionServer : IDisposable
         // A game asks exactly when it builds the entity.
         if (entity != null)
         {
-            lock (entity.Builders)
-            {
-                entity.Builders.Add(sender.SmallId);
-            }
+            NoteBuilder(entity, sender);
         }
 
         byte? target = WorldCatchup.DataRequestTarget(
@@ -5802,6 +5796,15 @@ public sealed class FusionServer : IDisposable
 
         if (asked == null)
         {
+            var others = Players.Players.Where(p => p.Loaded && p != requester).ToList();
+
+            // Everybody else here joined after it was registered, so nobody can vouch for it.
+            if (others.Count > 0 && others.All(p => p.JoinedAt > entity.SpawnedAt))
+            {
+                Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), nobody here saw it spawned",
+                    console: false);
+            }
+
             return;
         }
 
@@ -5811,6 +5814,23 @@ public sealed class FusionServer : IDisposable
         {
             SendTo(asked.Connection, FusionProtocol.BuildEntityDataRequest(requester.SmallId, asked.SmallId, entity.Id),
                 reliable: true);
+        }
+    }
+
+    /// <summary>
+    /// Notes a game that showed it built the entity, if its player was here when it was registered. A later
+    /// joiner built it from our own list, so it would vouch for a ghost too.
+    /// </summary>
+    private static void NoteBuilder(TrackedEntity entity, ConnectedPlayer player)
+    {
+        if (player.JoinedAt > entity.SpawnedAt)
+        {
+            return;
+        }
+
+        lock (entity.Builders)
+        {
+            entity.Builders.Add(player.SmallId);
         }
     }
 

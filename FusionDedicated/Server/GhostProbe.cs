@@ -62,12 +62,14 @@ public sealed class GhostProbe
         }
     }
 
-    /// <summary>Any pose shows a game has the entity. True when that ended a probe.</summary>
-    public bool Answered(ushort entityId)
+    /// <summary>A pose from a player who was asked shows they have it. True when that ended a probe.</summary>
+    public bool Answered(ushort entityId, byte sender)
     {
         lock (_lock)
         {
-            return _pending.Remove(entityId);
+            return _pending.TryGetValue(entityId, out var probe)
+                   && (sender == probe.Asked || sender == probe.Second)
+                   && _pending.Remove(entityId);
         }
     }
 

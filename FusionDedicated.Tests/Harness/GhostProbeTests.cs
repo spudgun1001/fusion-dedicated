@@ -494,4 +494,66 @@ public class GhostProbeTests
         Assert.Equal(1, DataRequestsTo(world, kanza, Gun));
         Assert.NotNull(world.Server.Entities.Get(Gun));
     }
+
+    /// <summary>A late joiner's game built the gun from our own list, so its poses only echo the server.</summary>
+    [Fact]
+    public void A_late_joiner_posing_the_ghost_does_not_keep_it_alive()
+    {
+        var (world, joel, mia, _) = NewbieAsksJoel();
+        using var _ = world;
+        world.Advance(TimeSpan.FromSeconds(1));
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+
+        Answer(late, Gun);
+        world.Advance(PastDeadline);
+        Answer(late, Gun);
+        world.Advance(PastDeadline);
+
+        Assert.Null(world.Server.Entities.Get(Gun));
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+    }
+
+    [Fact]
+    public void A_late_joiners_data_request_does_not_make_them_a_witness()
+    {
+        var world = new World();
+        using var _ = world;
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+        var gun = world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", joel.SmallId, 1, 2, 3);
+        gun.Builders.Add(joel.SmallId);
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+        world.Join(NewbieId, "Newbie").FinishLoading();
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.DoesNotContain(late.SmallId, gun.Builders);
+        Assert.Equal(0, DataRequestsTo(world, late, Gun));
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+    }
+
+    [Fact]
+    public void With_only_late_joiners_here_an_entity_is_only_logged()
+    {
+        var world = new World();
+        using var _ = world;
+        world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", 0, 1, 2, 3).OwnerSmallId = null;
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+        var newbie = world.Join(NewbieId, "Newbie");
+        newbie.FinishLoading();
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Equal(0, DataRequestsTo(world, late, Gun));
+        Assert.Equal(PlayerRegistry.ServerSmallId, newbie.View.Entities[Gun].Owner);
+        Assert.Single(Lines(world, $"Possible ghost: entity {Gun}"));
+    }
 }
