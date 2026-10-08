@@ -20,6 +20,7 @@ public sealed class CommandProcessor
         players
         level <barcode> [title]
         plugins [reload]
+          Edit a plugin's JSON while the server runs, save it, and the plugin reloads with your edit within a few seconds.
         help
         """;
 

@@ -22,6 +22,9 @@ public sealed class LoadedPlugin
 
     /// <summary>What the plugin was handed, kept so its timers can be stopped.</summary>
     public PluginContext? Given { get; init; }
+
+    /// <summary>Where it was loaded from, so it can be loaded again on its own.</summary>
+    internal string Folder { get; init; } = "";
 }
 
 /// <summary>
@@ -58,6 +61,9 @@ public sealed class PluginHost
 
     private readonly List<LoadedPlugin> _loaded = new();
     private readonly object _lock = new();
+
+    /// <summary>One reload at a time, whether typed or from a hand-edited file.</summary>
+    private readonly object _reloadLock = new();
 
     public PluginHost(string directory, PluginEvents events, PluginHealth health,
         PluginPanel panel, PluginModules modules, IPluginActions actions,
@@ -142,19 +148,83 @@ public sealed class PluginHost
     /// </summary>
     public int ReloadAll()
     {
-        foreach (var plugin in Loaded)
+        lock (_reloadLock)
         {
-            try
+            foreach (var plugin in Loaded)
             {
-                Unload(plugin.Name);
+                try
+                {
+                    Unload(plugin.Name);
+                }
+                catch (Exception e)
+                {
+                    _log("WARN", $"Plugin '{plugin.Name}' could not be unloaded: {e.Message}");
+                }
             }
-            catch (Exception e)
-            {
-                _log("WARN", $"Plugin '{plugin.Name}' could not be unloaded: {e.Message}");
-            }
+
+            return LoadAll();
+        }
+    }
+
+    /// <summary>
+    /// Reloads each plugin whose data file was edited by hand, once the edit is a
+    /// second old so a file still being written is not read half done. Never throws,
+    /// since it runs on a timer.
+    /// </summary>
+    public void ReloadEdited()
+    {
+        // A reload already running, by command or the last check, is left to finish.
+        if (!Monitor.TryEnter(_reloadLock))
+        {
+            return;
         }
 
-        return LoadAll();
+        try
+        {
+            foreach (var plugin in Loaded)
+            {
+                try
+                {
+                    var edited = (plugin.Given?.OpenedStores ?? new List<PluginStore>())
+                        .Prepend(plugin.Store)
+                        .FirstOrDefault(s => s.EditedOnDisk);
+
+                    if (edited == null
+                        || DateTime.UtcNow - File.GetLastWriteTimeUtc(edited.FilePath) < TimeSpan.FromSeconds(1))
+                    {
+                        continue;
+                    }
+
+                    if (!edited.Parses())
+                    {
+                        // Warns and keeps what the plugin has, as a broken file at startup does.
+                        edited.Load();
+                        continue;
+                    }
+
+                    Unload(plugin.Name);
+
+                    if (plugin.Context == null)
+                    {
+                        Start(plugin.Manifest, plugin.Instance, null, plugin.Folder);
+                    }
+                    else
+                    {
+                        LoadFolder(plugin.Folder);
+                    }
+
+                    _log("INFO", $"'{edited.FilePath}' was edited on disk, so {plugin.Name} was reloaded with it");
+                }
+                catch (Exception e)
+                {
+                    _log("WARN", $"Plugin '{plugin.Name}' could not be checked for an edited data file: {e.Message}");
+                }
+            }
+        }
+        finally
+        {
+            Monitor.Exit(_reloadLock);
+        }
     }
 
     /// <summary>
@@ -340,6 +410,7 @@ public sealed class PluginHost
                 Store = store,
                 Context = context,
                 Given = pluginContext,
+                Folder = folder,
             });
         }
 

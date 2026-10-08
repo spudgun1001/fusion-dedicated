@@ -613,6 +613,10 @@ replacing a plugin folder does not take its saved data with it. A plugin that
 still has a `data.json` inside its own folder has it copied across on the next
 start, once, and the old file is left alone.
 
+Edit a plugin's JSON while the server runs, save it, and the plugin reloads with
+your edit within a few seconds. Only that plugin reloads. A file that will not
+parse is not loaded: the plugin keeps what it had and the log says so.
+
 Plugins can answer JSON routes under /api/plugins/http for a panel role, such as a
 bot signed in as a banker.
 

@@ -405,6 +405,11 @@ public static class Program
                 : "Plugins are off; set PluginsEnabled in server.json to load them");
         }
 
+        // Off the main loop and the world lock, like a typed reload, which waits for plugin timers.
+        using var pluginEdits = config.PluginsEnabled
+            ? new System.Threading.Timer(_ => plugins.ReloadEdited(), null, 2000, 2000)
+            : null;
+
         // After the plugins, so a reload typed at startup cannot run alongside LoadAll.
         StdinCommands.Start(commands, Console.WriteLine, quit.Token);
         rcon.Start();

@@ -85,17 +85,15 @@ public sealed class PluginContext
     /// <summary>Saves every store opened with <see cref="OpenStore"/>.</summary>
     public void SaveOpenedStores()
     {
-        List<PluginStore> stores;
-
-        lock (_storesLock)
-        {
-            stores = _opened.Values.ToList();
-        }
-
-        foreach (var store in stores)
+        foreach (var store in OpenedStores)
         {
             store.SaveIfChanged();
         }
+    }
+
+    internal List<PluginStore> OpenedStores
+    {
+        get { lock (_storesLock) { return _opened.Values.ToList(); } }
     }
 
     /// <summary>The page this plugin offers in the web panel, if it wants one.</summary>

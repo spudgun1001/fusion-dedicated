@@ -36,6 +36,12 @@ public sealed class PluginStore
     /// </summary>
     private bool _dirty;
 
+    /// <summary>The file's write time and length when this store last read or wrote it. Null until then.</summary>
+    private (DateTime, long)? _seen;
+
+    /// <summary>The edit already warned about, so a plugin saving every second says it once.</summary>
+    private (DateTime, long)? _warnedEdit;
+
     public PluginStore(string path, Action<string, string>? log = null)
     {
         _path = path;
@@ -47,6 +53,34 @@ public sealed class PluginStore
 
     /// <summary>False once a write has failed and not yet succeeded again.</summary>
     public bool Writable { get; private set; } = true;
+
+    /// <summary>True when the file was changed by someone else since this store read or wrote it.</summary>
+    public bool EditedOnDisk => Edited(out _);
+
+    private bool Edited(out (DateTime, long) onDisk)
+    {
+        onDisk = OnDisk();
+
+        lock (_lock)
+        {
+            return _seen != null && onDisk.Item2 >= 0 && onDisk != _seen;
+        }
+    }
+
+    /// <summary>Length -1 for a missing file.</summary>
+    private (DateTime, long) OnDisk()
+    {
+        var file = new FileInfo(_path);
+        return file.Exists ? (file.LastWriteTimeUtc, file.Length) : (DateTime.MinValue, -1);
+    }
+
+    private void Seen((DateTime, long) onDisk)
+    {
+        lock (_lock)
+        {
+            _seen = onDisk;
+        }
+    }
 
     public T? Get<T>(string key)
     {
@@ -108,6 +142,9 @@ public sealed class PluginStore
     /// <summary>Reads the file, keeping what is loaded if it will not parse.</summary>
     public void Load()
     {
+        // Taken before reading, so a write landing mid-read still counts as an edit.
+        Seen(OnDisk());
+
         if (!File.Exists(_path))
         {
             // Nothing on disk yet is not a change to protect against; only
@@ -120,27 +157,34 @@ public sealed class PluginStore
             return;
         }
 
-        try
-        {
-            var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-                File.ReadAllText(_path), Options);
+        var parsed = Read();
 
-            if (parsed == null)
-            {
-                KeepUnreadable();
-                return;
-            }
-
-            lock (_lock)
-            {
-                _values = new Dictionary<string, JsonElement>(parsed, StringComparer.OrdinalIgnoreCase);
-                _dirty = false;
-            }
-        }
-        catch (JsonException)
+        if (parsed == null)
         {
             // A broken file must not throw away state the plugin is still using.
             KeepUnreadable();
+            return;
+        }
+
+        lock (_lock)
+        {
+            _values = new Dictionary<string, JsonElement>(parsed, StringComparer.OrdinalIgnoreCase);
+            _dirty = false;
+        }
+    }
+
+    /// <summary>Whether the file reads as a store, without loading it.</summary>
+    internal bool Parses() => Read() != null;
+
+    private Dictionary<string, JsonElement>? Read()
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(File.ReadAllText(_path), Options);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
@@ -185,6 +229,25 @@ public sealed class PluginStore
     {
         lock (_saveLock)
         {
+            // The owner's hand edit wins; the plugin is reloaded with it shortly.
+            if (Edited(out var onDisk))
+            {
+                bool warn;
+
+                lock (_lock)
+                {
+                    warn = _warnedEdit != onDisk;
+                    _warnedEdit = onDisk;
+                }
+
+                if (warn)
+                {
+                    _log?.Invoke("WARN", $"'{_path}' was edited on disk, so it was not saved over");
+                }
+
+                return false;
+            }
+
             return WriteFile();
         }
     }
@@ -235,6 +298,7 @@ public sealed class PluginStore
             // Written beside the file and moved over it, so a kill mid-write leaves the old file whole.
             File.WriteAllText(tmp, JsonSerializer.Serialize(forDisk, Options));
             File.Move(tmp, _path, overwrite: true);
+            Seen(OnDisk());
 
             if (!Writable)
             {
