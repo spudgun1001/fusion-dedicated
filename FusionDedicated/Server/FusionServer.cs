@@ -3535,6 +3535,7 @@ public sealed class FusionServer : IDisposable
             player.LevelStateSent = false;
             player.AttachmentsResent = false;
             player.Loaded = false;
+            player.LoadedAt = null;
         }
 
         Broadcast(ServerProtocol.WriteSceneLoad(Config.LevelBarcode, Config.LoadingScreenBarcode),
