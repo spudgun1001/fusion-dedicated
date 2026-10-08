@@ -951,13 +951,13 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
             {
-                // A pose, broken or bodiless too, notes its sender as a builder. Only the asked witness's pose settles a probe.
+                // A pose, broken or bodiless too, notes its sender as a builder. Only a witness's pose settles a probe.
                 bool settled = false;
 
                 if (FusionProtocol.TryReadEntityPoseId(message) is { } posed && Entities.Get(posed) is { } posedEntity)
                 {
                     NoteBuilder(posedEntity, sender);
-                    settled = _ghosts.Count > 0 && IsWitness(posedEntity, sender) && _ghosts.Answered(posed, sender.SmallId);
+                    settled = _ghosts.Count > 0 && IsWitness(posedEntity, sender) && _ghosts.Answered(posed);
                 }
 
                 if (FusionProtocol.EntityPoseProblem(message) is { } problem)
@@ -5789,7 +5789,8 @@ public sealed class FusionServer : IDisposable
         {
             var others = Players.Players.Where(p => p.Loaded && p != requester).ToList();
 
-            if (others.Count > 0 && !others.Any(p => IsWitness(entity, p)))
+            // Under a deadline old, the spawner may simply not have posed it yet.
+            if (others.Count > 0 && !others.Any(p => IsWitness(entity, p)) && Clock() - entity.SpawnedAt >= GhostProbe.Wait)
             {
                 LogPossibleGhost(entity, "nobody here who saw it spawned has shown they have it");
             }
@@ -5855,8 +5856,18 @@ public sealed class FusionServer : IDisposable
 
     /// <summary>Sends a data request for the requester to the steadiest witness whose send goes out.</summary>
     private ConnectedPlayer? AskWitness(TrackedEntity entity, byte requester, byte? alsoExcept)
-        => Witnesses(entity, requester, alsoExcept).FirstOrDefault(p => SendTo(p.Connection,
-            FusionProtocol.BuildEntityDataRequest(requester, p.SmallId, entity.Id), reliable: true));
+    {
+        foreach (var witness in Witnesses(entity, requester, alsoExcept).ToList())
+        {
+            if (SendTo(witness.Connection, FusionProtocol.BuildEntityDataRequest(requester, witness.SmallId, entity.Id),
+                    reliable: true))
+            {
+                return witness;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Once per entity, since every joiner asks about it.</summary>
     private void LogPossibleGhost(TrackedEntity entity, string why)
@@ -5897,6 +5908,11 @@ public sealed class FusionServer : IDisposable
                 if (++probe.Rearms <= 3)
                 {
                     _ghosts.Requeue(probe);
+                }
+                else
+                {
+                    Log("INFO", $"Ghost check dropped for entity {entity.Id} ('{entity.ShortName}'): " +
+                                $"{current!.DisplayName} stayed backlogged", console: false);
                 }
 
                 continue;

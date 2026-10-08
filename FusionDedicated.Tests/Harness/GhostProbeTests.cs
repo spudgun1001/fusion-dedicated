@@ -566,7 +566,7 @@ public class GhostProbeTests
         var world = new World();
         using var _ = world;
         world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", 0, 1, 2, 3).OwnerSmallId = null;
-        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(PastDeadline);
 
         var late = world.Join(LateId, "Late");
         late.FinishLoading();
@@ -665,6 +665,9 @@ public class GhostProbeTests
 
         Assert.NotNull(world.Server.Entities.Get(Gun));
         Assert.Empty(Lines(world, "Ghost removed"));
+
+        var line = Assert.Single(Lines(world, $"Ghost check dropped for entity {Gun} ('Gun'): Mia stayed backlogged"));
+        Assert.Equal("INFO", line.Level);
     }
 
     /// <summary>Joel stayed silent and left, then a late joiner took his small id and posed the ghost.</summary>
@@ -713,7 +716,7 @@ public class GhostProbeTests
         var world = new World();
         using var _ = world;
         world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", 0, 1, 2, 3).OwnerSmallId = null;
-        world.Advance(TimeSpan.FromSeconds(1));
+        world.Advance(PastDeadline);
 
         world.Join(LateId, "Late").FinishLoading();
         world.Join(NewbieId, "Newbie").FinishLoading();
@@ -723,11 +726,32 @@ public class GhostProbeTests
     }
 
     [Fact]
-    public void Witnesses_who_never_built_it_are_logged_as_a_possible_ghost()
+    public void Witnesses_who_never_built_it_are_logged_as_a_possible_ghost_once_it_is_not_new()
     {
         var (world, _, _, _) = NewbieAsksJoel(gun => gun.Builders.Clear());
         using var _ = world;
 
+        // A second after the spawn, the spawner may not have posed it yet.
+        Assert.Empty(Lines(world, $"Possible ghost: entity {Gun}"));
+
+        world.Advance(TimeSpan.FromSeconds(29));
+        world.Join(LateId, "Late").FinishLoading();
+
         Assert.Single(Lines(world, $"Possible ghost: entity {Gun}"));
+    }
+
+    /// <summary>Kanza saw the gun spawn, so her pose is as good as Joel's answer.</summary>
+    [Fact]
+    public void A_witness_who_was_not_asked_can_settle_a_probe()
+    {
+        var (world, _, mia, _) = NewbieAsksJoel(kanza: true);
+        using var _ = world;
+
+        Answer(Named(world, "Kanza"), Gun);
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Equal(0, DataRequestsTo(world, mia, Gun));
     }
 }

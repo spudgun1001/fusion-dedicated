@@ -63,14 +63,12 @@ public sealed class GhostProbe
             Owner = entity.OwnerSmallId, OwnerName = ownerName,
         });
 
-    /// <summary>A pose from a player who was asked shows they have it. True when that ended a probe.</summary>
-    public bool Answered(ushort entityId, byte sender)
+    /// <summary>A witness's pose shows the entity exists. True when that ended a probe.</summary>
+    public bool Answered(ushort entityId)
     {
         lock (_lock)
         {
-            return _pending.TryGetValue(entityId, out var probe)
-                   && (sender == probe.Asked || sender == probe.Second)
-                   && _pending.Remove(entityId);
+            return _pending.Remove(entityId);
         }
     }
 
