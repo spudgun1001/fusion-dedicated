@@ -39,6 +39,9 @@ public sealed class TrackedEntity
     /// <summary>Set once a "Possible ghost" line has been logged for this, so each joiner asking does not repeat it.</summary>
     public bool NoWitnessLogged { get; set; }
 
+    /// <summary>Set once a dropped ghost check has been logged for this, so it is said once.</summary>
+    public bool DropLogged { get; set; }
+
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
     public float X { get; set; }

@@ -1968,6 +1968,11 @@ public sealed class FusionServer : IDisposable
         if (request.Value.PlayerSmallId == sender.SmallId
             && WorldCatchup.LoadingState(request.Value.Key, request.Value.Value) is { } loading)
         {
+            if (!loading && !sender.Loaded)
+            {
+                sender.LoadedAt = Clock();
+            }
+
             sender.Loaded = !loading;
             sender.Loading = loading;
         }
@@ -5738,19 +5743,19 @@ public sealed class FusionServer : IDisposable
             SendTo(sender.Connection,
                 FusionProtocol.BuildOwnershipResponse(owner, request.EntityId), reliable: true);
 
-            SendTo(current.Connection,
+            bool sent = SendTo(current.Connection,
                 FusionProtocol.BuildEntityDataRequest(sender.SmallId, owner, request.EntityId),
                 reliable: true);
 
             Log("INFO", $"Data request by {sender.DisplayName} for entity {request.EntityId} " +
                         $"redirected from {request.Target?.ToString() ?? "nobody"} to player {owner}", console: false);
 
-            asked = current;
+            // A refused send never reached them, so they cannot count as asked.
+            asked = sent ? current : null;
         }
         else
         {
-            Relay(sender, message);
-            asked = request.Target is { } named ? Players.Get(named) : null;
+            asked = Relay(sender, message) && request.Target is { } named ? Players.Get(named) : null;
         }
 
         ProbeForGhost(sender, entity, asked);
@@ -5776,7 +5781,9 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private void ProbeForGhost(ConnectedPlayer requester, TrackedEntity? entity, ConnectedPlayer? sentTo)
     {
-        if (entity == null || !Probeable(entity) || entity.OwnerSmallId == requester.SmallId || _ghosts.Has(entity.Id))
+        // A requester who saw it spawn was told about it live, so there is no catch-up to check.
+        if (entity == null || !Probeable(entity) || entity.OwnerSmallId == requester.SmallId || _ghosts.Has(entity.Id)
+            || SawSpawn(entity, requester))
         {
             return;
         }
@@ -5808,7 +5815,7 @@ public sealed class FusionServer : IDisposable
     /// </summary>
     private static void NoteBuilder(TrackedEntity entity, ConnectedPlayer player)
     {
-        if (player.JoinedAt > entity.SpawnedAt)
+        if (!SawSpawn(entity, player))
         {
             return;
         }
@@ -5819,13 +5826,17 @@ public sealed class FusionServer : IDisposable
         }
     }
 
+    /// <summary>Whether their game had loaded when the entity was registered, so it was told about it live.</summary>
+    private static bool SawSpawn(TrackedEntity entity, ConnectedPlayer player)
+        => player.LoadedAt is { } loaded && loaded <= entity.SpawnedAt;
+
     /// <summary>
-    /// Whether this player saw the entity spawn and their game showed it built it. The join time is
+    /// Whether this player saw the entity spawn and their game showed it built it. The load time is
     /// checked too, because whoever is given a leaver's small id inherits their place in Builders.
     /// </summary>
     private static bool IsWitness(TrackedEntity entity, ConnectedPlayer player)
     {
-        if (player.JoinedAt > entity.SpawnedAt)
+        if (!SawSpawn(entity, player))
         {
             return false;
         }
@@ -5909,8 +5920,9 @@ public sealed class FusionServer : IDisposable
                 {
                     _ghosts.Requeue(probe);
                 }
-                else
+                else if (!entity.DropLogged)
                 {
+                    entity.DropLogged = true;
                     Log("INFO", $"Ghost check dropped for entity {entity.Id} ('{entity.ShortName}'): " +
                                 $"{current!.DisplayName} stayed backlogged", console: false);
                 }
@@ -6285,7 +6297,8 @@ public sealed class FusionServer : IDisposable
         203,  // GamemodeMetadataRemove
     };
 
-    private void Relay(ConnectedPlayer sender, byte[] message)
+    /// <returns>False when a message for one player was not sent to them.</returns>
+    private bool Relay(ConnectedPlayer sender, byte[] message)
     {
         if (HostOnlyTags.Contains(message[0]))
         {
@@ -6296,7 +6309,7 @@ public sealed class FusionServer : IDisposable
                             "Ignored. A stock client does not do this.");
             }
 
-            return;
+            return true;
         }
 
         var (relayType, channel, target) = ServerProtocol.ReadRoute(message);
@@ -6319,23 +6332,19 @@ public sealed class FusionServer : IDisposable
                                 "was dropped");
                 }
 
-                return;
+                return true;
 
             case 2: // ToClients, everyone, sender included
                 Broadcast(stamped, reliable);
-                return;
+                return true;
 
             case 3: // ToOtherClients
                 Broadcast(stamped, reliable, except: sender.SmallId);
-                return;
+                return true;
 
             case 4: // ToTarget
-                if (target.HasValue && Players.Get(target.Value) is { } recipient)
-                {
-                    SendTo(recipient.Connection, stamped, reliable);
-                }
-
-                return;
+                return target.HasValue && Players.Get(target.Value) is { } recipient
+                       && SendTo(recipient.Connection, stamped, reliable);
 
             case 5: // ToTargets, the listed players only
                 foreach (byte listedId in ServerProtocol.ReadTargets(message))
@@ -6346,11 +6355,11 @@ public sealed class FusionServer : IDisposable
                     }
                 }
 
-                return;
+                return true;
 
             default:
                 Broadcast(stamped, reliable, except: sender.SmallId);
-                return;
+                return true;
         }
     }
 

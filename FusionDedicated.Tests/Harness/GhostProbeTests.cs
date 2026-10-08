@@ -754,4 +754,96 @@ public class GhostProbeTests
         Assert.NotNull(world.Server.Entities.Get(Gun));
         Assert.Equal(0, DataRequestsTo(world, mia, Gun));
     }
+
+    /// <summary>Every game that saw a live spawn asks about it, and none of them is a joiner to protect.</summary>
+    [Fact]
+    public void A_live_spawn_asks_nobody_extra()
+    {
+        var world = new World();
+        using var _ = world;
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+        var mia = world.Join(MiaId, "Mia");
+        mia.FinishLoading();
+        var kanza = world.Join(KanzaId, "Kanza");
+        kanza.FinishLoading();
+
+        world.Spawn(joel, Gun, "Pack.Spawnable.Gun", 1, 2, 3);
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.Equal(2, DataRequestsTo(world, joel, Gun));
+        Assert.Equal(0, DataRequestsTo(world, mia, Gun));
+        Assert.Equal(0, DataRequestsTo(world, kanza, Gun));
+    }
+
+    /// <summary>Kanza was connected for the spawn but still loading, so her game built it from the server's word.</summary>
+    [Fact]
+    public void A_player_who_loaded_after_the_spawn_is_not_a_witness()
+    {
+        var world = new World();
+        using var _ = world;
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+        var mia = world.Join(MiaId, "Mia");
+        mia.FinishLoading();
+        var kanza = world.Join(KanzaId, "Kanza");
+
+        world.Spawn(joel, Gun, "Pack.Spawnable.Gun", 1, 2, 3);
+        world.Advance(TimeSpan.FromSeconds(1));
+        kanza.FinishLoading();
+
+        Assert.DoesNotContain(kanza.SmallId, world.Server.Entities.Get(Gun)!.Builders);
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+    }
+
+    [Fact]
+    public void A_dropped_ghost_check_is_logged_once_per_entity()
+    {
+        var (world, joel, mia, _) = NewbieAsksJoel();
+        using var _ = world;
+
+        Congest(world, joel);
+        for (int i = 0; i < 4; i++)
+        {
+            world.Advance(PastDeadline);
+        }
+
+        world.Join(LateId, "Late").FinishLoading();
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+
+        Congest(world, mia);
+        for (int i = 0; i < 4; i++)
+        {
+            world.Advance(PastDeadline);
+        }
+
+        Assert.Single(Lines(world, $"Ghost check dropped for entity {Gun}"));
+    }
+
+    /// <summary>With nothing held for retry, a refused relay leaves no backlog to show the owner never heard it.</summary>
+    [Fact]
+    public void An_owner_whose_relayed_request_was_refused_is_not_counted_as_asked()
+    {
+        var world = new World(new ServerConfig { CullOrphanedEntities = false, SendRetryQueue = 0 });
+        using var _ = world;
+        var joel = world.Join(JoelId, "Joel");
+        joel.FinishLoading();
+        var mia = world.Join(MiaId, "Mia");
+        mia.FinishLoading();
+        var gun = world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", joel.SmallId, 1, 2, 3);
+        gun.Builders.UnionWith(new[] { joel.SmallId, mia.SmallId });
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        var newbie = world.Join(NewbieId, "Newbie");
+        world.Transport.FailSendsWith = "k_EResultLimitExceeded";
+        newbie.FinishLoading();
+        world.Transport.FailSendsWith = null;
+
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.Equal(0, DataRequestsTo(world, mia, Gun));
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+    }
 }

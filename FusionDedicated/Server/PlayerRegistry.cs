@@ -152,6 +152,9 @@ public sealed class ConnectedPlayer
     /// </summary>
     public bool Loaded { get; set; }
 
+    /// <summary>When their game last said it finished loading, by the server clock. Null until it has.</summary>
+    public DateTime? LoadedAt { get; set; }
+
     /// <summary>
     /// Whether their game last said it is loading. Unlike Loaded it is false for a game that
     /// has said nothing yet, so only a player known to be loading is skipped.
