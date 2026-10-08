@@ -36,6 +36,9 @@ public sealed class TrackedEntity
     /// <summary>Players whose game showed it built this, by asking for its state or sending its pose. Lock it to use it.</summary>
     public HashSet<byte> Builders { get; } = new();
 
+    /// <summary>Set once a "Possible ghost" line has been logged for this, so each joiner asking does not repeat it.</summary>
+    public bool NoWitnessLogged { get; set; }
+
     public DateTime LastUpdate { get; set; } = DateTime.UtcNow;
 
     public float X { get; set; }

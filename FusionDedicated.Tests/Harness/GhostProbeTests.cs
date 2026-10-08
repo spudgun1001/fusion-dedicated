@@ -21,21 +21,31 @@ public class GhostProbeTests
     private static readonly TimeSpan PastDeadline = TimeSpan.FromSeconds(11);
 
     /// <summary>
-    /// Joel owns a gun that his game and Mia's both built, then Newbie joins and asks Joel about it.
+    /// Joel owns a gun that his game and Mia's both built (and Kanza's, when asked for), then a second
+    /// later Newbie joins and asks Joel about it.
     /// </summary>
     private static (World World, FakePlayer Joel, FakePlayer Mia, FakePlayer Newbie) NewbieAsksJoel(
-        Action<TrackedEntity>? shape = null, string barcode = "Pack.Spawnable.Gun")
+        Action<TrackedEntity>? shape = null, string barcode = "Pack.Spawnable.Gun", bool kanza = false)
     {
         var world = new World();
         var joel = world.Join(JoelId, "Joel");
         joel.FinishLoading();
         var mia = world.Join(MiaId, "Mia");
         mia.FinishLoading();
+        var third = kanza ? world.Join(KanzaId, "Kanza") : null;
+        third?.FinishLoading();
 
         var gun = world.Server.Entities.Register(Gun, barcode, joel.SmallId, 1, 2, 3);
         gun.Builders.Add(joel.SmallId);
         gun.Builders.Add(mia.SmallId);
+
+        if (third != null)
+        {
+            gun.Builders.Add(third.SmallId);
+        }
+
         shape?.Invoke(gun);
+        world.Advance(TimeSpan.FromSeconds(1));
 
         var newbie = world.Join(NewbieId, "Newbie");
         newbie.FinishLoading();
@@ -45,6 +55,18 @@ public class GhostProbeTests
 
     private static void Answer(FakePlayer player, ushort entity, float x = 1)
         => player.Send(FusionProtocol.BuildEntityPoseUpdate(player.SmallId, entity, new Vec3(x, 2, 3), default, default, default));
+
+    private static FakePlayer Named(World world, string name) => world.Players.Single(p => p.Name == name);
+
+    private static readonly ConnectionHealth Calm = new(PingMs: 60, QualityLocal: 1f, QualityRemote: 1f,
+        OutBytesPerSecond: 40_000f, WaitingBytes: 1_000, QueueMicroseconds: 3_000, PendingBytes: 800);
+
+    /// <summary>A send buffer past the server's congestion limit.</summary>
+    private static void Congest(World world, FakePlayer player)
+    {
+        world.Transport.SetHealth(player.Connection, Calm with { PendingBytes = 512_000 });
+        world.Advance(TimeSpan.FromMilliseconds(120));
+    }
 
     private static int DataRequestsTo(World world, FakePlayer player, ushort entity)
         => world.Transport.SentTo(player.Connection).Count(sent =>
@@ -161,7 +183,7 @@ public class GhostProbeTests
         Assert.Equal("WARN", line.Level);
         Assert.Contains($"spawned by Joel ({JoelId})", line.Message);
         Assert.Contains("owned by Joel", line.Message);
-        Assert.Contains("last update 22 s ago at (1.0, 2.0, 3.0)", line.Message);
+        Assert.Contains("last update 23 s ago at (1.0, 2.0, 3.0)", line.Message);
         Assert.Contains("inherited", line.Message);
         Assert.Contains("neither Joel nor Mia had it", line.Message);
     }
@@ -188,6 +210,7 @@ public class GhostProbeTests
         var joel = world.Join(JoelId, "Joel");
         joel.FinishLoading();
         world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", joel.SmallId, 1, 2, 3).Builders.Add(joel.SmallId);
+        world.Advance(TimeSpan.FromSeconds(1));
         world.Join(NewbieId, "Newbie").FinishLoading();
 
         world.Advance(PastDeadline);
@@ -230,12 +253,13 @@ public class GhostProbeTests
     [Fact]
     public void Asking_for_an_entity_or_sending_its_pose_shows_a_game_built_it()
     {
-        var (world, joel, mia, newbie) = NewbieAsksJoel(gun => gun.Builders.Clear());
+        var (world, joel, mia, _) = NewbieAsksJoel(gun => gun.Builders.Clear());
         using var _ = world;
 
         Answer(joel, Gun);
+        mia.Send(FusionProtocol.BuildEntityDataRequest(mia.SmallId, joel.SmallId, Gun));
 
-        Assert.Equal(new[] { joel.SmallId, newbie.SmallId }.Order(), world.Server.Entities.Get(Gun)!.Builders.Order());
+        Assert.Equal(new[] { joel.SmallId, mia.SmallId }.Order(), world.Server.Entities.Get(Gun)!.Builders.Order());
     }
 
     /// <summary>Mia's fast game asks Joel before his own game has built what he spawned.</summary>
@@ -316,6 +340,7 @@ public class GhostProbeTests
         mia.FinishLoading();
         var gun = world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", joel.SmallId, 1, 2, 3);
         gun.Builders.UnionWith(new[] { kanza.SmallId, joel.SmallId, mia.SmallId });
+        world.Advance(TimeSpan.FromSeconds(1));
         world.Join(NewbieId, "Newbie").FinishLoading();
 
         world.Advance(PastDeadline);
@@ -480,10 +505,9 @@ public class GhostProbeTests
     [Fact]
     public void A_second_player_who_leaves_is_replaced()
     {
-        var (world, _, mia, _) = NewbieAsksJoel();
+        var (world, _, mia, _) = NewbieAsksJoel(kanza: true);
         using var _ = world;
-        var kanza = world.Join(KanzaId, "Kanza");
-        kanza.FinishLoading();
+        var kanza = Named(world, "Kanza");
 
         world.Advance(PastDeadline);
         Assert.Equal(1, DataRequestsTo(world, mia, Gun));
@@ -554,6 +578,156 @@ public class GhostProbeTests
         Assert.NotNull(world.Server.Entities.Get(Gun));
         Assert.Equal(0, DataRequestsTo(world, late, Gun));
         Assert.Equal(PlayerRegistry.ServerSmallId, newbie.View.Entities[Gun].Owner);
+        Assert.Single(Lines(world, $"Possible ghost: entity {Gun}"));
+    }
+
+    /// <summary>The reported case: the ghost belongs to a late joiner, whose game keeps posing it.</summary>
+    [Fact]
+    public void A_ghost_owned_by_a_late_joiner_is_removed_while_they_pose_it()
+    {
+        var (world, joel, mia, _) = NewbieAsksJoel();
+        using var _ = world;
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+        world.Server.Entities.SetOwner(Gun, late.SmallId);
+        world.Advance(PastDeadline);
+        int joelBefore = DataRequestsTo(world, joel, Gun);
+
+        var asker = world.Join(KanzaId, "Kanza");
+        asker.FinishLoading();
+        Answer(late, Gun);
+        world.Advance(PastDeadline);
+        Answer(late, Gun);
+        world.Advance(PastDeadline);
+
+        Assert.Null(world.Server.Entities.Get(Gun));
+        Assert.Equal(joelBefore + 1, DataRequestsTo(world, joel, Gun));
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+    }
+
+    /// <summary>A real answer goes only to whoever asked, as Fusion's NetworkProp routes it.</summary>
+    [Fact]
+    public void An_answer_sent_to_the_asker_alone_keeps_the_entity()
+    {
+        var (world, joel, mia, newbie) = NewbieAsksJoel();
+        using var _ = world;
+
+        var payload = new FusionNetWriter(64);
+        payload.WriteUInt16(Gun);
+        payload.Write((byte)1);
+        FusionRigPose.WriteBodyPose(payload, new Vec3(1, 2, 3), Quat.Identity, default, default);
+
+        var message = new FusionNetWriter(96);
+        message.Write(FusionProtocol.TagEntityPoseUpdate);
+        message.Write((byte)4);   // ToTarget
+        message.Write((byte)0);   // Reliable
+        message.WriteNullable(newbie.SmallId);
+        message.WriteNullable(joel.SmallId);
+        message.WriteBlock(payload.ToArray());
+
+        joel.Send(message.ToArray());
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Equal(0, DataRequestsTo(world, mia, Gun));
+    }
+
+    [Fact]
+    public void A_backlogged_witness_is_passed_over()
+    {
+        var (world, _, mia, _) = NewbieAsksJoel(kanza: true);
+        using var _ = world;
+        var kanza = Named(world, "Kanza");
+
+        Congest(world, mia);
+        world.Advance(PastDeadline);
+
+        Assert.Equal(0, DataRequestsTo(world, mia, Gun));
+        Assert.Equal(1, DataRequestsTo(world, kanza, Gun));
+    }
+
+    [Fact]
+    public void A_witness_backlogged_at_the_deadline_is_not_counted_as_silent()
+    {
+        var (world, _, mia, _) = NewbieAsksJoel();
+        using var _ = world;
+
+        world.Advance(PastDeadline);
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+
+        Congest(world, mia);
+
+        for (int i = 0; i < 5; i++)
+        {
+            world.Advance(PastDeadline);
+        }
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Empty(Lines(world, "Ghost removed"));
+    }
+
+    /// <summary>Joel stayed silent and left, then a late joiner took his small id and posed the ghost.</summary>
+    [Fact]
+    public void A_late_joiner_on_a_silent_witnesss_small_id_cannot_answer_for_them()
+    {
+        var (world, joel, mia, _) = NewbieAsksAboutAnOwnerlessGun();
+        using var _ = world;
+        byte joelId = joel.SmallId;
+
+        world.Advance(PastDeadline);
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+
+        world.Leave(joel, "Closing Connection");
+        var late = world.Join(LateId, "Late");
+        late.FinishLoading();
+        Assert.Equal(joelId, late.SmallId);
+
+        Answer(late, Gun);
+        world.Advance(PastDeadline);
+
+        Assert.Null(world.Server.Entities.Get(Gun));
+        Assert.Contains("neither Joel nor Mia had it", Assert.Single(Lines(world, "Ghost removed")).Message);
+    }
+
+    [Fact]
+    public void A_first_asked_player_who_leaves_is_replaced_and_one_silence_never_removes()
+    {
+        var (world, joel, mia, _) = NewbieAsksAboutAnOwnerlessGun();
+        using var _ = world;
+
+        world.Leave(joel, "Closing Connection");
+        world.Advance(TimeSpan.FromMilliseconds(16));
+        Assert.Equal(1, DataRequestsTo(world, mia, Gun));
+
+        world.Advance(PastDeadline);
+        world.Advance(PastDeadline);
+
+        Assert.NotNull(world.Server.Entities.Get(Gun));
+        Assert.Single(Lines(world, $"Possible ghost: entity {Gun}"));
+    }
+
+    [Fact]
+    public void A_possible_ghost_is_logged_once()
+    {
+        var world = new World();
+        using var _ = world;
+        world.Server.Entities.Register(Gun, "Pack.Spawnable.Gun", 0, 1, 2, 3).OwnerSmallId = null;
+        world.Advance(TimeSpan.FromSeconds(1));
+
+        world.Join(LateId, "Late").FinishLoading();
+        world.Join(NewbieId, "Newbie").FinishLoading();
+        world.Join(KanzaId, "Kanza").FinishLoading();
+
+        Assert.Single(Lines(world, $"Possible ghost: entity {Gun}"));
+    }
+
+    [Fact]
+    public void Witnesses_who_never_built_it_are_logged_as_a_possible_ghost()
+    {
+        var (world, _, _, _) = NewbieAsksJoel(gun => gun.Builders.Clear());
+        using var _ = world;
+
         Assert.Single(Lines(world, $"Possible ghost: entity {Gun}"));
     }
 }

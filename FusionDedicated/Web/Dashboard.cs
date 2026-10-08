@@ -581,7 +581,7 @@ public sealed class Dashboard
                 avatar = p.AvatarBarcode,
                 version = $"{p.Version.Major}.{p.Version.Minor}",
                 permission = (int)p.Permission,
-                onlineSeconds = (int)(DateTime.UtcNow - p.JoinedAt).TotalSeconds,
+                onlineSeconds = (int)(_server.Clock() - p.JoinedAt).TotalSeconds,
                 bytesIn = p.BytesIn,
                 bytesOut = p.BytesOut,
                 entities = _server.Entities.Entities.Count(e => e.OwnerSmallId == p.SmallId),

@@ -436,15 +436,6 @@ public sealed class FusionServer : IDisposable
         _catchup.Forget(player.SmallId);
         _ghosts.Depart(player.SmallId);
 
-        // Small ids are reused, and whoever is given this one next has built nothing yet.
-        foreach (var entity in Entities.Entities)
-        {
-            lock (entity.Builders)
-            {
-                entity.Builders.Remove(player.SmallId);
-            }
-        }
-
         // Fusion sends no egress for a leaver, so the others would see them frozen in the seat.
         // Sent before the disconnect, while their clients still know who the rider is.
         if (_seats.SeatOf(player.SmallId) is { } seat)
@@ -960,13 +951,13 @@ public sealed class FusionServer : IDisposable
 
             case FusionProtocol.TagEntityPoseUpdate when sender != null:
             {
-                // Any pose shows the sender's game has the entity, a broken or bodiless one too.
+                // A pose, broken or bodiless too, notes its sender as a builder. Only the asked witness's pose settles a probe.
                 bool settled = false;
 
                 if (FusionProtocol.TryReadEntityPoseId(message) is { } posed && Entities.Get(posed) is { } posedEntity)
                 {
                     NoteBuilder(posedEntity, sender);
-                    settled = _ghosts.Count > 0 && _ghosts.Answered(posed, sender.SmallId);
+                    settled = _ghosts.Count > 0 && IsWitness(posedEntity, sender) && _ghosts.Answered(posed, sender.SmallId);
                 }
 
                 if (FusionProtocol.EntityPoseProblem(message) is { } problem)
@@ -5780,41 +5771,34 @@ public sealed class FusionServer : IDisposable
         => entity is { Discovered: false, Persistent: false, Synthetic: false } && !string.IsNullOrEmpty(entity.Barcode);
 
     /// <summary>
-    /// Watches for an answer from a player whose game built the entity: whoever the request went to when
-    /// they did, or else the steadiest builder, asked here. A game that never built it is silent for no reason.
+    /// Watches for an answer from a witness to the entity: whoever the request went to when they are one,
+    /// or else the steadiest witness, asked here. A game that never built it is silent for no reason.
     /// </summary>
     private void ProbeForGhost(ConnectedPlayer requester, TrackedEntity? entity, ConnectedPlayer? sentTo)
     {
-        if (entity == null || !Probeable(entity) || entity.OwnerSmallId == requester.SmallId)
+        if (entity == null || !Probeable(entity) || entity.OwnerSmallId == requester.SmallId || _ghosts.Has(entity.Id))
         {
             return;
         }
 
-        var asked = sentTo is { Loaded: true } && sentTo != requester && Built(entity, sentTo.SmallId)
+        var asked = sentTo != null && sentTo != requester && Askable(entity, sentTo)
             ? sentTo
-            : SteadiestBuilder(entity, requester.SmallId);
+            : AskWitness(entity, requester.SmallId, null);
 
         if (asked == null)
         {
             var others = Players.Players.Where(p => p.Loaded && p != requester).ToList();
 
-            // Everybody else here joined after it was registered, so nobody can vouch for it.
-            if (others.Count > 0 && others.All(p => p.JoinedAt > entity.SpawnedAt))
+            if (others.Count > 0 && !others.Any(p => IsWitness(entity, p)))
             {
-                Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), nobody here saw it spawned",
-                    console: false);
+                LogPossibleGhost(entity, "nobody here who saw it spawned has shown they have it");
             }
 
             return;
         }
 
         string owner = entity.OwnerSmallId is { } id ? Players.Get(id)?.DisplayName ?? $"player {id}" : "nobody";
-
-        if (_ghosts.Start(entity, requester.SmallId, asked.SmallId, owner) && asked != sentTo)
-        {
-            SendTo(asked.Connection, FusionProtocol.BuildEntityDataRequest(requester.SmallId, asked.SmallId, entity.Id),
-                reliable: true);
-        }
+        _ghosts.Start(entity, requester.SmallId, asked.SmallId, asked.DisplayName, owner);
     }
 
     /// <summary>
@@ -5834,25 +5818,62 @@ public sealed class FusionServer : IDisposable
         }
     }
 
-    private static bool Built(TrackedEntity entity, byte player)
+    /// <summary>
+    /// Whether this player saw the entity spawn and their game showed it built it. The join time is
+    /// checked too, because whoever is given a leaver's small id inherits their place in Builders.
+    /// </summary>
+    private static bool IsWitness(TrackedEntity entity, ConnectedPlayer player)
     {
+        if (player.JoinedAt > entity.SpawnedAt)
+        {
+            return false;
+        }
+
         lock (entity.Builders)
         {
-            return entity.Builders.Contains(player);
+            return entity.Builders.Contains(player.SmallId);
         }
     }
 
-    /// <summary>The longest-joined loaded player, leaving out those given, whose game showed it built this.</summary>
-    private ConnectedPlayer? SteadiestBuilder(TrackedEntity entity, byte except, byte? alsoExcept = null)
+    /// <summary>A loaded witness who will hear a request now, not behind a backlog.</summary>
+    private bool Askable(TrackedEntity entity, ConnectedPlayer player)
+        => player.Loaded && IsWitness(entity, player) && !Backlogged(player);
+
+    private bool Backlogged(ConnectedPlayer player)
+        => _retry.Waiting(player.Connection.m_HSteamNetConnection) > 0
+           || _congested.Contains(player.Connection.m_HSteamNetConnection);
+
+    /// <summary>The steadiest askable witness, leaving out the requester and anybody else given.</summary>
+    private IEnumerable<ConnectedPlayer> Witnesses(TrackedEntity entity, byte requester, byte? alsoExcept)
         => Players.Players
-            .Where(p => p.Loaded && p.SmallId != except && p.SmallId != alsoExcept && Built(entity, p.SmallId))
+            .Where(p => p.SmallId != requester && p.SmallId != alsoExcept && Askable(entity, p))
             .OrderBy(p => p.JoinedAt)
-            .ThenBy(p => p.SmallId)
-            .FirstOrDefault();
+            .ThenBy(p => p.SmallId);
+
+    private ConnectedPlayer? SteadiestBuilder(TrackedEntity entity, byte except)
+        => Witnesses(entity, except, null).FirstOrDefault();
+
+    /// <summary>Sends a data request for the requester to the steadiest witness whose send goes out.</summary>
+    private ConnectedPlayer? AskWitness(TrackedEntity entity, byte requester, byte? alsoExcept)
+        => Witnesses(entity, requester, alsoExcept).FirstOrDefault(p => SendTo(p.Connection,
+            FusionProtocol.BuildEntityDataRequest(requester, p.SmallId, entity.Id), reliable: true));
+
+    /// <summary>Once per entity, since every joiner asks about it.</summary>
+    private void LogPossibleGhost(TrackedEntity entity, string why)
+    {
+        if (entity.NoWitnessLogged)
+        {
+            return;
+        }
+
+        entity.NoWitnessLogged = true;
+        Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), {why}", console: false);
+    }
 
     /// <summary>
-    /// Asks a second builder about each entity the first did not answer for, and removes it everywhere
+    /// Asks a second witness about each entity the first did not answer for, and removes it everywhere
     /// when they are silent too. A joiner is built from this list, so they alone saw such an item.
+    /// Removal takes two silences, each from a witness still here and not backlogged at their deadline.
     /// </summary>
     private void CheckGhostProbes()
     {
@@ -5867,31 +5888,61 @@ public sealed class FusionServer : IDisposable
                 continue;
             }
 
-            string first = Players.Get(probe.Asked)?.DisplayName ?? $"player {probe.Asked}";
+            var current = Players.Get(probe.Second ?? probe.Asked);
+            bool here = current != null && IsWitness(entity, current);
 
-            // A second player who left before answering is replaced rather than counted as silent.
-            if (probe.Second is not { } second || Players.Get(second) is not { } secondPlayer)
+            // Too backlogged to have heard us, so the silence says nothing yet.
+            if (here && Backlogged(current!))
             {
-                if (SteadiestBuilder(entity, probe.Requester, probe.Asked) is not { } next)
+                if (++probe.Rearms <= 3)
                 {
-                    Log("INFO", $"Possible ghost: entity {entity.Id} ('{entity.ShortName}'), {first} did not " +
-                                "answer for it and nobody else who built it could be asked", console: false);
-                    continue;
+                    _ghosts.Requeue(probe);
                 }
 
-                SendTo(next.Connection, FusionProtocol.BuildEntityDataRequest(probe.Requester, next.SmallId, entity.Id),
-                    reliable: true);
-                _ghosts.AskNext(probe, next.SmallId);
                 continue;
             }
 
-            // Written before the despawn, whose hooks can kick the very players it names.
+            // The first player asked left before their deadline, so somebody else is asked first instead.
+            if (probe.Second == null && !here)
+            {
+                if (AskWitness(entity, probe.Requester, null) is { } replacement)
+                {
+                    probe.Asked = replacement.SmallId;
+                    probe.AskedName = replacement.DisplayName;
+                    _ghosts.Requeue(probe);
+                }
+                else
+                {
+                    LogPossibleGhost(entity, $"{probe.AskedName} left before answering and nobody else who saw it spawned could be asked");
+                }
+
+                continue;
+            }
+
+            // The first was silent, or the second left before their deadline.
+            if (probe.Second == null || !here)
+            {
+                if (AskWitness(entity, probe.Requester, probe.Asked) is { } next)
+                {
+                    probe.Second = next.SmallId;
+                    probe.SecondName = next.DisplayName;
+                    _ghosts.Requeue(probe);
+                }
+                else
+                {
+                    LogPossibleGhost(entity, $"{probe.AskedName} did not answer for it and nobody else who saw it spawned could be asked");
+                }
+
+                continue;
+            }
+
+            // Written before the despawn, whose hooks can kick somebody.
             string flags = (entity.PluginSpawned ? ", plugin spawned" : "") + (entity.Inherited ? ", inherited" : "");
             string line = $"Ghost removed: entity {entity.Id} ('{entity.ShortName}', {entity.Barcode}), spawned by " +
                           $"{(entity.PluginSpawned ? "a plugin" : entity.SpawnedBy)} at {entity.SpawnedAt:HH:mm:ss} UTC, " +
                           $"owned by {probe.OwnerName}, last update {(Clock() - entity.LastUpdate).TotalSeconds:0} s ago " +
                           $"at ({entity.X:0.0}, {entity.Y:0.0}, {entity.Z:0.0}){flags}; " +
-                          $"neither {first} nor {secondPlayer.DisplayName} had it";
+                          $"neither {probe.AskedName} nor {probe.SecondName} had it";
 
             if (DespawnEntity(entity.Id))
             {

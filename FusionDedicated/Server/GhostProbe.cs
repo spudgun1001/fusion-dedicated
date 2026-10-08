@@ -25,8 +25,10 @@ public sealed class GhostProbe
         public required TrackedEntity Entity { get; init; }
         public required byte Requester { get; init; }
 
-        /// <summary>Who was asked first: the owner, or the steadiest other player whose game built it.</summary>
-        public required byte Asked { get; init; }
+        /// <summary>Who is asked first: the owner, or the steadiest witness. Replaced if they leave before their deadline.</summary>
+        public required byte Asked { get; set; }
+
+        public required string AskedName { get; set; }
 
         /// <summary>The owner when it started, so a probe ends if the entity changes hands.</summary>
         public byte? Owner { get; init; }
@@ -36,31 +38,30 @@ public sealed class GhostProbe
         /// <summary>Who was asked once the first stayed silent, or null while it is still their turn.</summary>
         public byte? Second { get; set; }
 
+        public string SecondName { get; set; } = "";
+
+        /// <summary>Deadlines put back because the asked player was too backlogged to have heard us.</summary>
+        public int Rearms { get; set; }
+
         public DateTime Due { get; set; }
     }
 
     public int Count => _pending.Count;
 
-    /// <summary>Starts a probe for this entity, unless one is already running.</summary>
-    public bool Start(TrackedEntity entity, byte requester, byte asked, string ownerName)
+    public bool Has(ushort entityId)
     {
         lock (_lock)
         {
-            var probe = new Probe
-            {
-                Entity = entity, Requester = requester, Asked = asked, Owner = entity.OwnerSmallId,
-                OwnerName = ownerName, Due = _clock() + Wait,
-            };
-
-            if (!_pending.TryAdd(entity.Id, probe))
-            {
-                return false;
-            }
-
-            Schedule(probe.Due);
-            return true;
+            return _pending.ContainsKey(entityId);
         }
     }
+
+    public void Start(TrackedEntity entity, byte requester, byte asked, string askedName, string ownerName)
+        => Requeue(new Probe
+        {
+            Entity = entity, Requester = requester, Asked = asked, AskedName = askedName,
+            Owner = entity.OwnerSmallId, OwnerName = ownerName,
+        });
 
     /// <summary>A pose from a player who was asked shows they have it. True when that ended a probe.</summary>
     public bool Answered(ushort entityId, byte sender)
@@ -117,12 +118,11 @@ public sealed class GhostProbe
         }
     }
 
-    /// <summary>Puts a probe back, now waiting on a second player.</summary>
-    public void AskNext(Probe probe, byte next)
+    /// <summary>Waits a full deadline on whoever the probe now asks.</summary>
+    public void Requeue(Probe probe)
     {
         lock (_lock)
         {
-            probe.Second = next;
             probe.Due = _clock() + Wait;
             _pending[probe.Entity.Id] = probe;
             Schedule(probe.Due);
