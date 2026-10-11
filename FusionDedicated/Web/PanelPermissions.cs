@@ -33,6 +33,7 @@ public static class PanelPermissions
         ["/api/persist"] = PanelRole.Moderator,
         ["/api/despawn"] = PanelRole.Moderator,
         ["/api/gather"] = PanelRole.Moderator,
+        ["/api/teleport"] = PanelRole.Moderator,
 
         ["/api/settings"] = PanelRole.Owner,
         ["/api/restart"] = PanelRole.Owner,

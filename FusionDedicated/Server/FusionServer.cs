@@ -3236,6 +3236,51 @@ public sealed class FusionServer : IDisposable
         return true;
     }
 
+    /// <summary>Every kept entity in the world, with the note on the record the join catch-up links it to.</summary>
+    public List<(TrackedEntity Entity, string Note)> KeptProps()
+    {
+        var records = Props?.For(Config.LevelBarcode) ?? Array.Empty<Props.PersistentProp>();
+
+        return Entities.Entities
+            .Where(e => e.Persistent)
+            .OrderBy(e => e.Id)
+            .Select(e => (e, records
+                .Where(p => string.Equals(p.Barcode, e.Barcode, StringComparison.OrdinalIgnoreCase)
+                    && MatchesKeptPosition(e, p))
+                .OrderBy(p => KeptDistanceSquared(e, p))
+                .FirstOrDefault()?.Note ?? ""))
+            .ToList();
+    }
+
+    public IEnumerable<ConnectedPlayer> OnlineStaff()
+        => Players.Players.Where(p => p.Permission.IsAtLeast(PermissionLevel.Operator));
+
+    /// <summary>Sends an online Operator or Owner to 1 m above a tracked entity. Returns why not, or null once sent.</summary>
+    public string? TeleportStaffTo(byte smallId, ushort entityId, string by)
+    {
+        if (Players.Get(smallId) is not { } player)
+        {
+            return "That player is not online.";
+        }
+
+        if (!player.Permission.IsAtLeast(PermissionLevel.Operator))
+        {
+            return "Only an Operator or Owner can be teleported from here.";
+        }
+
+        if (Entities.Get(entityId) is not { } entity)
+        {
+            return "That prop is no longer in the world.";
+        }
+
+        SendTo(player.Connection,
+            ServerProtocol.WritePlayerTeleport(player.SmallId, new Vec3(entity.X, entity.Y + 1f, entity.Z)),
+            reliable: true);
+
+        Log("INFO", $"{by} teleported {player.DisplayName} to {entity.ShortName} (id {entityId})");
+        return null;
+    }
+
     /// <summary>
     /// Brings everybody to one player. For gathering a server up before a round,
     /// or getting people out of somewhere they have fallen into.

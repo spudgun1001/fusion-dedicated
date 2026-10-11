@@ -328,6 +328,7 @@
   td.dim { color: hsl(var(--muted-foreground)); }
   .right { text-align: right; }
   .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .acts select { width: auto; padding: 4px 8px; }
   .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
   .tree ul { margin-left: 12px; padding-left: 14px; border-left: 1px solid hsl(var(--border)); }
   .tree .node { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; }
@@ -730,6 +731,9 @@
         </div>
       </div>
       <div class="panel" id="entities"></div>
+
+      <div class="sec"><h2>Kept props<span class="n" id="keptCount">0</span></h2></div>
+      <div class="panel" id="kept"></div>
     </section>
 
     <!-- ========== MODERATION ========== -->
@@ -1652,6 +1656,7 @@ function renderWorld(d) {
   $('worldNote').textContent = d.entities.total + ' tracked, ' + d.entities.orphaned +
     ' orphaned, ' + (d.entities.discovered || 0) + ' from the level';
 
+  renderKept(d);
   if (worldHeld && !worldForce) return;
 
   const html = !d.entities.recent.length
@@ -1689,6 +1694,50 @@ function renderWorld(d) {
 
 $('entities').addEventListener('pointerenter', () => { worldHeld = true; });
 $('entities').addEventListener('pointerleave', () => { worldHeld = false; });
+
+/* Held on hover like the list above, so a staff select stays open. */
+let keptHeld = false;
+let keptHtml = '';
+
+function renderKept(d) {
+  const kept = d.entities.kept || [];
+  const staff = d.staff || [];
+  $('keptCount').textContent = kept.length;
+
+  if (keptHeld && !worldForce) return;
+
+  const pick = id => !staff.length
+    ? '<span class="dim">No staff online</span>'
+    : '<select id="kt' + id + '">' + staff.map(p =>
+        '<option value="' + p.smallId + '">' + esc(plain(p.name)) + '</option>').join('') + '</select>' +
+      '<button onclick="teleport(' + id + ')">Teleport</button>';
+
+  const html = !kept.length
+    ? empty('No kept props')
+    : '<table class="stack"><thead><tr>' +
+      '<th>ID</th><th>Item</th><th>Kept by</th><th class="right">Position</th>' +
+      '<th class="right">Actions</th>' +
+      '</tr></thead><tbody>' +
+      kept.map(e => '<tr>' +
+        '<td class="m dim" data-label="ID">' + e.id + '</td>' +
+        '<td data-label="Item"><div class="name">' + esc(e.name) + '</div>' +
+          '<div class="sub">' + esc(e.barcode) + '</div></td>' +
+        '<td data-label="Kept by">' + (e.note ? esc(e.note) : '<span class="dim">-</span>') + '</td>' +
+        '<td class="m right dim" data-label="Position">' + e.x + ', ' + e.y + ', ' + e.z + '</td>' +
+        '<td class="right" data-label="Actions"><div class="acts">' +
+          '<button onclick="persist(' + e.id + ', 0)">Drop</button>' +
+          '<button class="bad" onclick="despawn(' + e.id + ')">Remove</button>' +
+          pick(e.id) +
+        '</div></td>' +
+        '</tr>').join('') + '</tbody></table>';
+
+  if (html === keptHtml) return;
+  keptHtml = html;
+  $('kept').innerHTML = html;
+}
+
+$('kept').addEventListener('pointerenter', () => { keptHeld = true; });
+$('kept').addEventListener('pointerleave', () => { keptHeld = false; });
 
 /* ---------- settings ---------- */
 
@@ -1967,6 +2016,13 @@ async function persist(id, keep) {
 
   worldForce = true;
   poll();
+}
+
+async function teleport(id) {
+  const player = $('kt' + id).value;
+  const r = await (await fetch('/api/teleport?player=' + player + '&entity=' + id)).json();
+
+  if (!r.ok) { alert(r.error || 'That did not work.'); }
 }
 
 async function unban(platformId) {

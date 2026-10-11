@@ -259,6 +259,16 @@ public sealed class Dashboard
                 HandlePersist(context, query);
                 return;
 
+            case "/api/teleport":
+            {
+                string? error = byte.TryParse(query["player"], out byte player) && ushort.TryParse(query["entity"], out ushort entity)
+                    ? _server.Exclusive(() => _server.TeleportStaffTo(player, entity, _acting))
+                    : "Which player and prop?";
+
+                ServeJson(context, new { ok = error == null, error });
+                return;
+            }
+
             case "/api/mute":
                 HandleMute(context, query, muted: true);
                 return;
@@ -674,7 +684,21 @@ public sealed class Dashboard
                         y = MathF.Round(e.Y, 1),
                         z = MathF.Round(e.Z, 1),
                     }).ToArray(),
+
+                // Every kept prop, so none scrolls out of the recent list.
+                kept = _server.KeptProps().Select(k => new
+                {
+                    id = k.Entity.Id,
+                    name = k.Entity.ShortName,
+                    barcode = k.Entity.Barcode,
+                    x = MathF.Round(k.Entity.X, 1),
+                    y = MathF.Round(k.Entity.Y, 1),
+                    z = MathF.Round(k.Entity.Z, 1),
+                    note = k.Note,
+                }).ToArray(),
             },
+
+            staff = _server.OnlineStaff().Select(p => new { smallId = p.SmallId, name = p.DisplayName }).ToArray(),
 
             log = _server.RecentLog(200).Select(l => new
             {
