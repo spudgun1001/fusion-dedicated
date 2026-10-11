@@ -73,15 +73,16 @@ public class DiscoveredEntityTests
         Assert.DoesNotContain((ushort)500, registry.CullOrphans(TimeSpan.Zero));
     }
 
+    // Owner, 2026-10-11: map objects such as doors are never cleared.
     [Fact]
-    public void Clearing_leaves_discovered_entities_alone_by_default()
+    public void Clearing_never_removes_map_objects()
     {
         var registry = Registry();
         ushort spawned = registry.AllocateId();
         registry.Register(spawned, "A.B.C.D", 3, 0f, 0f, 0f);
         registry.NotePose(500, 7, 0f, 0f, 0f);
 
-        var removed = registry.Clear(includeDiscovered: false);
+        var removed = registry.Clear();
 
         Assert.Contains(spawned, removed);
         Assert.DoesNotContain((ushort)500, removed);
@@ -89,15 +90,21 @@ public class DiscoveredEntityTests
     }
 
     [Fact]
-    public void Clearing_can_include_them_when_asked()
+    public void The_panel_has_no_way_to_clear_map_objects()
     {
-        var registry = Registry();
-        registry.NotePose(500, 7, 0f, 0f, 0f);
+        string page = File.ReadAllText(Path.Combine(
+            Path.GetDirectoryName(typeof(FusionServer).Assembly.Location)!, "Web", "index.html"));
 
-        var removed = registry.Clear(includeDiscovered: true);
+        Assert.DoesNotContain("includeDiscovered", Web.DashboardSource.Text());
+        Assert.DoesNotContain("includeDiscovered", page);
+    }
 
-        Assert.Contains((ushort)500, removed);
-        Assert.Null(registry.Get(500));
+    [Fact]
+    public void The_panel_will_not_remove_a_map_object_on_its_own()
+    {
+        string despawn = Web.DashboardSource.Method("private void HandleDespawn(");
+
+        Assert.Contains("That is part of the map, so it stays.", despawn);
     }
 
     [Fact]

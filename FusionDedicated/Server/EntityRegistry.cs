@@ -873,11 +873,6 @@ public sealed class EntityRegistry
     }
 
     /// <summary>
-    /// Removes everything and reports what went. Discovered entities are held back
-    /// unless asked for: one may be a scene prop, and despawning that desynchronises
-    /// every client.
-    /// </summary>
-    /// <summary>
     /// Empties the books completely, persistent props included. For a level change,
     /// where the old world is gone whatever it was made of. The props themselves are
     /// kept in their own file and go back on the level they belong to.
@@ -897,7 +892,8 @@ public sealed class EntityRegistry
         return removed.Select(e => e.Id).ToList();
     }
 
-    public List<ushort> Clear(bool includeDiscovered = false)
+    /// <summary>Removes every spawned item and reports what went. Kept props and map objects stay.</summary>
+    public List<ushort> Clear()
     {
         List<TrackedEntity> removed;
 
@@ -908,7 +904,8 @@ public sealed class EntityRegistry
             removed = _entities.Values
                 // A constraint end stays until the server drops its constraint: when what
                 // it holds goes, one of its ends goes missing, or it is cleared.
-                .Where(e => e.Removable && !e.Synthetic && (includeDiscovered || !e.Discovered))
+                // Map objects such as doors are never cleared (owner, 2026-10-11).
+                .Where(e => e.Removable && !e.Synthetic && !e.Discovered)
                 .ToList();
 
             foreach (var entity in removed)

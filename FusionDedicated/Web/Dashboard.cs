@@ -240,8 +240,7 @@ public sealed class Dashboard
 
             case "/api/clear":
             {
-                int removed = _server.Exclusive(() => _server.ClearAllEntities(
-                    query["includeDiscovered"] == "1" || _config.ClearDiscoveredEntities));
+                int removed = _server.Exclusive(() => _server.ClearAllEntities());
 
                 ServeJson(context, new { ok = true, removed });
                 return;
@@ -1067,6 +1066,11 @@ public sealed class Dashboard
             if (_server.Entities.Get(id) is not { } entity)
             {
                 return new { ok = false, error = "That entity is no longer in the world." };
+            }
+
+            if (entity.Discovered)
+            {
+                return new { ok = false, error = "That is part of the map, so it stays." };
             }
 
             string name = entity.ShortName;

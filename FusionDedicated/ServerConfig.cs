@@ -399,12 +399,6 @@ public sealed class ServerConfig
     /// <summary>Only players listed in whitelist.json may join when this is on.</summary>
     public bool WhitelistEnabled { get; set; }
 
-    /// <summary>
-    /// Whether "clear every entity" also removes entities the server only learned
-    /// about from pose updates. Off by default: one may be a scene prop, and
-    /// despawning that desynchronises every client.
-    /// </summary>
-    public bool ClearDiscoveredEntities { get; set; }
 
     /// <summary>
     /// Whether the claim Fusion answers a joiner's magazine catch-up with is passed on. Off by default:

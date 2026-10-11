@@ -3521,11 +3521,9 @@ public sealed class FusionServer : IDisposable
     /// is not acted on, the entity would disappear from the server's books while
     /// staying in everyone's world.
     /// </summary>
-    public int ClearAllEntities(bool includeDiscovered = false)
+    public int ClearAllEntities()
     {
-        // Clear() decides what is eligible; discovered entities are held back unless
-        // asked for, because one may be a scene prop rather than a spawn.
-        var doomed = Entities.Clear(includeDiscovered);
+        var doomed = Entities.Clear();
 
         DespawnOnClients(doomed);
 
