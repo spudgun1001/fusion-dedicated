@@ -568,6 +568,7 @@ public sealed class Dashboard
                 idleTimeoutSeconds = _config.IdleTimeoutSeconds,
                 ammoTimeoutSeconds = _config.AmmoTimeoutSeconds,
                 orphanTimeoutSeconds = _config.OrphanTimeoutSeconds,
+                neverCullBarcodes = _config.NeverCullBarcodes,
             },
             traffic = new
             {
@@ -1293,6 +1294,11 @@ public sealed class Dashboard
                 _config.OrphanTimeoutSeconds = orphan;
             }
 
+            if (query["neverCullBarcodes"] is { } neverCull)
+            {
+                _config.NeverCullBarcodes = SplitList(neverCull);
+            }
+
             _config.Save(Program.ConfigPath);
 
             // Reaches players who are already connected, not just the browser listing.
@@ -1303,6 +1309,10 @@ public sealed class Dashboard
 
         ServeJson(context, new { ok = true });
     }
+
+    /// <summary>One entry per line or comma, blanks dropped.</summary>
+    internal static List<string> SplitList(string text)
+        => text.Split(['\n', '\r', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
     private static void ReadBool(NameValueCollection query, string key, Action<bool> apply)
     {

@@ -700,7 +700,8 @@ public sealed class EntityRegistry
     public List<TrackedEntity> CullStaleDetailed(
         TimeSpan orphanTimeout, TimeSpan inheritedTimeout, TimeSpan idleTimeout = default,
         TimeSpan ammoTimeout = default, IReadOnlySet<ushort>? inUse = null,
-        IReadOnlyCollection<string>? shortLived = null, TimeSpan gadgetTimeout = default)
+        IReadOnlyCollection<string>? shortLived = null, TimeSpan gadgetTimeout = default,
+        IReadOnlyCollection<string>? neverCull = null)
     {
         var removed = new List<TrackedEntity>();
         var now = Clock();
@@ -745,6 +746,11 @@ public sealed class EntityRegistry
                     continue;
                 }
 
+                if (Matches(entity.Barcode, neverCull))
+                {
+                    continue;
+                }
+
                 TimeSpan timeout;
 
                 // Only the idle clock treats zero as "leave them alone". An
@@ -776,7 +782,7 @@ public sealed class EntityRegistry
                     && !entity.Attached
                     && (timeout <= TimeSpan.Zero || ammoTimeout < timeout)
                     && (Safety.Ammunition.IsAmmo(entity.Barcode)
-                        || shortLived?.Any(w => entity.Barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true))
+                        || Matches(entity.Barcode, shortLived)))
                 {
                     timeout = ammoTimeout;
                     zeroMeansNever = false;
@@ -807,6 +813,9 @@ public sealed class EntityRegistry
         return removed;
     }
 
+    private static bool Matches(string barcode, IReadOnlyCollection<string>? words)
+        => words?.Any(w => barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true;
+
     /// <summary>
     /// Frees space at the cap by dropping the least recently touched abandoned props.
     /// Only inherited or ownerless ones are eligible, so a player's own work is never
@@ -828,7 +837,7 @@ public sealed class EntityRegistry
     /// goes. Requiring real idleness means nothing in use is ever a candidate.
     /// </param>
     public List<ushort> EvictOldest(int count, bool anyOwner = false, TimeSpan idleFor = default,
-        IReadOnlySet<ushort>? inUse = null)
+        IReadOnlySet<ushort>? inUse = null, IReadOnlyCollection<string>? neverCull = null)
     {
         var cutoff = Clock() - (idleFor == default ? TimeSpan.FromMinutes(2) : idleFor);
         List<TrackedEntity> candidates;
@@ -847,6 +856,7 @@ public sealed class EntityRegistry
                     // Somebody is sitting in it, so it is in use on either pass.
                     && !e.Occupied
                     && inUse?.Contains(e.Id) != true
+                    && !Matches(e.Barcode, neverCull)
                     // A magazine in a gun or a gun in a holster sleeps, so it
                     // looks idle while somebody is carrying it.
                     && (anyOwner

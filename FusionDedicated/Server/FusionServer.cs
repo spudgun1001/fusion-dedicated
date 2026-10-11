@@ -2192,7 +2192,8 @@ public sealed class FusionServer : IDisposable
             // invisible to the player, they pull the trigger and nothing happens -
             // and once the world is full it stays full, so every spawn after that
             // fails for everyone.
-            var evicted = Entities.EvictOldest(Config.EvictBatchSize, inUse: EntitiesInUse());
+            var evicted = Entities.EvictOldest(Config.EvictBatchSize, inUse: EntitiesInUse(),
+                neverCull: Config.NeverCullBarcodes);
 
             if (evicted.Count > 0)
             {
@@ -2212,7 +2213,7 @@ public sealed class FusionServer : IDisposable
                 // cannot aim the eviction at anybody else.
                 var forced = Entities.EvictOldest(
                     Config.EvictBatchSize, anyOwner: true, idleFor: TimeSpan.FromMinutes(2),
-                    inUse: EntitiesInUse());
+                    inUse: EntitiesInUse(), neverCull: Config.NeverCullBarcodes);
 
                 if (forced.Count > 0)
                 {
@@ -6878,7 +6879,8 @@ public sealed class FusionServer : IDisposable
             TimeSpan.FromSeconds(Math.Max(0, Config.AmmoTimeoutSeconds)),
             EntitiesInUse(),
             Config.ShortLivedBarcodes,
-            TimeSpan.FromSeconds(Math.Max(0, Config.GadgetTimeoutSeconds)));
+            TimeSpan.FromSeconds(Math.Max(0, Config.GadgetTimeoutSeconds)),
+            neverCull: Config.NeverCullBarcodes);
 
         _magazinesCulled += culled.Count(e => Ammunition.IsAmmo(e.Barcode));
         _gadgetsCulled += culled.Count(e => ToolGate.IsGadget(e.Barcode));

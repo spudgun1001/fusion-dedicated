@@ -304,6 +304,9 @@ public sealed class ServerConfig
     /// </summary>
     public List<string> ShortLivedBarcodes { get; set; } = new() { "Mist" };
 
+    /// <summary>Words in a crate name that keep it out of the cull and eviction, such as vehicles.</summary>
+    public List<string> NeverCullBarcodes { get; set; } = new();
+
     /// <summary>
     /// Seconds before a nimbus gun or spawn gun nobody is holding or wearing is removed, counted
     /// from the last time it moved. Zero leaves them to the ordinary rules.

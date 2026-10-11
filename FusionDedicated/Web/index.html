@@ -889,6 +889,7 @@
         <div><label>Orphan timeout (s)</label><input id="fOrphan" type="number" min="5" max="86400" data-s></div>
         <div><label>Idle timeout (s)</label><input id="fIdle" type="number" min="0" max="86400" data-s></div>
         <div><label>Ammo timeout (s)</label><input id="fAmmo" type="number" min="0" max="86400" data-s></div>
+        <div class="full"><label for="fNeverCull">Never cull barcodes</label><textarea id="fNeverCull" class="m" rows="3" data-s></textarea></div>
       </div>
       <div class="panel" style="margin-top:14px">
         <div class="rows">
@@ -1883,6 +1884,7 @@ function revert() {
   $('fOrphan').value = d.limits.orphanTimeoutSeconds;
   $('fIdle').value = d.limits.idleTimeoutSeconds;
   $('fAmmo').value = d.limits.ammoTimeoutSeconds;
+  $('fNeverCull').value = d.limits.neverCullBarcodes.join('\n');
 
   $('fBurst').value = g.burstLimit;
   $('fWindow').value = g.windowSeconds;
@@ -1923,6 +1925,7 @@ async function saveSettings() {
     orphanTimeoutSeconds: $('fOrphan').value,
     idleTimeoutSeconds: $('fIdle').value,
     ammoTimeoutSeconds: $('fAmmo').value,
+    neverCullBarcodes: $('fNeverCull').value,
     cullOrphans: !!draft.cullOrphans,
 
     antiSpam: !!draft.antiSpam,
