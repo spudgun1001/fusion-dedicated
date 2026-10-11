@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FusionDedicated;
 using FusionDedicated.Server;
 using FusionDedicated.Commands;
@@ -448,15 +449,29 @@ public static class Program
             // A dedicated server has to outlive its own mistakes. Nothing here
             // was wrapped, so one unexpected throw anywhere in the loop ended the
             // process with players on it: a file busy for a moment was enough.
+            long passStart = Stopwatch.GetTimestamp();
+            int collections = GC.CollectionCount(0);
+            double lockWait = 0;
+
             try
             {
                 // One pass at a time under the world lock, so the panel, console and RCON
                 // never change the world halfway through one.
                 server.Exclusive(() =>
                 {
+                    lockWait = Stopwatch.GetElapsedTime(passStart).TotalMilliseconds;
+                    long lap = Stopwatch.GetTimestamp();
+                    void Phase(string name)
+                    {
+                        server.Loop.Phase(name, Stopwatch.GetElapsedTime(lap).TotalMilliseconds);
+                        lap = Stopwatch.GetTimestamp();
+                    }
+
                     SteamAPI.RunCallbacks();
+                    Phase("steam callbacks");
 
                     server.Receive();
+                    Phase("receive");
 
                     if ((DateTime.UtcNow - lastLobbyUpdate).TotalSeconds >= 5)
                     {
@@ -522,8 +537,11 @@ public static class Program
                         });
                     }
 
+                    Phase("lobby");
+
                     // Anything waiting on a shorter clock than the tick below.
                     server.PumpDeferred();
+                    Phase("deferred");
 
                     if ((DateTime.UtcNow - lastTick).TotalSeconds >= 10)
                     {
@@ -552,16 +570,26 @@ public static class Program
                         lastTick = DateTime.UtcNow;
                     }
 
+                    Phase("tick");
+
                     if ((DateTime.UtcNow - lastSample).TotalSeconds >= 5)
                     {
                         server.Resources.Sample_(server);
                         lastSample = DateTime.UtcNow;
                     }
+
+                    Phase("sample");
                 });
             }
             catch (Exception ex)
             {
                 server.Log("ERROR", $"The server loop threw and carried on: {ex.Message}");
+            }
+
+            if (server.Loop.End(Stopwatch.GetElapsedTime(passStart).TotalMilliseconds, lockWait,
+                    GC.CollectionCount(0) - collections, DateTime.UtcNow) is { } slow)
+            {
+                server.Log("WARN", slow);
             }
 
             await Task.Delay(16);

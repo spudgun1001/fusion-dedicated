@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BonelabServerBrowser.Fusion;
 using FusionDedicated.Protocol;
 using FusionDedicated.Server.Audit;
@@ -773,6 +774,7 @@ public sealed class FusionServer : IDisposable
     {
         PacketsIn++;
         BytesIn += bytes.Length;
+        long start = Stopwatch.GetTimestamp();
 
         try
         {
@@ -782,7 +784,14 @@ public sealed class FusionServer : IDisposable
         {
             Log("ERROR", $"Failed to handle a packet: {ex.Message}");
         }
+
+        double ms = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        string sender = ms > Loop.SlowestMs ? Players.GetByConnection(connection)?.DisplayName ?? "a new connection" : "";
+        Loop.Message(bytes.Length > 0 ? bytes[0] : (byte)0, sender, ms);
     }
+
+    /// <summary>Times the main loop's passes; Program feeds it the phases.</summary>
+    public LoopTimer Loop { get; } = new();
 
     private void HandleMessage(HSteamNetConnection connection, byte[] message)
     {
