@@ -67,6 +67,7 @@
   "MaxEntities": 2000,
   "CullOrphanedEntities": true,
   "OrphanTimeoutSeconds": 120,
+  "NeverCullBarcodes": [],
   "BlacklistedBarcodes": [],
   "LogDirectory": "logs",
   "DashboardPort": 8778,

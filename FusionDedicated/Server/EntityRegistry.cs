@@ -746,11 +746,6 @@ public sealed class EntityRegistry
                     continue;
                 }
 
-                if (Matches(entity.Barcode, neverCull))
-                {
-                    continue;
-                }
-
                 TimeSpan timeout;
 
                 // Only the idle clock treats zero as "leave them alone". An
@@ -800,7 +795,7 @@ public sealed class EntityRegistry
                 bool stale = (!zeroMeansNever || timeout > TimeSpan.Zero)
                     && now - entity.LastUpdate > timeout;
 
-                if (stale)
+                if (stale && !Matches(entity.Barcode, neverCull))
                 {
                     _entities.Remove(entity.Id);
                     removed.Add(entity);
@@ -814,7 +809,7 @@ public sealed class EntityRegistry
     }
 
     private static bool Matches(string barcode, IReadOnlyCollection<string>? words)
-        => words?.Any(w => barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true;
+        => words?.Any(w => !string.IsNullOrWhiteSpace(w) && barcode.Contains(w, StringComparison.OrdinalIgnoreCase)) == true;
 
     /// <summary>
     /// Frees space at the cap by dropping the least recently touched abandoned props.

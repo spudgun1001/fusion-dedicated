@@ -70,6 +70,27 @@ public class NeverCullTests
     }
 
     [Fact]
+    public void Blank_and_null_entries_match_nothing()
+    {
+        var registry = World((300, "Pack.Spawnable.Chair", null, false));
+
+        Assert.Equal(new ushort[] { 300 }, Cull(registry, new[] { null!, "", " " }));
+    }
+
+    [Fact]
+    public void A_blank_short_lived_entry_does_not_put_everything_on_the_ammo_clock()
+    {
+        var registry = World((300, "Pack.Spawnable.Chair", 1, false));
+        registry.Get(300)!.LastUpdate = DateTime.UtcNow.AddMinutes(-3);
+
+        var removed = registry.CullStaleDetailed(
+            TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(10),
+            TimeSpan.FromMinutes(1), shortLived: new[] { null!, "" });
+
+        Assert.Empty(removed);
+    }
+
+    [Fact]
     public void The_config_defaults_to_empty()
         => Assert.Empty(new ServerConfig().NeverCullBarcodes);
 
