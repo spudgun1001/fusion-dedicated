@@ -57,6 +57,30 @@ public class KeptTeleportTests : IDisposable
     }
 
     [Fact]
+    public void Two_close_kept_props_get_the_notes_the_catch_up_links_them_to()
+    {
+        // Each one alone is nearest record B. The catch-up goes record first and claims, so A takes 1 and B takes 2.
+        using var world = new World();
+        var store = new PersistentPropStore(Path.Combine(_dir, "persistent.json"));
+        string level = world.Server.Config.LevelBarcode;
+        store.Add(new PersistentProp { Barcode = "Pack.Spawnable.Crate", Level = level, X = 0f, Note = "A" });
+        store.Add(new PersistentProp { Barcode = "Pack.Spawnable.Crate", Level = level, X = 0.4f, Note = "B" });
+        world.Server.Props = store;
+
+        foreach (var (id, x) in new[] { ((ushort)1, 0.3f), ((ushort)2, 0.35f) })
+        {
+            var entity = world.Server.Entities.Register(id, "Pack.Spawnable.Crate", 1, x, 0, 0);
+            entity.Persistent = true;
+            entity.KeptAt = (x, 0f, 0f);
+        }
+
+        var kept = world.Server.KeptProps();
+
+        Assert.Equal("A", kept.Single(k => k.Entity.Id == 1).Note);
+        Assert.Equal("B", kept.Single(k => k.Entity.Id == 2).Note);
+    }
+
+    [Fact]
     public void Staff_lists_only_operators_and_owners_online()
     {
         using var world = new World();

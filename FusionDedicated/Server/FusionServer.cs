@@ -3104,14 +3104,7 @@ public sealed class FusionServer : IDisposable
 
         foreach (var prop in store.For(Config.LevelBarcode))
         {
-            // Props side by side can both be in range of one entity, so each record takes the closest one not yet taken.
-            var existing = Entities.Entities
-                .Where(e => e.Persistent
-                    && !claimed.Contains(e.Id)
-                    && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
-                    && MatchesKeptPosition(e, prop))
-                .OrderBy(e => KeptDistanceSquared(e, prop))
-                .FirstOrDefault();
+            var existing = ClaimKept(prop, claimed);
 
             ushort id;
 
@@ -3135,6 +3128,19 @@ public sealed class FusionServer : IDisposable
             claimed.Add(id);
         }
     }
+
+    /// <summary>
+    /// The live kept entity a record belongs to. Props side by side can both be in
+    /// range of one entity, so each record takes the closest one not yet taken.
+    /// </summary>
+    private TrackedEntity? ClaimKept(Props.PersistentProp prop, HashSet<ushort> claimed)
+        => Entities.Entities
+            .Where(e => e.Persistent
+                && !claimed.Contains(e.Id)
+                && string.Equals(e.Barcode, prop.Barcode, StringComparison.OrdinalIgnoreCase)
+                && MatchesKeptPosition(e, prop))
+            .OrderBy(e => KeptDistanceSquared(e, prop))
+            .FirstOrDefault();
 
     /// <summary>
     /// Matches a kept record against where the entity was kept, not where it has
@@ -3239,16 +3245,21 @@ public sealed class FusionServer : IDisposable
     /// <summary>Every kept entity in the world, with the note on the record the join catch-up links it to.</summary>
     public List<(TrackedEntity Entity, string Note)> KeptProps()
     {
-        var records = Props?.For(Config.LevelBarcode) ?? Array.Empty<Props.PersistentProp>();
+        var claimed = new HashSet<ushort>();
+        var notes = new Dictionary<ushort, string>();
+
+        foreach (var prop in Props?.For(Config.LevelBarcode) ?? Array.Empty<Props.PersistentProp>())
+        {
+            if (ClaimKept(prop, claimed) is { } entity)
+            {
+                claimed.Add(entity.Id);
+                notes[entity.Id] = prop.Note;
+            }
+        }
 
         return Entities.Entities
             .Where(e => e.Persistent)
-            .OrderBy(e => e.Id)
-            .Select(e => (e, records
-                .Where(p => string.Equals(p.Barcode, e.Barcode, StringComparison.OrdinalIgnoreCase)
-                    && MatchesKeptPosition(e, p))
-                .OrderBy(p => KeptDistanceSquared(e, p))
-                .FirstOrDefault()?.Note ?? ""))
+            .Select(e => (e, notes.GetValueOrDefault(e.Id, "")))
             .ToList();
     }
 

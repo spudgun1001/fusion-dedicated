@@ -260,14 +260,8 @@ public sealed class Dashboard
                 return;
 
             case "/api/teleport":
-            {
-                string? error = byte.TryParse(query["player"], out byte player) && ushort.TryParse(query["entity"], out ushort entity)
-                    ? _server.Exclusive(() => _server.TeleportStaffTo(player, entity, _acting))
-                    : "Which player and prop?";
-
-                ServeJson(context, new { ok = error == null, error });
+                HandleTeleport(context, query);
                 return;
-            }
 
             case "/api/mute":
                 HandleMute(context, query, muted: true);
@@ -1124,6 +1118,16 @@ public sealed class Dashboard
         });
 
         ServeJson(context, reply);
+    }
+
+    /// <summary>Sends an online staff member to a prop, so a kept one can be found.</summary>
+    private void HandleTeleport(HttpListenerContext context, NameValueCollection query)
+    {
+        string? error = byte.TryParse(query["player"], out byte player) && ushort.TryParse(query["entity"], out ushort entity)
+            ? _server.Exclusive(() => _server.TeleportStaffTo(player, entity, _acting))
+            : "Which player and prop?";
+
+        ServeJson(context, new { ok = error == null, error });
     }
 
     private void HandlePurge(HttpListenerContext context, NameValueCollection query)
