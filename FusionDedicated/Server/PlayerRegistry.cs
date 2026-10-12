@@ -14,6 +14,11 @@ public sealed class ConnectedPlayer
     public string AvatarBarcode { get; set; } = "";
     public byte[] AvatarStats { get; set; } = Array.Empty<byte>();
 
+    /// <summary>When their avatar was last relayed, and the unchanged copies dropped since the last summary.</summary>
+    public DateTime? AvatarRelayedAt { get; set; }
+    public int RepeatAvatarsDropped { get; set; }
+    public DateTime RepeatAvatarsFirstDrop { get; set; }
+
     /// <summary>Messages dropped because their prefix was not in Fusion's shape.</summary>
     public int MalformedMessages { get; set; }
     /// <summary>

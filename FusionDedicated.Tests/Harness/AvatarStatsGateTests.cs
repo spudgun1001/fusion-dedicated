@@ -281,9 +281,11 @@ public class AvatarStatsGateTests
         var (joel, kanza, max) = Loaded(world);
         int toKanza = world.Transport.SentTo(kanza.Connection).Count;
 
+        // Spaced past AvatarRepeatSeconds, so none is dropped as a repeat.
         for (var i = 0; i < 5; i++)
         {
             joel.Send(ClientMessages.Avatar(joel.SmallId, Barcode, OverTheLimit()));
+            world.Advance(TimeSpan.FromSeconds(2));
         }
 
         Assert.Equal(5, AvatarsTo(world, kanza, toKanza));

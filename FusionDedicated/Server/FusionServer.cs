@@ -1079,6 +1079,11 @@ public sealed class FusionServer : IDisposable
 
                 string worn = GateProtocol.TryReadAvatarBarcode(message) ?? "";
 
+                if (RepeatedAvatar(sender, worn, GateProtocol.TryReadAvatarStats(message)))
+                {
+                    return;
+                }
+
                 var pluginAvatar = Plugins?.Avatar.Raise(new Plugins.AvatarEvent(
                     sender.PlatformId, sender.DisplayName, sender.Permission, worn));
 
@@ -1108,6 +1113,7 @@ public sealed class FusionServer : IDisposable
 
                 // A new avatar is a new rig, with nothing in its hands.
                 _grabs.ForgetPlayer(sender.SmallId);
+                sender.AvatarRelayedAt = Clock();
 
                 break;
             }
@@ -2550,9 +2556,46 @@ public sealed class FusionServer : IDisposable
         return _hits.Allow(sender.SmallId, target, Clock());
     }
 
+    /// <summary>
+    /// Whether this avatar is the one last relayed for them, inside AvatarRepeatSeconds. Fusion
+    /// rebuilds the rig on every client for each copy, and the owner's rank skips the allowance.
+    /// </summary>
+    private bool RepeatedAvatar(ConnectedPlayer sender, string worn, byte[]? stats)
+    {
+        DateTime now = Clock();
+
+        if (Config.AvatarRepeatSeconds <= 0
+            || sender.AvatarRelayedAt is not { } last
+            || now < last
+            || now - last >= TimeSpan.FromSeconds(Config.AvatarRepeatSeconds)
+            || worn != sender.AvatarBarcode
+            || stats == null
+            || !stats.AsSpan().SequenceEqual(sender.AvatarStats))
+        {
+            return false;
+        }
+
+        if (sender.RepeatAvatarsDropped++ == 0)
+        {
+            sender.RepeatAvatarsFirstDrop = now;
+        }
+
+        return true;
+    }
+
     /// <summary>One line per player and kind for messages dropped over the allowance, at most once a minute.</summary>
     private void LogDroppedMessages()
     {
+        foreach (var player in Players.Players)
+        {
+            if (player.RepeatAvatarsDropped > 0 && Clock() - player.RepeatAvatarsFirstDrop >= TimeSpan.FromMinutes(1))
+            {
+                Log("WARN", $"Dropped {player.RepeatAvatarsDropped} repeated avatar messages from " +
+                            $"{player.DisplayName} ({player.AvatarBarcode})");
+                player.RepeatAvatarsDropped = 0;
+            }
+        }
+
         foreach (var (smallId, kind, dropped) in _budget.DueSummaries(Clock()))
         {
             string name = Players.Get(smallId)?.DisplayName ?? $"player {smallId}";

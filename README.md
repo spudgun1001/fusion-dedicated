@@ -660,6 +660,7 @@ gitignored.
 | `HolsterDuplicateWindowSeconds` | how long a barcode stays suspect, so every spawn of it inside that time is refused (10 by default, 0 never refuses) |
 | `MetadataPerSecond` | metadata changes each player may send per second (10 by default, 0 for no limit) |
 | `AvatarSwapsPerSecond` | avatar swaps each player may send per second (2 by default, 0 for no limit) |
+| `AvatarRepeatSeconds` | seconds an unchanged avatar from one player is not relayed again, at every rank, with drops logged once a minute (2 by default, 0 turns it off) |
 | `RpcMessagesPerSecond` | RPC variable and event messages each player may send per second (250 by default, 0 for no limit) |
 | `LogRpc` | logs one line per RPC message received: sender, tag, length, first bytes, and whether it was dropped by budget, unreadable, or offered to plugins (off by default, capped at 30 lines a second) |
 | `OwnershipRequestsPerSecond` | ownership requests each player may send per second (10 by default, 0 for no limit) |

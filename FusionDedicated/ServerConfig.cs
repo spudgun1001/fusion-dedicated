@@ -471,6 +471,12 @@ public sealed class ServerConfig
     /// <summary>Avatar swaps one player may send a second. Zero means no limit.</summary>
     public int AvatarSwapsPerSecond { get; set; } = 2;
 
+    /// <summary>
+    /// Seconds an unchanged avatar from one player is not relayed again, at every rank.
+    /// Each copy rebuilds their rig on every other client. Zero turns it off.
+    /// </summary>
+    public int AvatarRepeatSeconds { get; set; } = 2;
+
     /// <summary>RPC variable and event messages one player may send a second. Zero means no limit.</summary>
     public int RpcMessagesPerSecond { get; set; } = 250;
 
