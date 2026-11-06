@@ -46,6 +46,46 @@ public class PluginHttpLoopbackTests
     private static string Auth => Convert.ToBase64String(Encoding.ASCII.GetBytes("admin:" + Password));
 
     [Fact]
+    public async Task A_request_that_never_finishes_is_dropped_and_the_next_one_is_answered()
+    {
+        var config = new ServerConfig { CullOrphanedEntities = false, DashboardHost = "localhost", DashboardPassword = Password };
+        using var world = new World(config);
+        using var release = new ManualResetEventSlim();
+
+        var http = new PluginHttp(new PluginHealth(), (_, _) => { });
+        http.Handle("discord", "stuck", PanelRole.Viewer, _ =>
+        {
+            release.Wait();
+            return PluginHttpReply.Ok("{}");
+        });
+        http.Handle("discord", "me", PanelRole.Viewer, _ => PluginHttpReply.Ok("{\"ok\":true}"));
+
+        var dashboard = StartPanel(world, config, http);
+        dashboard.RequestLimit = TimeSpan.FromMilliseconds(500);
+        int port = config.DashboardPort;
+
+        try
+        {
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Auth);
+            client.Timeout = TimeSpan.FromSeconds(5);
+
+            var stuck = client.GetAsync($"http://localhost:{port}/api/plugins/http/discord/stuck");
+            await Task.Delay(100);
+
+            var reply = await client.GetAsync($"http://localhost:{port}/api/plugins/http/discord/me");
+
+            Assert.Equal(HttpStatusCode.OK, reply.StatusCode);
+            await Assert.ThrowsAnyAsync<Exception>(() => stuck);
+        }
+        finally
+        {
+            release.Set();
+            dashboard.Stop();
+        }
+    }
+
+    [Fact]
     public async Task A_stalled_body_is_dropped_and_the_next_request_is_answered()
     {
         var config = new ServerConfig { CullOrphanedEntities = false, DashboardHost = "localhost", DashboardPassword = Password };

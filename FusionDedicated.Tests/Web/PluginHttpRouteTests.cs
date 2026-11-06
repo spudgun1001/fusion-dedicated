@@ -184,7 +184,7 @@ public class PluginHttpRouteTests
     [Fact]
     public void The_panel_sets_the_gates_status_before_an_abort()
     {
-        string source = DashboardSource.Text();
+        string source = DashboardSource.Method("private void HandlePluginHttp(");
 
         Assert.InRange(source.IndexOf("context.Response.StatusCode = reply.Status;", StringComparison.Ordinal),
             0, source.IndexOf("context.Response.Abort()", StringComparison.Ordinal));

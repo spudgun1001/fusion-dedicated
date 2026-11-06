@@ -65,7 +65,7 @@ public class DashboardLockTests
     [Fact]
     public void A_request_that_throws_is_still_answered()
     {
-        string loop = DashboardSource.Method("private async Task LoopAsync(");
+        string loop = DashboardSource.Method("private void HandleOne(");
 
         int status = loop.IndexOf("context.Response.StatusCode = 500;", StringComparison.Ordinal);
 

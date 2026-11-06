@@ -45,6 +45,9 @@ public sealed class Dashboard
     /// <summary>How long a plugin route caller has to send its body.</summary>
     public TimeSpan PluginBodyLimit { get; init; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long one request may take before its connection is cut, so a stuck one cannot hold up the rest.</summary>
+    public TimeSpan RequestLimit { get; set; } = TimeSpan.FromSeconds(60);
+
     private string ActorFor(HttpListenerContext context)
     {
         var parsed = DashboardAuth.TryParseBasic(context.Request.Headers["Authorization"]);
@@ -120,31 +123,59 @@ public sealed class Dashboard
                 return;
             }
 
+            var work = Task.Run(() => HandleOne(context));
+
+            if (await Task.WhenAny(work, Task.Delay(RequestLimit)) != work)
+            {
+                // ponytail: a handler stuck on something other than its socket keeps its thread; the loop moves on regardless.
+                _server.Log("WARN", $"Panel: {context.Request.Url?.AbsolutePath} took longer than {RequestLimit.TotalSeconds:0} s, so it was dropped");
+
+                // Linux's managed listener writes the status line as it aborts.
+                try
+                {
+                    context.Response.StatusCode = 503;
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    context.Response.Abort();
+                }
+                catch
+                {
+                }
+            }
+        }
+    }
+
+    private void HandleOne(HttpListenerContext context)
+    {
+        try
+        {
+            Handle(context);
+        }
+        catch (Exception ex)
+        {
+            _server.Log("ERROR", $"Panel: {ex.Message}");
+
+            // Answered, so the browser is not left waiting on a request that failed.
+            // Apart, so a status that can no longer be set does not stop the close.
             try
             {
-                Handle(context);
+                context.Response.StatusCode = 500;
             }
-            catch (Exception ex)
+            catch
             {
-                _server.Log("ERROR", $"Panel: {ex.Message}");
+            }
 
-                // Answered, so the browser is not left waiting on a request that failed.
-                // Apart, so a status that can no longer be set does not stop the close.
-                try
-                {
-                    context.Response.StatusCode = 500;
-                }
-                catch
-                {
-                }
-
-                try
-                {
-                    context.Response.Close();
-                }
-                catch
-                {
-                }
+            try
+            {
+                context.Response.Close();
+            }
+            catch
+            {
             }
         }
     }
