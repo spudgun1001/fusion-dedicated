@@ -76,7 +76,9 @@ public class PluginHttpLoopbackTests
             var reply = await client.GetAsync($"http://localhost:{port}/api/plugins/http/discord/me");
 
             Assert.Equal(HttpStatusCode.OK, reply.StatusCode);
-            await Assert.ThrowsAnyAsync<Exception>(() => stuck);
+            // Windows drops it with nothing sent. Linux's managed listener writes the 503 as it aborts.
+            try { Assert.Equal(HttpStatusCode.ServiceUnavailable, (await stuck).StatusCode); }
+            catch (HttpRequestException) { }
         }
         finally
         {
